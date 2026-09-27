@@ -3,16 +3,30 @@ import { Pressable, ScrollView, useWindowDimensions, View } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery } from "@tanstack/react-query";
-import { isProjectStatus, PROJECT_STATUS_LABELS, projectDisplayName } from "@everlumen/shared";
-import { listMyOpenTasks, listRecentCaptureTimes } from "@/api/dashboard";
+import {
+  isProjectStatus,
+  PROJECT_STATUS_LABELS,
+  projectDisplayName,
+  relativeTime,
+} from "@everlumen/shared";
+import {
+  countPhotosNeedingReview,
+  listMyOpenTasks,
+  listProjectPhotoStats,
+  listRecentCaptureTimes,
+  listRecentlyPhotographedProjects,
+  type ProjectPhotoStats,
+} from "@/api/dashboard";
 import {
   bucketOf,
   capturedTodayLabel,
   countToday,
+  documentationHealth,
   dueLabel,
   greeting,
   headline,
   needsYou,
+  photoCountLabel,
 } from "@/api/dashboard-view";
 import { getUnreadNotificationCount } from "@/api/notifications";
 import { listGalleryPhotoPage, listProjectCovers, type GalleryPhotoItem } from "@/api/photos";
@@ -49,12 +63,12 @@ import {
 /**
  * Home: where every job stands, and what needs you today.
  *
- * Deliberately not the web dashboard. That page is a widget grid of counts, a
- * seven-day sparkline and a documentation-health percentage, which answer "how
- * is the business doing" for somebody at a desk. The person holding this phone
- * is standing on a site at seven in the morning, so the four counts here are
- * the ones a crew lead acts on, and every one of them is a real query: a count
- * with no source behind it is worse than no count.
+ * The counts are the web dashboard's, drawn for a phone: the four a crew lead
+ * acts on (active, photos today, on hold, tasks due) plus the two the office
+ * reads the board by (documentation health and needs review), with the web's
+ * own definitions so both screens show the same numbers. Every one of them is a
+ * real query: a count with no source behind it is worse than no count. The
+ * seven-day sparkline stays on the web; it answers a desk question.
  *
  * The order below the counts is by urgency and it is fixed. Anything the phone
  * still has to send comes first because it is the only item on the screen that
@@ -209,6 +223,16 @@ export default function HomeScreen() {
     staleTime: 60_000,
   });
 
+  /*
+   * Untagged photos, the web dashboard's "Needs review". The tile opens the
+   * gallery with the same filter applied, so the number and the list agree.
+   */
+  const reviewQuery = useQuery({
+    queryKey: ["dashboard-needs-review"],
+    queryFn: countPhotosNeedingReview,
+    staleTime: 5 * 60 * 1000,
+  });
+
   const tasks = useMemo(() => tasksQuery.data ?? [], [tasksQuery.data]);
   const urgent = useMemo(() => needsYou(tasks), [tasks]);
 
@@ -250,6 +274,26 @@ export default function HomeScreen() {
         .slice(0, RECENT_JOBS),
     [projects],
   );
+  /*
+   * Documentation health: the share of active jobs photographed in the last
+   * seven days. Active here means active and not archived, the same set the
+   * Active projects tile counts, so the percentage is "of those".
+   */
+  const activeIds = useMemo(
+    () =>
+      projects
+        .filter((project) => !project.archived && project.status === "active")
+        .map((project) => project.id),
+    [projects],
+  );
+  const healthQuery = useQuery({
+    queryKey: ["dashboard-doc-health", activeIds.join(",")],
+    queryFn: () => listRecentlyPhotographedProjects(activeIds),
+    enabled: Boolean(projectsQuery.data),
+    staleTime: 5 * 60 * 1000,
+  });
+  const docHealth = healthQuery.data ? documentationHealth(activeIds, healthQuery.data) : null;
+
   const recentIds = useMemo(() => {
     const ids: string[] = [];
     for (const project of recent) ids.push(project.id);
@@ -265,6 +309,18 @@ export default function HomeScreen() {
   });
   const covers = coversQuery.data ?? {};
 
+  /*
+   * Photo count and last photo per recent job, the web's "On site now" line.
+   * One bounded request per job, and there are three of them.
+   */
+  const statsQuery = useQuery({
+    queryKey: ["project-photo-stats", recentIds.join(",")],
+    queryFn: () => listProjectPhotoStats(recentIds),
+    enabled: recentIds.length > 0,
+    staleTime: 60_000,
+  });
+  const stats = statsQuery.data ?? {};
+
   const stripPhotos = recentPhotosQuery.data?.photos ?? [];
   const stripUrls = recentPhotosQuery.data?.urls ?? {};
 
@@ -278,7 +334,9 @@ export default function HomeScreen() {
     tasksQuery.isRefetching ||
     projectsQuery.isRefetching ||
     capturesQuery.isRefetching ||
-    recentPhotosQuery.isRefetching;
+    recentPhotosQuery.isRefetching ||
+    healthQuery.isRefetching ||
+    reviewQuery.isRefetching;
 
   const refresh = () => {
     void tasksQuery.refetch();
@@ -287,6 +345,9 @@ export default function HomeScreen() {
     void capturesQuery.refetch();
     void recentPhotosQuery.refetch();
     void coversQuery.refetch();
+    void healthQuery.refetch();
+    void reviewQuery.refetch();
+    void statsQuery.refetch();
   };
 
   /*
@@ -297,6 +358,7 @@ export default function HomeScreen() {
   const projectCount = (value: number) => (projectsQuery.data ? value : null);
   const photosToday = capturesQuery.data ? countToday(capturesQuery.data) : null;
   const tasksDue = tasksQuery.data ? urgent.length : null;
+  const needsReview = reviewQuery.data ?? null;
 
   /*
    * The line under the greeting. The mockup's sentence when nothing is
@@ -432,8 +494,9 @@ export default function HomeScreen() {
         ) : null}
 
         {/*
-          The board in four numbers. Two rows of two rather than a wrapped
-          grid, so each tile is exactly half the row whatever the gap.
+          The board in six numbers. Rows of two rather than a wrapped grid, so
+          each tile is exactly half the row whatever the gap. The web's two
+          office numbers sit in the middle row, between the jobs and the work.
         */}
         <View style={{ paddingHorizontal: spacing.lg, gap: spacing.md }}>
           <View style={{ flexDirection: "row", gap: spacing.md }}>
@@ -447,6 +510,30 @@ export default function HomeScreen() {
               value={photosToday}
               spoken={photosToday === null ? undefined : capturedTodayLabel(photosToday)}
               onPress={() => router.push("/gallery")}
+            />
+          </View>
+          <View style={{ flexDirection: "row", gap: spacing.md }}>
+            <StatTile
+              label="Documentation health"
+              value={docHealth}
+              format={(value) => `${value}%`}
+              spoken={
+                docHealth === null
+                  ? "Documentation health: no active projects"
+                  : `Documentation health: ${docHealth} percent of active projects photographed this week`
+              }
+              onPress={() => router.push("/projects")}
+            />
+            <StatTile
+              label="Needs review"
+              value={needsReview}
+              warn
+              spoken={
+                needsReview === null ? undefined : `Needs review: ${needsReview} untagged photos`
+              }
+              onPress={() =>
+                router.push({ pathname: "/gallery", params: { review: "1", nonce: String(Date.now()) } })
+              }
             />
           </View>
           <View style={{ flexDirection: "row", gap: spacing.md }}>
@@ -500,7 +587,12 @@ export default function HomeScreen() {
                 />
                 <View style={{ paddingHorizontal: spacing.lg, gap: spacing.md }}>
                   {recent.map((project) => (
-                    <JobCard key={project.id} project={project} coverUrl={covers[project.id]} />
+                    <JobCard
+                      key={project.id}
+                      project={project}
+                      coverUrl={covers[project.id]}
+                      stats={stats[project.id]}
+                    />
                   ))}
                 </View>
               </>
@@ -659,12 +751,15 @@ function StatTile({
   label,
   value,
   warn = false,
+  format,
   spoken,
   onPress,
 }: {
   label: string;
   value: number | null;
   warn?: boolean;
+  /** How the number is drawn, when it is not a bare count ("83%"). */
+  format?: (value: number) => string;
   /** What a screen reader says instead of "label: value", when words read better. */
   spoken?: string;
   onPress?: () => void;
@@ -680,6 +775,7 @@ function StatTile({
       style={({ pressed }) => ({
         flex: 1,
         gap: spacing.xs,
+        justifyContent: "space-between",
         padding: spacing.lg,
         borderRadius: radius.lg,
         borderWidth: 1,
@@ -687,11 +783,12 @@ function StatTile({
         backgroundColor: pressed ? theme.colors.secondary : theme.colors.card,
       })}
     >
-      <Text variant="caption" tone="muted" numberOfLines={1} style={{ fontWeight: "600" }}>
+      {/* Two lines, so "Documentation health" is not cut to "Documentati..." */}
+      <Text variant="caption" tone="muted" numberOfLines={2} style={{ fontWeight: "600" }}>
         {label}
       </Text>
       <Text variant="display" tone={hot ? "primary" : "default"}>
-        {value ?? "–"}
+        {value === null ? "–" : format ? format(value) : value}
       </Text>
     </Pressable>
   );
@@ -751,20 +848,34 @@ function HeroAction({
  *
  * The mockup's second line is "city · job type". Projects have no type column,
  * so the second half is the client, which is the other thing a crew knows a job
- * by.
+ * by. The third line is the web's "On site now" detail: how many photos the job
+ * has and when the last one was taken, falling back to when the job was last
+ * touched while the counts load or when it has no photos.
  */
-function JobCard({ project, coverUrl }: { project: ProjectListItem; coverUrl?: string }) {
+function JobCard({
+  project,
+  coverUrl,
+  stats,
+}: {
+  project: ProjectListItem;
+  coverUrl?: string;
+  stats?: ProjectPhotoStats;
+}) {
   const theme = useTheme();
   const name = projectDisplayName(project);
   const place = [project.city, project.state].filter(Boolean).join(", ") || project.location;
   const subtitle = [place, project.client_name].filter(Boolean).join(" · ");
   const status = isProjectStatus(project.status) ? PROJECT_STATUS_LABELS[project.status] : null;
   const tone = isProjectStatus(project.status) ? STATUS_TONE[project.status] : "neutral";
+  const when = relativeTime(stats?.lastPhotoAt ?? project.updated_at);
+  const activity = stats
+    ? [photoCountLabel(stats.photoCount), when].filter(Boolean).join(" · ")
+    : when;
 
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={[name, subtitle, status].filter(Boolean).join(", ")}
+      accessibilityLabel={[name, subtitle, activity, status].filter(Boolean).join(", ")}
       onPress={() => router.push({ pathname: "/project/[id]", params: { id: project.id } })}
       style={({ pressed }) => ({
         flexDirection: "row",
@@ -785,6 +896,11 @@ function JobCard({ project, coverUrl }: { project: ProjectListItem; coverUrl?: s
         {subtitle ? (
           <Text variant="caption" tone="muted" numberOfLines={2}>
             {subtitle}
+          </Text>
+        ) : null}
+        {activity ? (
+          <Text variant="caption" tone="muted" numberOfLines={1}>
+            {activity}
           </Text>
         ) : null}
       </View>

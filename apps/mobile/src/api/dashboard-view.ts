@@ -173,3 +173,27 @@ export function capturedTodayLabel(count: number): string {
   if (count === 0) return "No photos yet today";
   return `${count} photo${count === 1 ? "" : "s"} today`;
 }
+
+/**
+ * Documentation health, as the web dashboard defines it.
+ *
+ * The share of active jobs that got at least one photo in the last seven days.
+ * Null when there are no active jobs, because "0%" over nothing is a claim the
+ * board cannot back, and "100%" over nothing is worse.
+ */
+export function documentationHealth(
+  activeProjectIds: string[],
+  recentlyPhotographed: Iterable<string>,
+): number | null {
+  if (activeProjectIds.length === 0) return null;
+  const active = new Set(activeProjectIds);
+  const covered = new Set<string>();
+  for (const id of recentlyPhotographed) if (active.has(id)) covered.add(id);
+  return Math.round((covered.size / active.size) * 100);
+}
+
+/** "12 photos", "1 photo", "No photos yet". */
+export function photoCountLabel(count: number): string {
+  if (count === 0) return "No photos yet";
+  return `${count} photo${count === 1 ? "" : "s"}`;
+}

@@ -11,6 +11,7 @@ import { AuthProvider, useAuth } from "@/lib/auth";
 import { queryClient } from "@/lib/query";
 import { startSync } from "@/offline/sync";
 import { useTheme } from "@/theme";
+import { restoreAppearance } from "@/theme/appearance";
 
 /**
  * Cached server state, so the app opens with something on screen.
@@ -45,6 +46,8 @@ export default function RootLayout() {
     // Recovers anything interrupted by the last process death, then starts
     // listening for reconnects and foregrounds.
     void startSync();
+    // The light/dark choice from Settings > Appearance, if one was made.
+    void restoreAppearance();
   }, []);
 
   return (

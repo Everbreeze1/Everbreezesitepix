@@ -89,6 +89,13 @@ export default function AppLayout() {
       <Stack.Screen name="report-issue" options={{ title: "Report a problem" }} />
       <Stack.Screen name="admin" options={{ title: "Feedback queue" }} />
       <Stack.Screen name="close-account" options={{ title: "Close account" }} />
+      <Stack.Screen name="settings/profile" options={{ title: "Profile" }} />
+      <Stack.Screen
+        name="settings/notification-preferences"
+        options={{ title: "Email notifications" }}
+      />
+      <Stack.Screen name="settings/security" options={{ title: "Email and password" }} />
+      <Stack.Screen name="settings/appearance" options={{ title: "Appearance" }} />
       <Stack.Screen name="workspace" options={{ title: "Workspace" }} />
       <Stack.Screen name="labels" options={{ title: "Labels" }} />
       <Stack.Screen name="templates" options={{ title: "Templates" }} />

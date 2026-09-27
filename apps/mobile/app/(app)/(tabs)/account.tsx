@@ -7,14 +7,18 @@ import {
   CreditCard,
   ExternalLink,
   LayoutTemplate,
+  KeyRound,
   LifeBuoy,
   LogOut,
+  Mail,
+  Palette,
   Server,
   Sparkles,
   Trash2,
   CloudUpload,
   UserPlus,
   Users,
+  UserRound,
   UserX,
 } from "@/ui/icons";
 import { View } from "react-native";
@@ -23,6 +27,7 @@ import * as WebBrowser from "expo-web-browser";
 import { useQuery } from "@tanstack/react-query";
 import { ApiClientError } from "@everlumen/api-client";
 import { checkIsPlatformAdmin } from "@/api/admin";
+import { getMyProfile } from "@/api/profile";
 import { getUnreadNotificationCount } from "@/api/notifications";
 import { getTrashCounts } from "@/api/trash";
 import { pushStatusLabel } from "@/api/push-view";
@@ -98,6 +103,19 @@ export default function AccountScreen() {
   const unread = unreadQuery.data ?? 0;
 
   /*
+   * The profile row, for the name and picture at the top. The same row the
+   * Profile screen edits, under the same key, so a save there shows here on
+   * the way back.
+   */
+  const profileQuery = useQuery({
+    queryKey: ["my-profile", user?.id],
+    queryFn: () => getMyProfile(user!.id),
+    enabled: Boolean(user?.id),
+    staleTime: 5 * 60 * 1000,
+  });
+  const profileName = profileQuery.data?.full_name?.trim() || null;
+
+  /*
    * The staff console row, which a customer must never see.
    *
    * `platform_admins` has no client access by design, so this asks the server
@@ -163,15 +181,56 @@ export default function AccountScreen() {
           paddingTop: spacing.xxl,
         }}
       >
-        <Avatar name={user?.email ?? null} size="lg" />
+        <Avatar
+          name={profileName ?? user?.email ?? null}
+          uri={profileQuery.data?.avatar_url}
+          size="lg"
+        />
         <View style={{ flex: 1, gap: 2 }}>
           <Text variant="title" numberOfLines={1}>
-            {user?.email ?? "Signed in"}
+            {profileName ?? user?.email ?? "Signed in"}
           </Text>
-          <Text variant="caption" tone="muted">
-            Everlumen field app
+          <Text variant="caption" tone="muted" numberOfLines={1}>
+            {profileName ? (user?.email ?? "") : "Everlumen field app"}
           </Text>
         </View>
+      </View>
+
+      {/*
+        The web Settings page's personal sections, native: they are four
+        screens of switches and fields, and none of them needs a browser.
+      */}
+      <SectionHeader title="You" />
+      <View style={{ paddingHorizontal: spacing.lg }}>
+        <ListGroup>
+          <ListRow
+            icon={UserRound}
+            title="Profile"
+            subtitle="Name, job title and picture"
+            onPress={() => router.push("/settings/profile")}
+          />
+          <RowDivider />
+          <ListRow
+            icon={Mail}
+            title="Email notifications"
+            subtitle="Assignments, mentions, copied in, work done"
+            onPress={() => router.push("/settings/notification-preferences")}
+          />
+          <RowDivider />
+          <ListRow
+            icon={KeyRound}
+            title="Email and password"
+            subtitle="How you sign in"
+            onPress={() => router.push("/settings/security")}
+          />
+          <RowDivider />
+          <ListRow
+            icon={Palette}
+            title="Appearance"
+            subtitle="Light, dark or match the phone"
+            onPress={() => router.push("/settings/appearance")}
+          />
+        </ListGroup>
       </View>
 
       <SectionHeader title="Inbox" />

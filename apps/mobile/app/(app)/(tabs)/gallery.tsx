@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useState } from "react";
-import { Check, Images, Search } from "@/ui/icons";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Check, Images, Search, SlidersHorizontal } from "@/ui/icons";
 import {
   FlatList,
   Modal,
@@ -8,11 +8,20 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { randomUUID } from "expo-crypto";
 import { displayCaption, formatPhotoDateGroup } from "@everlumen/shared";
 import { listGalleryPhotoPage, type GalleryPage, type GalleryPhotoItem } from "@/api/photos";
+import {
+  activeFilterCount,
+  dateRangeLabel,
+  EMPTY_GALLERY_FILTERS,
+  parseCalendarDay,
+  type GalleryFilters,
+} from "@/api/gallery-filters";
+import { GalleryFilterSheet } from "@/components/GalleryFilterSheet";
+import { PhotoLightboxActions } from "@/components/PhotoLightboxActions";
 import { mergeTags, phasePatch, trashPhotos, type PhotoPatch } from "@/api/photo-edit";
 import { generateSummaryFromPhotos } from "@/api/summaries";
 import { photoSelectionError } from "@/api/summary-view";
@@ -99,10 +108,50 @@ export default function GalleryScreen() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [bulkError, setBulkError] = useState<string | null>(null);
+  /*
+   * The web gallery's refinements (projects, dates, tags, taken by, needs
+   * review), applied at the database and edited in a sheet. Part of the query
+   * key, so each combination pages on its own and flicking back to "no
+   * filters" lands on the cache rather than a refetch.
+   */
+  const [refine, setRefine] = useState<GalleryFilters>(EMPTY_GALLERY_FILTERS);
+  const [filterSheet, setFilterSheet] = useState(false);
+  const refineCount = activeFilterCount(refine);
+
+  /*
+   * Deep links into a filtered library: the timeline opens a day, the home
+   * screen's Needs review tile opens the untagged photos. `nonce` changes on
+   * every push, so opening the same day twice still applies it even after the
+   * filter was cleared in between.
+   */
+  const params = useLocalSearchParams<{
+    from?: string;
+    to?: string;
+    review?: string;
+    projectId?: string;
+    nonce?: string;
+  }>();
+  useEffect(() => {
+    if (!params.nonce) return;
+    const from = parseCalendarDay(params.from) ? params.from! : null;
+    const to = parseCalendarDay(params.to) ? params.to! : null;
+    setRefine({
+      ...EMPTY_GALLERY_FILTERS,
+      from,
+      to,
+      needsReview: params.review === "1",
+      projectIds: params.projectId ? [params.projectId] : [],
+    });
+    setFilter("all");
+    setSearch("");
+    setLightboxId(null);
+  }, [params.nonce, params.from, params.to, params.review, params.projectId]);
+
+  const queryKey = useMemo(() => ["gallery-photos", refine] as const, [refine]);
 
   const query = useInfiniteQuery({
-    queryKey: ["gallery-photos"],
-    queryFn: ({ pageParam }) => listGalleryPhotoPage(pageParam),
+    queryKey,
+    queryFn: ({ pageParam }) => listGalleryPhotoPage(pageParam, undefined, refine),
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) => lastPage.nextCursor,
   });
@@ -153,7 +202,8 @@ export default function GalleryScreen() {
     [visible, filter],
   );
 
-  const filtered = search.trim() !== "" || (filter !== "all" && filter !== "project");
+  const filtered =
+    search.trim() !== "" || (filter !== "all" && filter !== "project") || refineCount > 0;
 
   const lightboxPhoto = useMemo(
     () => visible.find((photo) => photo.id === lightboxId) ?? null,
@@ -265,7 +315,7 @@ export default function GalleryScreen() {
             }));
 
       queryClient.setQueryData<{ pages: GalleryPage[]; pageParams: unknown[] }>(
-        ["gallery-photos"],
+        queryKey,
         (current) => {
           if (!current) return current;
           return {
@@ -316,7 +366,7 @@ export default function GalleryScreen() {
       endSelection();
       setBusy(false);
     },
-    [photos, selected, queryClient, endSelection],
+    [photos, selected, queryClient, endSelection, queryKey],
   );
 
   const showSearch = searchOpen || search.length > 0;
@@ -339,6 +389,17 @@ export default function GalleryScreen() {
           title={selecting && selected.size > 0 ? `${selected.size} selected` : "Photo Library"}
           actions={
             <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.xs }}>
+              {selecting ? null : (
+                <IconButton
+                  icon={SlidersHorizontal}
+                  accessibilityLabel={
+                    refineCount > 0 ? `Filters, ${refineCount} on` : "Filter by project, date, tag"
+                  }
+                  surface={false}
+                  tone={refineCount > 0 ? "primary" : "default"}
+                  onPress={() => setFilterSheet(true)}
+                />
+              )}
               {selecting ? null : (
                 <IconButton
                   icon={Search}
@@ -383,6 +444,37 @@ export default function GalleryScreen() {
             onChange={setFilter}
             label="Filter photos"
           />
+          {refineCount > 0 ? (
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: spacing.sm,
+                paddingHorizontal: spacing.lg,
+              }}
+            >
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Edit filters"
+                onPress={() => setFilterSheet(true)}
+                style={{ flex: 1, minHeight: 32, justifyContent: "center" }}
+              >
+                <Text variant="caption" tone="muted" numberOfLines={1}>
+                  {refineSummary(refine)}
+                </Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Clear all filters"
+                onPress={() => setRefine(EMPTY_GALLERY_FILTERS)}
+                hitSlop={8}
+              >
+                <Text variant="caption" tone="primary" style={{ fontWeight: "600" }}>
+                  Clear all
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
         </PageHeader>
       </View>
 
@@ -442,6 +534,7 @@ export default function GalleryScreen() {
                   onPress: () => {
                     setSearch("");
                     setFilter("all");
+                    setRefine(EMPTY_GALLERY_FILTERS);
                   },
                 }}
               />
@@ -560,6 +653,13 @@ export default function GalleryScreen() {
         />
       ) : null}
 
+      <GalleryFilterSheet
+        visible={filterSheet}
+        value={refine}
+        onClose={() => setFilterSheet(false)}
+        onApply={setRefine}
+      />
+
       <Modal
         visible={lightboxPhoto !== null}
         transparent
@@ -605,27 +705,14 @@ export default function GalleryScreen() {
                  * want to be inside, not the end of the search.
                  */}
                 {/*
-                  Same action as the project grid's lightbox. A photo found in
-                  the cross-project gallery is just as likely to be the one
-                  somebody needs to ask a question about.
+                  The project grid's lightbox acts: annotate, AI analysis and
+                  comments. A photo found in the cross-project library is just
+                  as likely to be the one somebody needs to mark up or ask about.
                 */}
-                <Button
-                  label="Comments"
-                  variant="secondary"
-                  size="sm"
-                  onPress={() => {
-                    const photo = lightboxPhoto;
-                    setLightboxId(null);
-                    router.push({
-                      pathname: "/photo/[id]/comments",
-                      params: {
-                        id: photo.id,
-                        uri: urls[photo.id] ?? "",
-                        projectId: photo.project_id,
-                        caption: photo.caption ?? "",
-                      },
-                    });
-                  }}
+                <PhotoLightboxActions
+                  photo={lightboxPhoto}
+                  uri={urls[lightboxPhoto.id]}
+                  onLeave={() => setLightboxId(null)}
                 />
                 {lightboxPhoto.project_name ? (
                   <Button
@@ -697,6 +784,23 @@ function groupByProject(photos: GalleryPhotoItem[]): Section[] {
     section.photos.push(photo);
   }
   return Array.from(byProject.values());
+}
+
+/** One line naming what the filter sheet has narrowed the library to. */
+function refineSummary(refine: GalleryFilters): string {
+  const parts: string[] = [];
+  if (refine.from || refine.to) parts.push(dateRangeLabel(refine.from, refine.to));
+  if (refine.needsReview) parts.push("needs review");
+  if (refine.projectIds.length > 0) {
+    parts.push(`${refine.projectIds.length} project${refine.projectIds.length === 1 ? "" : "s"}`);
+  }
+  if (refine.tags.length > 0) {
+    parts.push(refine.tags.length === 1 ? `tag ${refine.tags[0]}` : `${refine.tags.length} tags`);
+  }
+  if (refine.uploaders.length > 0) {
+    parts.push(`${refine.uploaders.length} ${refine.uploaders.length === 1 ? "person" : "people"}`);
+  }
+  return `Filtered: ${parts.join(", ")}`;
 }
 
 /** Local midnight on the Monday of this week, for "This week". */

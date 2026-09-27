@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Platform, View } from "react-native";
 import Constants from "expo-constants";
 import { router, Stack } from "expo-router";
@@ -13,6 +13,8 @@ import {
   regionFor,
   type Coord,
 } from "@/api/map-view";
+import { MapProjectPreview } from "@/components/MapProjectPreview";
+import { ProjectFilterPills, type ProjectFilterOption } from "@/components/ProjectStatusPill";
 import { useDeviceLocation } from "@/lib/use-device-location";
 import { radius, spacing, useTheme } from "@/theme";
 import { FolderKanban, LocateFixed, MapPin, TriangleAlert } from "@/ui/icons";
@@ -49,6 +51,14 @@ import {
  */
 
 /** Set by `app.config.js` when the build was given a Google Maps Android key. */
+/*
+ * The web map's status filter. Active is the default there and here: the map
+ * is opened to find a live job, and completed ones are most of a board's pins
+ * after a year. Archived is the `archived` flag, not a status, and is only
+ * plotted when asked for.
+ */
+type MapFilter = "active" | "on_hold" | "completed" | "archived" | "all";
+
 const googleMapsConfigured = Boolean(
   (Constants.expoConfig?.extra as { googleMapsConfigured?: boolean } | undefined)
     ?.googleMapsConfigured,
@@ -61,13 +71,48 @@ export default function MapScreen() {
   const { here, noFix } = useDeviceLocation();
 
   const query = useQuery({ queryKey: ["projects"], queryFn: listProjects });
+  const [filter, setFilter] = useState<MapFilter>("active");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const pinned = useMemo(() => {
-    const rows = (query.data ?? []).filter((project) => !project.archived);
-    // `locatable` drops rows with no fix, an out-of-range value, or the 0,0
-    // that half the systems producing a coordinate default to.
-    return locatable(rows as (ProjectListItem & { latitude: number | null })[]);
-  }, [query.data]);
+  // Every job that can be drawn, before the status filter.
+  const drawable = useMemo(
+    () =>
+      // `locatable` drops rows with no fix, an out-of-range value, or the 0,0
+      // that half the systems producing a coordinate default to.
+      locatable((query.data ?? []) as (ProjectListItem & { latitude: number | null })[]),
+    [query.data],
+  );
+
+  const pinned = useMemo(
+    () =>
+      drawable.filter((project) => {
+        if (filter === "archived") return Boolean(project.archived);
+        if (project.archived) return false;
+        return filter === "all" || project.status === filter;
+      }),
+    [drawable, filter],
+  );
+
+  // Counted over what can be drawn, so a pill promises exactly the pins it shows.
+  const filters = useMemo<ProjectFilterOption<MapFilter>[]>(() => {
+    const count = (test: (p: ProjectListItem) => boolean) => drawable.filter(test).length;
+    return [
+      { id: "active", label: "Active", count: count((p) => !p.archived && p.status === "active") },
+      { id: "on_hold", label: "On hold", count: count((p) => !p.archived && p.status === "on_hold") },
+      {
+        id: "completed",
+        label: "Completed",
+        count: count((p) => !p.archived && p.status === "completed"),
+      },
+      { id: "archived", label: "Archived", count: count((p) => Boolean(p.archived)) },
+      { id: "all", label: "All", count: count((p) => !p.archived) },
+    ];
+  }, [drawable]);
+
+  const selected = useMemo(
+    () => pinned.find((project) => project.id === selectedId) ?? null,
+    [pinned, selectedId],
+  );
 
   const nearest = useMemo(() => byDistance(pinned, here), [pinned, here]);
   const region = useMemo(() => regionFor(pinned), [pinned]);
@@ -75,12 +120,30 @@ export default function MapScreen() {
   const unavailable = mapUnavailable({
     googleMapsConfigured,
     platform: Platform.OS,
-    pinCount: pinned.length,
+    // Every drawable job, not the filtered ones: a filter that matches nothing
+    // should empty the map, not remove it.
+    pinCount: drawable.length,
   });
 
   const focus = useCallback((coord: Coord) => {
     mapRef.current?.animateToRegion({ ...coord, latitudeDelta: 0.01, longitudeDelta: 0.01 }, 400);
   }, []);
+
+  /*
+   * The region the map opened on belongs to the filter it opened with. A new
+   * filter reframes to its own pins, or the pins it just revealed would be off
+   * screen with nothing to say they exist.
+   */
+  const changeFilter = useCallback((next: MapFilter) => {
+    setFilter(next);
+    setSelectedId(null);
+  }, []);
+  const lastFitted = useRef<MapFilter>(filter);
+  useEffect(() => {
+    if (lastFitted.current === filter || !region) return;
+    lastFitted.current = filter;
+    mapRef.current?.animateToRegion(region as Region, 400);
+  }, [filter, region]);
 
   if (query.isLoading) {
     return (
@@ -122,6 +185,15 @@ export default function MapScreen() {
       />
 
       <Screen scroll padded={false} bottomInset={spacing.xxl}>
+        <View style={{ paddingVertical: spacing.md }}>
+          <ProjectFilterPills
+            options={filters}
+            value={filter}
+            onChange={changeFilter}
+            label="Show projects by status"
+          />
+        </View>
+
         {unavailable === null ? (
           <View style={{ height: 320, backgroundColor: theme.colors.secondary }}>
             <MapView
@@ -131,7 +203,7 @@ export default function MapScreen() {
               // and needs no key.
               provider={Platform.OS === "android" ? PROVIDER_GOOGLE : undefined}
               style={{ flex: 1 }}
-              initialRegion={region as Region}
+              initialRegion={(region ?? regionFor(drawable) ?? undefined) as Region}
               showsUserLocation={here !== null}
               showsMyLocationButton={false}
               toolbarEnabled={false}
@@ -142,10 +214,12 @@ export default function MapScreen() {
                   coordinate={{ latitude: project.latitude, longitude: project.longitude }}
                   title={project.name}
                   description={project.client_name ?? project.city ?? undefined}
-                  pinColor={theme.colors.primary}
-                  onCalloutPress={() =>
-                    router.push({ pathname: "/project/[id]", params: { id: project.id } })
+                  pinColor={
+                    project.id === selectedId ? theme.colors.foreground : theme.colors.primary
                   }
+                  // The preview card below replaces the platform callout: a
+                  // tap opens the card, and the card is the way into the job.
+                  onPress={() => setSelectedId(project.id)}
                 />
               ))}
             </MapView>
@@ -180,7 +254,20 @@ export default function MapScreen() {
           </View>
         ) : null}
 
-        {pinned.length === 0 ? (
+        {selected ? (
+          <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.lg }}>
+            <MapProjectPreview project={selected} onClose={() => setSelectedId(null)} />
+          </View>
+        ) : null}
+
+        {pinned.length === 0 && drawable.length > 0 ? (
+          <EmptyState
+            icon={MapPin}
+            title="Nothing with this status on the map"
+            body="No project with this status has a location. Try another filter."
+            action={{ label: "Show all", onPress: () => changeFilter("all") }}
+          />
+        ) : pinned.length === 0 ? (
           <EmptyState
             icon={MapPin}
             title="No projects have a location yet"
@@ -222,11 +309,15 @@ export default function MapScreen() {
                           <Badge label={distanceLabel(project.metres)} tone="neutral" />
                         ) : undefined
                       }
-                      // Tapping the row moves the map rather than leaving the
-                      // screen. Opening the project is the callout on the pin,
-                      // which is the deliberate second step.
-                      onPress={() => focus(project)}
-                      accessibilityHint="Centres the map on this project"
+                      // Tapping the row moves the map and opens the preview
+                      // card rather than leaving the screen. Opening the
+                      // project is the card's button, the deliberate second
+                      // step, the same as tapping the pin.
+                      onPress={() => {
+                        setSelectedId(project.id);
+                        focus(project);
+                      }}
+                      accessibilityHint="Centres the map on this project and shows its preview"
                     />
                   </View>
                 ))}

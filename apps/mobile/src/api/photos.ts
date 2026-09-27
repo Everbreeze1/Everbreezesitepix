@@ -2,6 +2,7 @@ import { photoObjectPaths, thumbPathFor } from "@everlumen/shared";
 import { randomUUID } from "expo-crypto";
 import { File } from "expo-file-system";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
+import { dateRangeOrFilter, type GalleryFilters } from "./gallery-filters";
 import { readExifMeta, resolvePhotoMeta, type Coords } from "./photo-meta";
 import { supabase } from "@/lib/supabase";
 
@@ -534,6 +535,7 @@ export type GalleryPage = {
 export async function listGalleryPhotoPage(
   cursor: string | null,
   limit = PHOTO_PAGE_SIZE,
+  filters?: GalleryFilters,
 ): Promise<GalleryPage> {
   let query = supabase
     .from("photos")
@@ -547,6 +549,21 @@ export async function listGalleryPhotoPage(
     .limit(limit);
 
   if (cursor) query = query.lt("created_at", cursor);
+
+  /*
+   * The web gallery's filters, applied at the database so the keyset paging
+   * still walks the whole matching set. Each `or` is its own query parameter,
+   * and PostgREST ANDs separate parameters, so a date range and "needs review"
+   * together mean both.
+   */
+  if (filters) {
+    if (filters.projectIds.length > 0) query = query.in("project_id", filters.projectIds);
+    if (filters.uploaders.length > 0) query = query.in("uploaded_by", filters.uploaders);
+    if (filters.tags.length > 0) query = query.overlaps("tags", filters.tags);
+    if (filters.needsReview) query = query.or("tags.is.null,tags.eq.{}");
+    const dates = dateRangeOrFilter(filters.from, filters.to);
+    if (dates) query = query.or(dates);
+  }
 
   const { data, error } = await query;
   if (error) throw new Error(error.message);
@@ -680,4 +697,21 @@ export async function listProjectCovers(projectIds: string[]): Promise<Record<st
     if (url) out[row.project_id] = url;
   }
   return out;
+}
+
+/**
+ * The workspace's tag catalogue, for the library's tag filter.
+ *
+ * The same `tags` table the web gallery lists. A failure returns an empty list
+ * rather than throwing: the tag section of the filter sheet is worth losing,
+ * the rest of the sheet is not.
+ */
+export async function listTagNames(): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("tags")
+    .select("name")
+    .order("name", { ascending: true });
+  if (error) return [];
+  const names = ((data as { name: string }[]) ?? []).map((row) => row.name).filter(Boolean);
+  return Array.from(new Set(names));
 }

@@ -93,3 +93,11 @@ export { default as VideoOff } from "lucide-react-native/dist/esm/icons/video-of
 export { default as WifiOff } from "lucide-react-native/dist/esm/icons/wifi-off";
 export { default as Workflow } from "lucide-react-native/dist/esm/icons/workflow";
 export { default as X } from "lucide-react-native/dist/esm/icons/x";
+export { default as KeyRound } from "lucide-react-native/dist/esm/icons/key-round";
+export { default as Mail } from "lucide-react-native/dist/esm/icons/mail";
+export { default as Palette } from "lucide-react-native/dist/esm/icons/palette";
+export { default as SlidersHorizontal } from "lucide-react-native/dist/esm/icons/sliders-horizontal";
+export { default as UserRound } from "lucide-react-native/dist/esm/icons/user-round";
+export { default as Moon } from "lucide-react-native/dist/esm/icons/moon";
+export { default as Smartphone } from "lucide-react-native/dist/esm/icons/smartphone";
+export { default as Sun } from "lucide-react-native/dist/esm/icons/sun";
