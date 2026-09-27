@@ -11,6 +11,7 @@ import {
   type PhotoAnnotatorHandle,
 } from "@/components/annotator/PhotoAnnotator";
 import { useAuth } from "@/lib/auth";
+import { deviceSupportsMeasure } from "@/lib/measure-support";
 
 /**
  * Annotate a saved photo: web's lightbox Annotate.
@@ -41,12 +42,15 @@ export default function AnnotateScreen() {
 
   /*
    * Measure is Pro/Team, the same rule the camera applies (web's `isPro`: an
-   * active pro or team plan). Until the plan is known the tool is hidden
-   * rather than shown and then taken away.
+   * active pro or team plan), and only on a phone that can do it: iPhone 15
+   * Pro and later, never Android (`deviceSupportsMeasure`). Until the plan is
+   * known the tool is hidden rather than shown and then taken away.
    */
   const teamQuery = useQuery({ queryKey: ["my-team"], queryFn: getMyTeam });
   const team = teamQuery.data;
-  const canMeasure = Boolean(team?.isActive && (team.plan === "pro" || team.plan === "team"));
+  const canMeasure =
+    deviceSupportsMeasure() &&
+    Boolean(team?.isActive && (team.plan === "pro" || team.plan === "team"));
 
   const capturedQuery = useQuery({
     queryKey: ["photo-captured-at", id],

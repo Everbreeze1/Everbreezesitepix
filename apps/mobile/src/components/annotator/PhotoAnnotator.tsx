@@ -15,7 +15,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  useWindowDimensions,
   View,
 } from "react-native";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
@@ -46,6 +45,7 @@ import {
   isAdjusted,
   isMeaningful,
   MAX_ZOOM,
+  measureEndpointAt,
   measureWidth,
   MIN_CROP,
   NO_ADJUST,
@@ -54,6 +54,7 @@ import {
   normaliseCrop,
   pushHistory,
   pxPerInchFromCalibration,
+  railGroups,
   redoHistory,
   rotatedSize,
   rotateShapesCW,
@@ -71,6 +72,7 @@ import {
   type HandleHit,
   type History,
   type Point,
+  type RailKey,
   type Rect,
   type Shape,
   type Size,
@@ -99,9 +101,12 @@ import {
  *   Handled as raw touches on one Manual gesture so the switch from drawing to
  *   zooming is decided here, the moment a second finger lands, instead of by
  *   two recognisers racing each other.
- * - The tool rail sits on the right, as on web, whenever it fits (tablets,
- *   landscape). A portrait phone gets the same buttons as a bottom bar, where
- *   a thumb reaches them.
+ * - The tool rail is web's: on the right edge, the same groups in the same
+ *   order with the same icons, on every screen. On a portrait phone that is
+ *   also where a right thumb holding the phone reaches, and the rail scrolls
+ *   when it is taller than the screen. Buttons are 46pt, over the 44pt floor.
+ * - Measure is a ruler: tap to drop the first point (or press and drag
+ *   straight to the second), and both ends stay draggable afterwards.
  * - Hover does not exist, so the precision loupe shows while a finger is down.
  */
 
@@ -147,8 +152,8 @@ type Drag = {
 };
 
 const BG = "#0a0a0a";
-const RAIL_WIDTH = 76;
-const BUTTON = 48;
+const RAIL_WIDTH = 64;
+const BUTTON = 46;
 
 function isRemote(uri: string) {
   return /^https?:\/\//i.test(uri);
@@ -186,7 +191,6 @@ export const PhotoAnnotator = forwardRef<PhotoAnnotatorHandle, Props>(function P
   },
   ref,
 ) {
-  const window = useWindowDimensions();
   const insets = useSafeAreaInsets();
 
   // ---- document ---------------------------------------------------------
@@ -223,6 +227,8 @@ export const PhotoAnnotator = forwardRef<PhotoAnnotatorHandle, Props>(function P
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Shape | null>(null);
   const [polyDraft, setPolyDraft] = useState<{ id: string; points: Point[] } | null>(null);
+  /** The ruler's first point, dropped by a tap and waiting for the second. */
+  const [measureAnchor, setMeasureAnchor] = useState<Point | null>(null);
   const [cropDraft, setCropDraft] = useState<Rect | null>(null);
   const [textPrompt, setTextPrompt] = useState<TextPrompt | null>(null);
   const [calibrate, setCalibrate] = useState<CalibratePrompt | null>(null);
@@ -251,6 +257,7 @@ export const PhotoAnnotator = forwardRef<PhotoAnnotatorHandle, Props>(function P
     setDraft(null);
     draftRef.current = null;
     setPolyDraft(null);
+    setMeasureAnchor(null);
     if (t !== "crop") setCropDraft(null);
   };
 
@@ -293,9 +300,6 @@ export const PhotoAnnotator = forwardRef<PhotoAnnotatorHandle, Props>(function P
 
   // ---- layout ------------------------------------------------------------
   const [stage, setStage] = useState<Size>({ w: 0, h: 0 });
-  const landscape = window.width > window.height;
-  const tablet = Math.min(window.width, window.height) >= 600;
-  const useRail = landscape || tablet;
   const display: Size =
     image && stage.w > 0
       ? fitSize({ w: stage.w - 8, h: stage.h - 8 }, image.w / image.h)
@@ -358,6 +362,26 @@ export const PhotoAnnotator = forwardRef<PhotoAnnotatorHandle, Props>(function P
     if (tool === "polyline") {
       setLoupe(p);
       return; // placed on release, so the loupe can aim it
+    }
+
+    if (tool === "measure" || tool === "select") {
+      // A ruler end under the finger is grabbed before anything else, so both
+      // ends of every measurement stay draggable after it is drawn.
+      const tol = Math.max(12, img.w * 0.012, 26 * tapK);
+      const end = measureAnchor ? null : measureEndpointAt(cur.shapes, p, tol);
+      if (end) {
+        setSelectedId(end.shape.id);
+        dragRef.current = {
+          shapeId: end.shape.id,
+          handle: { kind: end.end },
+          start: p,
+          original: end.shape,
+          prev: cur,
+          moved: false,
+        };
+        setLoupe(p);
+        return;
+      }
     }
 
     if (tool === "select") {
@@ -428,7 +452,14 @@ export const PhotoAnnotator = forwardRef<PhotoAnnotatorHandle, Props>(function P
     if (tool === "pen") d = { id, kind: "pen", color, width: strokeWidth, points: [p] };
     else if (tool === "arrow") d = { id, kind: "arrow", color, width: strokeWidth, from: p, to: p };
     else if (tool === "measure")
-      d = { id, kind: "measure", color, width: measureWidth(strokeWidth), from: p, to: p };
+      d = {
+        id,
+        kind: "measure",
+        color,
+        width: measureWidth(strokeWidth),
+        from: measureAnchor ?? p,
+        to: p,
+      };
     else if (tool === "rect") d = { id, kind: "rect", color, width: strokeWidth, from: p, to: p };
     else if (tool === "ellipse")
       d = { id, kind: "ellipse", color, width: strokeWidth, from: p, to: p };
@@ -440,6 +471,7 @@ export const PhotoAnnotator = forwardRef<PhotoAnnotatorHandle, Props>(function P
   const onMove = (p: Point) => {
     if (!touchLive.current) return;
     if (tool === "polyline" || tool === "measure" || tool === "crop") setLoupe(p);
+    else if (dragRef.current?.original.kind === "measure") setLoupe(p);
 
     if (tool === "crop" && cropRef.current) {
       const c = cropRef.current;
@@ -521,10 +553,18 @@ export const PhotoAnnotator = forwardRef<PhotoAnnotatorHandle, Props>(function P
     draftRef.current = null;
     setDraft(null);
     if (!d) return;
-    if (!isMeaningful(d)) return;
+    if (!isMeaningful(d)) {
+      // A tap with the ruler drops its first point; the next tap or drag
+      // lands the second.
+      if (d.kind === "measure") setMeasureAnchor(d.from);
+      return;
+    }
     changeShapes((s) => [...s, d]);
     setSelectedId(d.id);
-    setToolState("select");
+    // The ruler stays in hand for the next measurement, with this one's ends
+    // still draggable. Every other tool returns to Select, as on web.
+    if (d.kind === "measure") setMeasureAnchor(null);
+    else setToolState("select");
     // First measurement: ask for its real length, so the numbers are real.
     if (d.kind === "measure" && pxPerInch === null) {
       setCalibrate({ shapeId: d.id, value: "", unit: "ft" });
@@ -812,6 +852,7 @@ export const PhotoAnnotator = forwardRef<PhotoAnnotatorHandle, Props>(function P
     if (panel) return (setPanel(null), true);
     if (textPrompt) return (setTextPrompt(null), true);
     if (calibrate) return (setCalibrate(null), true);
+    if (measureAnchor) return (setMeasureAnchor(null), true);
     if (cropDraft) return (setCropDraft(null), true);
     if (polyDraft) return (setPolyDraft(null), true);
     if (draft) return (cancelTouch(), true);
@@ -871,6 +912,7 @@ export const PhotoAnnotator = forwardRef<PhotoAnnotatorHandle, Props>(function P
     draftRef.current = null;
     setDraft(null);
     setPolyDraft(null);
+    setMeasureAnchor(null);
     setSelectedId(null);
     setTextPrompt(null);
     setCalibrate(null);
@@ -963,6 +1005,26 @@ export const PhotoAnnotator = forwardRef<PhotoAnnotatorHandle, Props>(function P
         ),
       );
     }
+    if (tool === "measure") {
+      // The ruler's grab points: every measurement's two ends, plus the
+      // first point of the one being placed.
+      const ends: Point[] = [];
+      for (const sh of shapes) if (sh.kind === "measure") ends.push(sh.from, sh.to);
+      if (measureAnchor) ends.push(measureAnchor);
+      ends.forEach((e, i) =>
+        parts.push(
+          <SvgCircle
+            key={`m${i}`}
+            cx={e.x}
+            cy={e.y}
+            r={11 * k}
+            fill="#ffffff"
+            stroke={ACCENT}
+            strokeWidth={3 * k}
+          />,
+        ),
+      );
+    }
     if (cropDraft) {
       const c = cropDraft;
       const W = image.w;
@@ -1035,15 +1097,23 @@ export const PhotoAnnotator = forwardRef<PhotoAnnotatorHandle, Props>(function P
       ? `Tap to add · Double-tap to finish (${polyDraft.points.length})`
       : "Tap on the photo to place the first point";
   else if (tool === "measure" && !draft)
-    hint = pxPerInch ? "Drag to measure" : "Drag to measure · then Calibrate to set scale";
+    hint = measureAnchor
+      ? "Tap or drag to the second point"
+      : pxPerInch
+        ? "Tap a point, drag to the second. Drag either end to adjust"
+        : "Tap a point, drag to the second · then Calibrate to set scale";
   else if (tool === "sticker") hint = "Tap the photo to place the sticker";
   else if (tool === "text") hint = "Tap the photo to add text";
   else if (tool === "timestamp") hint = "Tap the photo to stamp the capture time";
 
-  // ---- buttons -----------------------------------------------------------
+  // ---- rail (web's toolbar) --------------------------------------------
+  const pickTool = (t: Tool) => {
+    setPanel(null);
+    // Tapping the tool in hand puts it down, which is how Select is reached
+    // on a phone (web returns to Select after each mark as well).
+    setTool(tool === t ? "select" : t);
+  };
   type Btn = {
-    key: string;
-    label: string;
     icon: IconName;
     onPress: () => void;
     active?: boolean;
@@ -1051,132 +1121,69 @@ export const PhotoAnnotator = forwardRef<PhotoAnnotatorHandle, Props>(function P
     danger?: boolean;
     badge?: ReactNode;
   };
-  const toolBtn = (t: Tool, label: string, icon: IconName): Btn => ({
-    key: t,
-    label,
-    icon,
-    active: tool === t,
-    onPress: () => {
-      setPanel(null);
-      setTool(t);
-    },
-  });
-  const groups: { label: string; items: Btn[] }[] = [
-    {
-      label: "History",
-      items: [
-        {
-          key: "undo",
-          label: "Undo",
-          icon: "undo",
-          onPress: undo,
-          disabled: history.past.length === 0,
-        },
-        {
-          key: "redo",
-          label: "Redo",
-          icon: "redo",
-          onPress: redo,
-          disabled: history.future.length === 0,
-        },
-      ],
-    },
-    {
-      label: "Draw",
-      items: [
-        toolBtn("select", "Select", "select"),
-        toolBtn("pen", "Freehand", "pen"),
-        toolBtn("polyline", "Line", "polyline"),
-        toolBtn("arrow", "Arrow", "arrow"),
-        ...(canMeasure ? [toolBtn("measure", "Measure (Pro)", "measure")] : []),
-      ],
-    },
-    {
-      label: "Shapes",
-      items: [toolBtn("ellipse", "Circle", "ellipse"), toolBtn("rect", "Rectangle", "rect")],
-    },
-    {
-      label: "Mark",
-      items: [
-        toolBtn("text", "Text", "text"),
-        toolBtn("timestamp", "Timestamp", "timestamp"),
-        {
-          key: "sticker",
-          label: "Stickers",
+  const railButton = (key: RailKey): Btn => {
+    switch (key) {
+      case "undo":
+        return { icon: "undo", onPress: undo, disabled: history.past.length === 0 };
+      case "redo":
+        return { icon: "redo", onPress: redo, disabled: history.future.length === 0 };
+      case "sticker":
+        return {
           icon: "sticker",
           active: tool === "sticker",
           onPress: () => {
-            setTool("sticker");
+            if (tool !== "sticker") setTool("sticker");
             setPanel(panel === "sticker" ? null : "sticker");
           },
           badge: <Text style={styles.badgeGlyph}>{sticker}</Text>,
-        },
-      ],
-    },
-    {
-      label: "Style",
-      items: [
-        {
-          key: "style",
-          label: `Color and thickness, ${strokeWidth}px`,
+        };
+      case "style":
+        return {
           icon: "palette",
           active: panel === "style",
           onPress: () => setPanel(panel === "style" ? null : "style"),
           badge: <View style={[styles.badgeDot, { backgroundColor: color }]} />,
-        },
-        {
-          key: "adjust",
-          label: "Adjust image",
+        };
+      case "adjust":
+        return {
           icon: "adjust",
           active: panel === "adjust",
           onPress: () => setPanel(panel === "adjust" ? null : "adjust"),
-        },
-        {
-          key: "rotate",
-          label: "Rotate 90 degrees",
-          icon: "rotate",
-          onPress: () => void rotate(),
-          disabled: !!busy,
-        },
-        toolBtn("crop", "Crop", "crop"),
-      ],
-    },
-    {
-      label: "Actions",
-      items: [
-        {
-          key: "clear",
-          label: "Clear all",
-          icon: "trash",
-          onPress: clearAll,
-          disabled: !shapes.length,
-          danger: true,
-        },
-      ],
-    },
-  ];
+        };
+      case "rotate":
+        return { icon: "rotate", onPress: () => void rotate(), disabled: !!busy };
+      case "clear":
+        return { icon: "trash", onPress: clearAll, disabled: !shapes.length, danger: true };
+      default:
+        return { icon: key, active: tool === key, onPress: () => pickTool(key) };
+    }
+  };
 
-  const renderBtn = (b: Btn) => (
-    <Pressable
-      key={b.key}
-      accessibilityRole="button"
-      accessibilityLabel={b.label}
-      accessibilityState={{ selected: !!b.active, disabled: !!b.disabled }}
-      disabled={b.disabled}
-      onPress={b.onPress}
-      style={[
-        styles.toolBtn,
-        b.active ? { backgroundColor: ACCENT } : null,
-        b.disabled ? { opacity: 0.3 } : null,
-      ]}
-    >
-      <ToolIcon name={b.icon} color={b.danger ? "#fca5a5" : "#fff"} />
-      {b.badge ? <View style={styles.badge}>{b.badge}</View> : null}
-      {b.active && b.key !== "style" && b.key !== "adjust" ? (
-        <View style={[styles.activeBar, { backgroundColor: color }]} />
-      ) : null}
-    </Pressable>
-  );
+  const renderBtn = (key: RailKey, label: string) => {
+    const b = railButton(key);
+    // Web tints the active drawing tool with the current colour.
+    const tinted = b.active && key !== "style" && key !== "adjust";
+    return (
+      <Pressable
+        key={key}
+        accessibilityRole="button"
+        accessibilityLabel={key === "style" ? `${label}, ${strokeWidth}px` : label}
+        accessibilityState={{ selected: !!b.active, disabled: !!b.disabled }}
+        disabled={b.disabled}
+        onPress={b.onPress}
+        hitSlop={2}
+        style={({ pressed }) => [
+          styles.toolBtn,
+          b.active ? styles.toolBtnOn : pressed ? styles.toolBtnPressed : null,
+          b.disabled ? { opacity: 0.3 } : null,
+        ]}
+      >
+        <ToolIcon name={b.icon} color={b.danger ? "#fca5a5" : "#fff"} />
+        {b.badge ? <View style={styles.badge}>{b.badge}</View> : null}
+        {tinted ? <View style={[styles.activeBar, { backgroundColor: color }]} /> : null}
+      </Pressable>
+    );
+  };
 
   const saveButton = (
     <Pressable
@@ -1186,7 +1193,12 @@ export const PhotoAnnotator = forwardRef<PhotoAnnotatorHandle, Props>(function P
       disabled={exporting || !image || !!busy}
       style={[styles.saveBtn, exporting || !image ? { opacity: 0.6 } : null]}
     >
-      {exporting ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveText}>Save</Text>}
+      {exporting ? (
+        <ActivityIndicator color="#fff" size="small" />
+      ) : (
+        <ToolIcon name="save" size={16} />
+      )}
+      <Text style={styles.saveText}>{exporting ? "Saving..." : "Save"}</Text>
     </Pressable>
   );
 
@@ -1269,7 +1281,10 @@ export const PhotoAnnotator = forwardRef<PhotoAnnotatorHandle, Props>(function P
   }
 
   const selectionBar =
-    selected && tool === "select" && !textPrompt && !calibrate ? (
+    selected &&
+    (tool === "select" || (tool === "measure" && selected.kind === "measure")) &&
+    !textPrompt &&
+    !calibrate ? (
       <View style={styles.selectionBar}>
         {selected.kind === "text" ? (
           <BarButton
@@ -1404,7 +1419,9 @@ export const PhotoAnnotator = forwardRef<PhotoAnnotatorHandle, Props>(function P
       ) : null}
 
       {panelBody ? (
-        <Panel style={useRail ? styles.panelRail : styles.panelBottom}>{panelBody}</Panel>
+        <Panel style={[styles.panelRail, { width: Math.min(300, stage.w - 16) }]}>
+          {panelBody}
+        </Panel>
       ) : null}
 
       {busy ? (
@@ -1444,7 +1461,7 @@ export const PhotoAnnotator = forwardRef<PhotoAnnotatorHandle, Props>(function P
           disabled={exporting}
           style={styles.cancelBtn}
         >
-          <ToolIcon name="close" />
+          <ToolIcon name="close" size={20} />
           <Text style={styles.cancelText}>Cancel</Text>
         </Pressable>
         <Text style={styles.title} numberOfLines={1}>
@@ -1453,43 +1470,42 @@ export const PhotoAnnotator = forwardRef<PhotoAnnotatorHandle, Props>(function P
         {saveButton}
       </View>
 
-      <View style={{ flex: 1, flexDirection: useRail ? "row" : "column" }}>
+      <View style={{ flex: 1, flexDirection: "row", backgroundColor: "#000" }}>
         {stageView}
-        {useRail ? (
-          <View
-            style={[
-              styles.rail,
-              { marginRight: insets.right + 8, marginBottom: insets.bottom + 8 },
-            ]}
-          >
+        <View
+          style={[
+            styles.railWrap,
+            { paddingRight: insets.right + 6, paddingBottom: insets.bottom + 6 },
+          ]}
+        >
+          <View style={styles.rail}>
             <ScrollView
               contentContainerStyle={styles.railContent}
               showsVerticalScrollIndicator={false}
+              bounces={false}
             >
-              {groups.map((g) => (
+              {railGroups(canMeasure).map((g) => (
                 <View key={g.label} style={styles.group}>
                   <Text style={styles.groupLabel}>{g.label.toUpperCase()}</Text>
-                  {g.items.map(renderBtn)}
+                  {g.items.map((it) => renderBtn(it.key, it.label))}
                 </View>
               ))}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Done and Save"
+                onPress={save}
+                disabled={exporting || !image || !!busy}
+                style={[styles.doneBtn, exporting || !image ? { opacity: 0.5 } : null]}
+              >
+                {exporting ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <ToolIcon name="check" strokeWidth={3} />
+                )}
+              </Pressable>
             </ScrollView>
           </View>
-        ) : (
-          <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 6 }]}>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.bottomContent}
-            >
-              {groups.map((g, gi) => (
-                <View key={g.label} style={styles.bottomGroup}>
-                  {gi > 0 ? <View style={styles.divider} /> : null}
-                  {g.items.map(renderBtn)}
-                </View>
-              ))}
-            </ScrollView>
-          </View>
-        )}
+        </View>
       </View>
 
       {exporting && image ? (
@@ -1565,9 +1581,11 @@ const styles = StyleSheet.create({
   cancelText: { color: "rgba(255,255,255,0.9)", fontSize: 15 },
   title: { flex: 1, textAlign: "center", color: "rgba(255,255,255,0.6)", fontSize: 13 },
   saveBtn: {
+    flexDirection: "row",
+    gap: 6,
     minHeight: 44,
-    minWidth: 84,
-    paddingHorizontal: 20,
+    minWidth: 92,
+    paddingHorizontal: 18,
     borderRadius: 22,
     backgroundColor: ACCENT,
     alignItems: "center",
@@ -1576,41 +1594,44 @@ const styles = StyleSheet.create({
   saveText: { color: "#fff", fontSize: 15, fontWeight: "700" },
   stage: { flex: 1, backgroundColor: "#000", overflow: "hidden" },
   center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24 },
+  /*
+   * Web's glass panel: floated on the right edge, centred vertically, as tall
+   * as its buttons need and no taller, scrolling when the screen is shorter.
+   */
+  railWrap: { justifyContent: "center", paddingTop: 6, paddingLeft: 4 },
   rail: {
     width: RAIL_WIDTH,
-    marginVertical: 8,
-    marginLeft: 8,
+    maxHeight: "100%",
     borderRadius: 26,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.1)",
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "rgba(255,255,255,0.07)",
+    overflow: "hidden",
   },
-  railContent: { paddingVertical: 12, gap: 12, alignItems: "center" },
-  group: { alignItems: "center", gap: 4 },
+  railContent: { paddingVertical: 10, gap: 10, alignItems: "center" },
+  group: { alignItems: "center", gap: 2 },
   groupLabel: {
     color: "rgba(255,255,255,0.4)",
     fontSize: 9,
     fontWeight: "700",
     letterSpacing: 1.2,
-  },
-  bottomBar: {
-    backgroundColor: "rgba(10,10,10,0.97)",
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "rgba(255,255,255,0.08)",
-    paddingTop: 6,
-  },
-  bottomContent: { paddingHorizontal: 8, alignItems: "center" },
-  bottomGroup: { flexDirection: "row", alignItems: "center", gap: 2 },
-  divider: {
-    width: StyleSheet.hairlineWidth,
-    height: 28,
-    backgroundColor: "rgba(255,255,255,0.2)",
-    marginHorizontal: 6,
+    marginBottom: 2,
   },
   toolBtn: {
     width: BUTTON,
     height: BUTTON,
     borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  toolBtnOn: { backgroundColor: ACCENT, transform: [{ scale: 1.05 }] },
+  toolBtnPressed: { backgroundColor: "rgba(255,255,255,0.15)" },
+  doneBtn: {
+    width: BUTTON + 2,
+    height: BUTTON + 2,
+    marginTop: 2,
+    borderRadius: 16,
+    backgroundColor: ACCENT,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1696,8 +1717,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#000",
   },
   cardWrap: { position: "absolute", top: 8, left: 8, right: 8 },
-  panelRail: { position: "absolute", right: 8, top: 8, width: 300, maxHeight: "96%" },
-  panelBottom: { position: "absolute", left: 8, right: 8, bottom: 8, maxHeight: "80%" },
+  // Web opens its popovers to the left of the toolbar; here they sit at the
+  // stage's right edge, which is directly beside the rail.
+  panelRail: { position: "absolute", right: 8, top: 8, maxHeight: "96%" },
   busy: {
     ...StyleSheet.absoluteFill,
     alignItems: "center",

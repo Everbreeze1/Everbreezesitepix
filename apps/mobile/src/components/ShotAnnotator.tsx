@@ -7,12 +7,13 @@ import {
   type AnnotatorSaveOutput,
   type PhotoAnnotatorHandle,
 } from "@/components/annotator/PhotoAnnotator";
+import { deviceSupportsMeasure } from "@/lib/measure-support";
 
 export type ShotAnnotatorTool = AnnotationTool | "measure";
 
 /**
  * Mark up a shot before it is saved: the camera's version of web's Annotate
- * step, with Measure for Pro and Team.
+ * step, with Measure for Pro and Team on an iPhone 15 Pro or later.
  *
  * The same full editor as a saved photo's Annotate (`PhotoAnnotator`), in a
  * modal. The difference is the result: it replaces the shot in the batch
@@ -46,6 +47,8 @@ export function ShotAnnotator({
   onDone: (result: { uri: string; width: number; height: number }) => void;
 }) {
   const editor = useRef<PhotoAnnotatorHandle>(null);
+  // The plan allows it AND the phone does: iPhone 15 Pro and later, never Android.
+  const measureOk = canMeasure && deviceSupportsMeasure();
 
   async function save(out: AnnotatorSaveOutput) {
     if (!out.dirty) {
@@ -72,10 +75,10 @@ export function ShotAnnotator({
           uri={uri}
           width={width}
           height={height}
-          canMeasure={canMeasure}
-          initialTool={initialTool === "measure" && !canMeasure ? "pen" : initialTool}
+          canMeasure={measureOk}
+          initialTool={initialTool === "measure" && !measureOk ? "pen" : initialTool}
           capturedAt={capturedAt}
-          title={initialTool === "measure" ? "Measure" : "Annotate"}
+          title={initialTool === "measure" && measureOk ? "Measure" : "Annotate"}
           onCancel={onCancel}
           onSave={save}
         />

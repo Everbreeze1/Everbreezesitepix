@@ -425,6 +425,32 @@ export function formatMeasure(px: number, pxPerInch: number): string {
   return `${imp}  ·  ${met}`;
 }
 
+/**
+ * The ruler end under a finger, on any measurement, selected or not: once a
+ * line is down both of its ends stay grabbable, so a tech can nudge either one
+ * onto the edge it should sit on. The nearest end wins when two are close.
+ */
+export function measureEndpointAt(
+  shapes: Shape[],
+  p: Point,
+  tol: number,
+): { shape: Extract<Shape, { kind: "measure" }>; end: "from" | "to" } | null {
+  let best: { shape: Extract<Shape, { kind: "measure" }>; end: "from" | "to" } | null = null;
+  let bestD = Infinity;
+  for (let i = shapes.length - 1; i >= 0; i--) {
+    const s = shapes[i];
+    if (s.kind !== "measure") continue;
+    for (const end of ["from", "to"] as const) {
+      const d = dist(s[end], p);
+      if (d <= tol && d < bestD) {
+        best = { shape: s, end };
+        bestD = d;
+      }
+    }
+  }
+  return best;
+}
+
 /** Where web draws a measurement's end caps and label, in image pixels. */
 export function measureLayout(from: Point, to: Point, width: number, canvas: Size) {
   const dx = to.x - from.x;
@@ -731,4 +757,80 @@ export function fitSize(area: Size, aspect: number): Size {
     w = h * a;
   }
   return { w: Math.round(w), h: Math.round(h) };
+}
+
+// ---------------------------------------------------------------------------
+// The tool rail
+// ---------------------------------------------------------------------------
+
+export type RailKey =
+  | "undo"
+  | "redo"
+  | "pen"
+  | "polyline"
+  | "arrow"
+  | "measure"
+  | "ellipse"
+  | "rect"
+  | "text"
+  | "timestamp"
+  | "sticker"
+  | "style"
+  | "adjust"
+  | "rotate"
+  | "crop"
+  | "clear";
+
+/**
+ * Web's right-hand toolbar, group for group and button for button, in web's
+ * order. The labels are web's tooltips, which on the phone are the
+ * accessibility labels (the buttons show icons only, as on web). Done and Save
+ * sits under the last group, outside any group, as on web.
+ */
+export function railGroups(
+  canMeasure: boolean,
+): { label: string; items: { key: RailKey; label: string }[] }[] {
+  return [
+    {
+      label: "History",
+      items: [
+        { key: "undo", label: "Undo" },
+        { key: "redo", label: "Redo" },
+      ],
+    },
+    {
+      label: "Draw",
+      items: [
+        { key: "pen", label: "Freehand" },
+        { key: "polyline", label: "Line" },
+        { key: "arrow", label: "Arrow" },
+        ...(canMeasure ? [{ key: "measure" as const, label: "Measure (Pro)" }] : []),
+      ],
+    },
+    {
+      label: "Shapes",
+      items: [
+        { key: "ellipse", label: "Circle" },
+        { key: "rect", label: "Rectangle" },
+      ],
+    },
+    {
+      label: "Mark",
+      items: [
+        { key: "text", label: "Text" },
+        { key: "timestamp", label: "Timestamp" },
+        { key: "sticker", label: "Stickers" },
+      ],
+    },
+    {
+      label: "Style",
+      items: [
+        { key: "style", label: "Color and thickness" },
+        { key: "adjust", label: "Adjust image" },
+        { key: "rotate", label: "Rotate 90 degrees" },
+        { key: "crop", label: "Crop" },
+      ],
+    },
+    { label: "Actions", items: [{ key: "clear", label: "Clear all" }] },
+  ];
 }

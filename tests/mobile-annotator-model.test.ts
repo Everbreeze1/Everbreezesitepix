@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, it, expect } from "vitest";
 import {
   adjustMatrix,
@@ -12,11 +14,13 @@ import {
   getHandles,
   hitTest,
   isMeaningful,
+  measureEndpointAt,
   NO_ADJUST,
   normaliseCrop,
   parseShapes,
   pushHistory,
   pxPerInchFromCalibration,
+  railGroups,
   redoHistory,
   rotateShapesCW,
   serializeShapes,
@@ -198,5 +202,68 @@ describe("zoom, fit, stamp, adjust", () => {
     expect(adjustMatrix(NO_ADJUST)).toEqual([
       1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0,
     ]);
+  });
+});
+
+describe("the tool rail is web's", () => {
+  it("has web's groups, buttons and order, with Measure only when allowed", () => {
+    const flat = (m: boolean) =>
+      railGroups(m).map((g) => `${g.label}: ${g.items.map((i) => i.label).join(", ")}`);
+    expect(flat(true)).toEqual([
+      "History: Undo, Redo",
+      "Draw: Freehand, Line, Arrow, Measure (Pro)",
+      "Shapes: Circle, Rectangle",
+      "Mark: Text, Timestamp, Stickers",
+      "Style: Color and thickness, Adjust image, Rotate 90 degrees, Crop",
+      "Actions: Clear all",
+    ]);
+    expect(flat(false)[1]).toBe("Draw: Freehand, Line, Arrow");
+  });
+
+  it("shows icons, not words, on the rail and top bar", () => {
+    const src = readFileSync(
+      join(__dirname, "../apps/mobile/src/components/annotator/PhotoAnnotator.tsx"),
+      "utf8",
+    );
+    expect(src).toContain("<ToolIcon name={b.icon}");
+    expect(src).toContain('accessibilityLabel="Done and Save"');
+    // No bottom toolbar on a phone: the rail stays on the right edge.
+    expect(src).not.toMatch(/bottomBar|useRail/);
+  });
+});
+
+describe("the ruler", () => {
+  const ruler: Shape = {
+    id: "m",
+    kind: "measure",
+    color: "#ef4444",
+    width: 8,
+    from: { x: 100, y: 500 },
+    to: { x: 700, y: 500 },
+  };
+
+  it("keeps both ends grabbable, nearest end first", () => {
+    expect(measureEndpointAt([arrow, ruler], { x: 104, y: 497 }, 20)).toMatchObject({
+      end: "from",
+    });
+    expect(measureEndpointAt([ruler], { x: 690, y: 505 }, 20)).toMatchObject({ end: "to" });
+    expect(measureEndpointAt([ruler], { x: 400, y: 500 }, 20)).toBeNull();
+    expect(measureEndpointAt([arrow], { x: 100, y: 100 }, 20)).toBeNull();
+  });
+
+  it("drags an end to a new length", () => {
+    const moved = transformShape(ruler, { kind: "to" }, 0, 0, { x: 400, y: 500 });
+    expect(moved).toMatchObject({ from: { x: 100, y: 500 }, to: { x: 400, y: 500 } });
+    expect(formatMeasure(300, defaultPxPerInch(img))).toBe(`1' 3.0"  ·  38.1 cm`);
+  });
+
+  it("is only offered on a supported iPhone, in both editors", () => {
+    const read = (rel: string) => readFileSync(join(__dirname, "..", rel), "utf8");
+    expect(read("apps/mobile/app/(app)/photo/[id]/annotate.tsx")).toMatch(
+      /canMeasure =\s*deviceSupportsMeasure\(\) &&/,
+    );
+    expect(read("apps/mobile/src/components/ShotAnnotator.tsx")).toContain(
+      "const measureOk = canMeasure && deviceSupportsMeasure();",
+    );
   });
 });
