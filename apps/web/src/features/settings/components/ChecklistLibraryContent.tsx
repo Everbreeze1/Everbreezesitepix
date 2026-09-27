@@ -153,11 +153,27 @@ function ChecklistEditor({
   onSave: () => void;
 }) {
   const [draft, setDraft] = useState("");
+  const nameRef = useRef<HTMLInputElement>(null);
+  const [nameMissing, setNameMissing] = useState(false);
   const commitDraft = () => {
     const label = draft.trim();
     if (!label) return;
     onAdd(label);
     setDraft("");
+  };
+  /*
+   * Save stays clickable without a name. It used to be `disabled` until one was
+   * typed, which read as a dead button: a long list of items and a Save that
+   * does nothing, with no hint that the one missing thing is the title. Now the
+   * click says so and puts the cursor in the field.
+   */
+  const trySave = () => {
+    if (!name.trim()) {
+      setNameMissing(true);
+      nameRef.current?.focus();
+      return;
+    }
+    onSave();
   };
 
   return (
@@ -173,10 +189,15 @@ function ChecklistEditor({
       {/* Title + actions */}
       <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
         <input
+          ref={nameRef}
           value={name}
-          onChange={(e) => onName(e.target.value)}
+          onChange={(e) => {
+            onName(e.target.value);
+            if (e.target.value.trim()) setNameMissing(false);
+          }}
           placeholder="Checklist name"
           aria-label="Checklist name"
+          aria-invalid={nameMissing || undefined}
           className="min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-1 text-[22px] font-bold tracking-[-0.01em] text-foreground outline-none transition-colors placeholder:text-faint hover:border-border focus:border-primary/50"
         />
         <div className="flex gap-2.5">
@@ -187,14 +208,19 @@ function ChecklistEditor({
             Cancel
           </button>
           <button
-            onClick={onSave}
-            disabled={saving || !name.trim()}
+            onClick={trySave}
+            disabled={saving}
             className="cursor-pointer rounded-[9px] bg-primary px-4 py-2.5 text-[13px] font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {saving ? "Saving\u2026" : "Save checklist"}
           </button>
         </div>
       </div>
+      {nameMissing && (
+        <p role="alert" className="mb-2 text-[12.5px] font-semibold text-destructive">
+          Give the checklist a name to save it.
+        </p>
+      )}
       <div className="mb-[22px] text-[12.5px] text-faint">
         {blueprintNames.length === 0
           ? "Not used in any blueprint yet"
