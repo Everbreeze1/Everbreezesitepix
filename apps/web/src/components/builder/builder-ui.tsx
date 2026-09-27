@@ -54,10 +54,10 @@ export function BuilderLayout({
   return (
     <div className="mt-6 gap-5 md:grid md:grid-cols-[minmax(0,272px)_minmax(0,1fr)] md:items-start">
       {/* Same app-header offset as the title bar, so the two panes pin flush.
-          This read 98px - the 82px header offset added on top of a pre-existing
+          This read 98px - the header offset added on top of a pre-existing
           `top-4` instead of replacing it - which left the rail docking 16px
           below the canvas once you scrolled. */}
-      <div className={cn("md:sticky md:top-[82px] md:block", pane === "list" ? "block" : "hidden")}>
+      <div className={cn("md:sticky md:top-14 md:block", pane === "list" ? "block" : "hidden")}>
         {rail}
       </div>
       <div className={cn("min-w-0 md:block", pane === "editor" ? "block" : "hidden")}>{canvas}</div>
@@ -196,7 +196,7 @@ export function BuilderCanvas({
    * sticky` resolves against its nearest scrollport - so the title bar stuck to
    * the CARD instead of the page. As you scrolled, the bar slid down over the
    * card's own first rows: checklist item 1 disappeared behind it and item 2
-   * was cut in half, while `top-[82px]` never actually took effect. That is the
+   * was cut in half, while `top-14` never actually took effect. That is the
    * bug this screen was reported for.
    *
    * The card is only rounded, not clipping anything that needs it - the title
@@ -256,8 +256,8 @@ export function BuilderTitleBar({
     const el = sentinelRef.current;
     if (!el || typeof IntersectionObserver === "undefined") return;
     const io = new IntersectionObserver(([entry]) => setCondensed(!entry.isIntersecting), {
-      // The bar docks under AppHeader, so "off screen" means past 82px, not 0.
-      rootMargin: "-82px 0px 0px 0px",
+      // The bar docks under AppHeader, so "off screen" means past 56px, not 0.
+      rootMargin: "-56px 0px 0px 0px",
       threshold: 0,
     });
     io.observe(el);
@@ -267,15 +267,15 @@ export function BuilderTitleBar({
   return (
     <>
       <div ref={sentinelRef} aria-hidden className="h-px" />
-      {/* top-[82px], not top-0: the page is the scroll container and AppHeader
-          is `sticky top-0 h-[82px]`, so top-0 parked this bar underneath it -
+      {/* top-14, not top-0: the page is the scroll container and AppHeader
+          is `sticky top-0 h-14`, so top-0 parked this bar underneath it -
           the save status it exists to keep in view was hidden behind the app
           chrome. */}
       <div
         className={cn(
           // `rounded-t-2xl` replaces the clipping the card used to do with
           // `overflow-hidden` - which broke this bar's stickiness entirely.
-          "sticky top-[82px] z-10 rounded-t-2xl border-b border-border/60 bg-gradient-to-b from-card via-card to-card/95 px-4 backdrop-blur transition-[padding] duration-150 sm:px-6",
+          "sticky top-14 z-10 rounded-t-2xl border-b border-border/60 bg-gradient-to-b from-card via-card to-card/95 px-4 backdrop-blur transition-[padding] duration-150 sm:px-6",
           condensed ? "py-2" : "pb-3 pt-4 sm:pt-5",
         )}
       >

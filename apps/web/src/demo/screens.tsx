@@ -864,7 +864,9 @@ export function MapScreen({ onOpenProject }: { onOpenProject: (id: string) => vo
           ))}
 
           <div className="absolute left-3 top-3 rounded-xl border border-border bg-card/95 px-3 py-2 shadow-md">
-            <p className="font-manrope text-xs font-bold text-foreground">{activeCount} active sites</p>
+            <p className="font-manrope text-xs font-bold text-foreground">
+              {activeCount} active sites
+            </p>
             <p className="font-manrope text-[10px] text-muted-foreground">Updated just now</p>
           </div>
           <div className="absolute right-3 top-3 hidden rounded-xl border border-border bg-card/95 px-3 py-2 shadow-md sm:block">
@@ -880,8 +882,12 @@ export function MapScreen({ onOpenProject }: { onOpenProject: (id: string) => vo
             <div className="p-3">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="font-manrope truncate text-sm font-extrabold text-foreground">{selected.name}</p>
-                  <p className="font-manrope mt-0.5 text-[11px] text-muted-foreground">{projectLocation(selected)}</p>
+                  <p className="font-manrope truncate text-sm font-extrabold text-foreground">
+                    {selected.name}
+                  </p>
+                  <p className="font-manrope mt-0.5 text-[11px] text-muted-foreground">
+                    {projectLocation(selected)}
+                  </p>
                 </div>
                 <StatusBadge status={selected.status} />
               </div>
@@ -904,7 +910,9 @@ export function MapScreen({ onOpenProject }: { onOpenProject: (id: string) => vo
         <aside className={cn(panelClass, "overflow-hidden")}>
           <div className="border-b border-border px-4 py-3">
             <p className={sectionLabel}>Projects on map</p>
-            <p className="font-manrope mt-1 text-xs text-muted-foreground">Select a project to preview it.</p>
+            <p className="font-manrope mt-1 text-xs text-muted-foreground">
+              Select a project to preview it.
+            </p>
           </div>
           <div className="max-h-[520px] space-y-1 overflow-y-auto p-2">
             {demoProjects.map((project) => (
@@ -914,17 +922,29 @@ export function MapScreen({ onOpenProject }: { onOpenProject: (id: string) => vo
                 onClick={() => setSelectedId(project.id)}
                 className={cn(
                   "flex w-full gap-3 rounded-xl p-2.5 text-left transition",
-                  selectedId === project.id ? "bg-primary/10 ring-1 ring-primary/20" : "hover:bg-accent/60",
+                  selectedId === project.id
+                    ? "bg-primary/10 ring-1 ring-primary/20"
+                    : "hover:bg-accent/60",
                 )}
               >
-                <img src={project.cover} alt="" className="h-14 w-16 shrink-0 rounded-lg object-cover" />
+                <img
+                  src={project.cover}
+                  alt=""
+                  className="h-14 w-16 shrink-0 rounded-lg object-cover"
+                />
                 <span className="min-w-0 flex-1">
                   <span className="flex items-start justify-between gap-2">
-                    <span className="font-manrope block truncate text-xs font-extrabold text-foreground">{project.name}</span>
+                    <span className="font-manrope block truncate text-xs font-extrabold text-foreground">
+                      {project.name}
+                    </span>
                     <StatusBadge status={project.status} />
                   </span>
-                  <span className="font-manrope mt-1 block truncate text-[10px] text-muted-foreground">{project.city}, {project.state} · {project.photoCount.toLocaleString()} photos</span>
-                  <span className="font-manrope mt-1 block text-[10px] font-bold text-primary">{project.phase}</span>
+                  <span className="font-manrope mt-1 block truncate text-[10px] text-muted-foreground">
+                    {project.city}, {project.state} · {project.photoCount.toLocaleString()} photos
+                  </span>
+                  <span className="font-manrope mt-1 block text-[10px] font-bold text-primary">
+                    {project.phase}
+                  </span>
                 </span>
               </button>
             ))}
@@ -1005,7 +1025,9 @@ export function GalleryScreen() {
         actions={
           selected.length > 0 ? (
             <div className="flex items-center gap-2">
-              <span className="font-manrope text-xs font-extrabold text-primary">{selected.length} selected</span>
+              <span className="font-manrope text-xs font-extrabold text-primary">
+                {selected.length} selected
+              </span>
               <Button
                 type="button"
                 size="sm"
@@ -1047,12 +1069,22 @@ export function GalleryScreen() {
           <span className="font-manrope mr-1 text-[11px] font-extrabold uppercase tracking-wide text-primary">
             Photo actions
           </span>
-          <InertButton icon={Share2} title="Share selected photos in the full app">Share</InertButton>
-          <InertButton icon={Download} title="Download selected photos in the full app">Download</InertButton>
-          <InertButton icon={Sparkles} title="Generate a report from selected photos in the full app">
+          <InertButton icon={Share2} title="Share selected photos in the full app">
+            Share
+          </InertButton>
+          <InertButton icon={Download} title="Download selected photos in the full app">
+            Download
+          </InertButton>
+          <InertButton
+            icon={Sparkles}
+            title="Generate a report from selected photos in the full app"
+          >
             Generate report
           </InertButton>
-          <InertButton icon={FileText} title="Add selected photos to an existing report in the full app">
+          <InertButton
+            icon={FileText}
+            title="Add selected photos to an existing report in the full app"
+          >
             Add to report
           </InertButton>
           <span className="font-manrope ml-auto hidden text-[10px] text-muted-foreground sm:block">
@@ -1170,8 +1202,16 @@ export function ReportsScreen() {
 
           <div className="mt-4 grid gap-2 sm:grid-cols-3">
             <MetaTile icon={FolderKanban} label="Project" value={reportProject.name} />
-            <MetaTile icon={Camera} label="Photo evidence" value={`${evidence.length} selected shots`} />
-            <MetaTile icon={Sparkles} label="Draft source" value={open.kind === "AI" ? "Project record + AI" : "Field team"} />
+            <MetaTile
+              icon={Camera}
+              label="Photo evidence"
+              value={`${evidence.length} selected shots`}
+            />
+            <MetaTile
+              icon={Sparkles}
+              label="Draft source"
+              value={open.kind === "AI" ? "Project record + AI" : "Field team"}
+            />
           </div>
 
           {/* Highlights */}
@@ -1195,24 +1235,22 @@ export function ReportsScreen() {
           <div className="mt-6">
             <p className={sectionLabel}>Photo evidence</p>
             <div className="mt-2 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-              {evidence
-                .slice(0, 6)
-                .map((photo) => (
-                  <div
-                    key={photo.id}
-                    className="relative aspect-[4/3] overflow-hidden rounded-lg border border-border"
-                  >
-                    <img
-                      src={photo.src}
-                      alt={photo.caption}
-                      className="h-full w-full object-cover"
-                      loading="lazy"
-                    />
-                    <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-1.5 pb-1 pt-3 text-[9px] leading-tight text-white">
-                      {photo.caption}
-                    </span>
-                  </div>
-                ))}
+              {evidence.slice(0, 6).map((photo) => (
+                <div
+                  key={photo.id}
+                  className="relative aspect-[4/3] overflow-hidden rounded-lg border border-border"
+                >
+                  <img
+                    src={photo.src}
+                    alt={photo.caption}
+                    className="h-full w-full object-cover"
+                    loading="lazy"
+                  />
+                  <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-1.5 pb-1 pt-3 text-[9px] leading-tight text-white">
+                    {photo.caption}
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
 

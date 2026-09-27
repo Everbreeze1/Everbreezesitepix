@@ -109,7 +109,7 @@ describe("ticking a task photo is queued", () => {
   });
 
   it("no longer writes straight to the server", () => {
-    expect(screen()).not.toMatch(/import \{[^}]*setTaskPhotoStatus/);
+    expect(screen()).not.toMatch(/import \{[^}]*\bsetTaskPhotoStatus\b/);
   });
 
   it("relies on an upsert, which is what makes a replay safe", () => {

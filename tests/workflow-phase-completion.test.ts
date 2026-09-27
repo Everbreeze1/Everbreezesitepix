@@ -4,9 +4,7 @@ import { describe, expect, it } from "vitest";
 
 const read = (p: string) => readFileSync(join(__dirname, "..", p), "utf8");
 
-const MIGRATION = read(
-  "supabase/migrations/20261009000000_workflow_phase_completion.sql",
-);
+const MIGRATION = read("supabase/migrations/20261009000000_workflow_phase_completion.sql");
 
 /*
  * The Workflow Automation Spec's prerequisite: "phase complete" has to become a

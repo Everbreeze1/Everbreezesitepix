@@ -17,10 +17,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PortfolioSitePanel } from "@/features/showcases/components/PortfolioSitePanel";
-import {
-  type PortfolioDetail,
-  type PortfolioShowcaseCard,
-} from "@/lib/portfolio.functions";
+import { type PortfolioDetail, type PortfolioShowcaseCard } from "@/lib/portfolio.functions";
 
 /*
  * The Portfolio screen, drawn exactly as the Main-html reference
@@ -138,9 +135,7 @@ export function PortfolioLibraryContent({
 
   const focus = (key: SectionKey) => {
     setSection(key);
-    const el = scrollerRef.current?.querySelector<HTMLElement>(
-      `[data-preview-block="${key}"]`,
-    );
+    const el = scrollerRef.current?.querySelector<HTMLElement>(`[data-preview-block="${key}"]`);
     if (el && scrollerRef.current) {
       scrollerRef.current.scrollTo({ top: Math.max(0, el.offsetTop - 8), behavior: "smooth" });
     }
@@ -161,8 +156,7 @@ export function PortfolioLibraryContent({
 
   const gallery = showcases.filter((s) => s.cover_image_url).slice(0, 8);
   const hasContact = !!(portfolio.phone || portfolio.email || portfolio.address);
-  const showReviewsBand =
-    portfolio.show_reviews && portfolio.google_rating != null;
+  const showReviewsBand = portfolio.show_reviews && portfolio.google_rating != null;
 
   return (
     <div className="flex flex-col gap-6 lg:flex-row lg:items-stretch">
@@ -277,10 +271,16 @@ export function PortfolioLibraryContent({
                   className="hidden items-center gap-[22px] text-[11px] font-semibold uppercase tracking-[0.06em] md:flex"
                   style={{ color: BRAND.inkMuted }}
                 >
-                  <button onClick={() => focus("services")} className="cursor-pointer hover:text-black">
+                  <button
+                    onClick={() => focus("services")}
+                    className="cursor-pointer hover:text-black"
+                  >
                     Services
                   </button>
-                  <button onClick={() => focus("gallery")} className="cursor-pointer hover:text-black">
+                  <button
+                    onClick={() => focus("gallery")}
+                    className="cursor-pointer hover:text-black"
+                  >
                     Gallery
                   </button>
                   <button
@@ -289,7 +289,10 @@ export function PortfolioLibraryContent({
                   >
                     Reviews
                   </button>
-                  <button onClick={() => focus("contact")} className="cursor-pointer hover:text-black">
+                  <button
+                    onClick={() => focus("contact")}
+                    className="cursor-pointer hover:text-black"
+                  >
                     Contact
                   </button>
                 </div>
@@ -429,10 +432,16 @@ export function PortfolioLibraryContent({
                   className="rounded-[10px] border p-4"
                   style={{ borderColor: BRAND.line, borderTop: `2.5px solid ${BRAND.gold}` }}
                 >
-                  <div className="text-[10.5px] font-semibold uppercase tracking-[0.04em]" style={{ color: BRAND.inkMuted }}>
+                  <div
+                    className="text-[10.5px] font-semibold uppercase tracking-[0.04em]"
+                    style={{ color: BRAND.inkMuted }}
+                  >
                     License
                   </div>
-                  <div className="mt-1 font-serif text-base font-semibold" style={{ color: BRAND.ink }}>
+                  <div
+                    className="mt-1 font-serif text-base font-semibold"
+                    style={{ color: BRAND.ink }}
+                  >
                     {"\u2014"}
                   </div>
                 </div>
@@ -440,10 +449,16 @@ export function PortfolioLibraryContent({
                   className="rounded-[10px] border p-4"
                   style={{ borderColor: BRAND.line, borderTop: `2.5px solid ${BRAND.gold}` }}
                 >
-                  <div className="text-[10.5px] font-semibold uppercase tracking-[0.04em]" style={{ color: BRAND.inkMuted }}>
+                  <div
+                    className="text-[10.5px] font-semibold uppercase tracking-[0.04em]"
+                    style={{ color: BRAND.inkMuted }}
+                  >
                     Service area
                   </div>
-                  <div className="mt-1 font-serif text-base font-semibold" style={{ color: BRAND.ink }}>
+                  <div
+                    className="mt-1 font-serif text-base font-semibold"
+                    style={{ color: BRAND.ink }}
+                  >
                     {portfolio.service_areas?.length
                       ? portfolio.service_areas.join(", ")
                       : "\u2014"}
@@ -453,10 +468,16 @@ export function PortfolioLibraryContent({
                   className="rounded-[10px] border p-4"
                   style={{ borderColor: BRAND.line, borderTop: `2.5px solid ${BRAND.gold}` }}
                 >
-                  <div className="text-[10.5px] font-semibold uppercase tracking-[0.04em]" style={{ color: BRAND.inkMuted }}>
+                  <div
+                    className="text-[10.5px] font-semibold uppercase tracking-[0.04em]"
+                    style={{ color: BRAND.inkMuted }}
+                  >
                     Projects shown
                   </div>
-                  <div className="mt-1 font-serif text-base font-semibold" style={{ color: BRAND.ink }}>
+                  <div
+                    className="mt-1 font-serif text-base font-semibold"
+                    style={{ color: BRAND.ink }}
+                  >
                     {projectCount}
                   </div>
                 </div>
@@ -464,7 +485,11 @@ export function PortfolioLibraryContent({
             </div>
 
             {/* Services */}
-            <div data-preview-block="services" className="px-10 py-14" style={{ background: BRAND.tint }}>
+            <div
+              data-preview-block="services"
+              className="px-10 py-14"
+              style={{ background: BRAND.tint }}
+            >
               <Eyebrow>Capabilities</Eyebrow>
               <h2
                 className="mb-7 font-serif text-[26px] font-semibold"
@@ -487,7 +512,10 @@ export function PortfolioLibraryContent({
                         >
                           <Icon className="h-[18px] w-[18px]" style={{ color: BRAND.gold }} />
                         </div>
-                        <div className="mb-2 font-serif text-[15.5px] font-semibold" style={{ color: BRAND.ink }}>
+                        <div
+                          className="mb-2 font-serif text-[15.5px] font-semibold"
+                          style={{ color: BRAND.ink }}
+                        >
                           {service}
                         </div>
                         <div className="text-[12.5px] leading-6" style={{ color: BRAND.inkMuted }}>
@@ -507,7 +535,10 @@ export function PortfolioLibraryContent({
             {/* Gallery */}
             <div data-preview-block="gallery" className="px-10 py-14">
               <Eyebrow>Portfolio</Eyebrow>
-              <h2 className="mb-7 font-serif text-[26px] font-semibold" style={{ color: BRAND.ink }}>
+              <h2
+                className="mb-7 font-serif text-[26px] font-semibold"
+                style={{ color: BRAND.ink }}
+              >
                 Recent work
               </h2>
               {gallery.length ? (
@@ -522,7 +553,8 @@ export function PortfolioLibraryContent({
                       <div
                         className="absolute inset-0"
                         style={{
-                          background: "linear-gradient(180deg, transparent 55%, rgba(15,15,20,0.45))",
+                          background:
+                            "linear-gradient(180deg, transparent 55%, rgba(15,15,20,0.45))",
                         }}
                       />
                       <div className="absolute bottom-2 left-2.5 text-[11px] font-semibold text-white">
@@ -545,7 +577,10 @@ export function PortfolioLibraryContent({
               style={{ background: BRAND.tint }}
             >
               <Eyebrow>Testimonials</Eyebrow>
-              <h2 className="mb-7 font-serif text-[26px] font-semibold" style={{ color: BRAND.ink }}>
+              <h2
+                className="mb-7 font-serif text-[26px] font-semibold"
+                style={{ color: BRAND.ink }}
+              >
                 What customers say
               </h2>
               {showReviewsBand ? (
@@ -582,7 +617,10 @@ export function PortfolioLibraryContent({
             <div data-preview-block="contact" className="grid gap-10 px-10 py-14 lg:grid-cols-2">
               <div className="max-w-[420px]">
                 <Eyebrow>Contact</Eyebrow>
-                <h2 className="mb-5 font-serif text-[26px] font-semibold" style={{ color: BRAND.ink }}>
+                <h2
+                  className="mb-5 font-serif text-[26px] font-semibold"
+                  style={{ color: BRAND.ink }}
+                >
                   Get in touch
                 </h2>
                 <div className="flex flex-col gap-2.5 text-[13px]">
@@ -643,7 +681,11 @@ export function PortfolioLibraryContent({
                   </div>
                   <div
                     className="rounded-lg border px-3.5 py-2.5 text-[12.5px]"
-                    style={{ borderColor: "oklch(88% 0.012 235)", color: BRAND.inkMuted, background: "#fff" }}
+                    style={{
+                      borderColor: "oklch(88% 0.012 235)",
+                      color: BRAND.inkMuted,
+                      background: "#fff",
+                    }}
                   >
                     Jane Homeowner
                   </div>
@@ -657,7 +699,11 @@ export function PortfolioLibraryContent({
                   </div>
                   <div
                     className="rounded-lg border px-3.5 py-2.5 text-[12.5px]"
-                    style={{ borderColor: "oklch(88% 0.012 235)", color: BRAND.inkMuted, background: "#fff" }}
+                    style={{
+                      borderColor: "oklch(88% 0.012 235)",
+                      color: BRAND.inkMuted,
+                      background: "#fff",
+                    }}
                   >
                     (916) 555-0100
                   </div>
@@ -671,7 +717,11 @@ export function PortfolioLibraryContent({
                   </div>
                   <div
                     className="min-h-[64px] rounded-lg border px-3.5 py-3 text-[12.5px]"
-                    style={{ borderColor: "oklch(88% 0.012 235)", color: BRAND.inkMuted, background: "#fff" }}
+                    style={{
+                      borderColor: "oklch(88% 0.012 235)",
+                      color: BRAND.inkMuted,
+                      background: "#fff",
+                    }}
                   >
                     Tell us what&rsquo;s going on&hellip;
                   </div>

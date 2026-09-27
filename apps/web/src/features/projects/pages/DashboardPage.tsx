@@ -387,7 +387,7 @@ export function DashboardPage() {
     { weekday: "short" },
   );
 
-return (
+  return (
     <div className="min-h-full bg-background">
       <div className="mx-auto w-full max-w-[1200px] px-6 pb-10 pt-8 sm:px-10">
         {/* Above the greeting, and only until it is answered or dismissed - see
@@ -407,7 +407,9 @@ return (
               onClick={() =>
                 guard(
                   () =>
-                    projects.length === 0 ? navigate({ to: "/projects/new" }) : setCaptureOpen(true),
+                    projects.length === 0
+                      ? navigate({ to: "/projects/new" })
+                      : setCaptureOpen(true),
                   "Subscribe to capture new field updates.",
                 )
               }
@@ -448,7 +450,7 @@ return (
           <div className="rounded-[12px] border border-border bg-card p-[18px_20px]">
             <div className="text-xs text-muted-foreground">Documentation health</div>
             <div className="font-mono mt-1.5 text-[26px] font-bold leading-none text-foreground">
-              {docHealthPct === null ? "—" : `${docHealthPct}%`}
+              {docHealthPct === null ? "-" : `${docHealthPct}%`}
             </div>
           </div>
           <div className="rounded-[12px] border border-status-hold bg-status-hold-soft p-[18px_20px]">
@@ -458,7 +460,7 @@ return (
             </div>
           </div>
         </div>
-{/* On site now + Needs attention */}
+        {/* On site now + Needs attention */}
         <div className="mt-7 flex flex-col gap-[22px] lg:flex-row lg:items-start">
           <div className="min-w-0 flex-1">
             <div className="flex items-center justify-between gap-4">
@@ -499,7 +501,11 @@ return (
                       </div>
                     </div>
                     <ReferencePill tone={tone}>
-                      {p.status === "completed" ? "Completed" : p.status === "hold" ? "On hold" : "Active"}
+                      {p.status === "completed"
+                        ? "Completed"
+                        : p.status === "hold"
+                          ? "On hold"
+                          : "Active"}
                     </ReferencePill>
                     <div className="w-[74px] shrink-0 text-right text-[11.5px] text-faint">
                       {p.lastPhotoAt ? timeAgo(p.lastPhotoAt) : timeAgo(p.updated_at)}

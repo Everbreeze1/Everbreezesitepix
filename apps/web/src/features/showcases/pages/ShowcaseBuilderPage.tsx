@@ -484,7 +484,7 @@ export function ShowcaseBuilderPage() {
     <div className="pb-16">
       {/* Sticky action bar - save state is always visible, so "did that save?"
           is never a question the user has to ask. */}
-      <div className="sticky top-[82px] z-20 border-b border-border bg-background/95 px-6 py-3 backdrop-blur sm:px-10">
+      <div className="sticky top-14 z-10 border-b border-border bg-background/95 px-6 py-3 backdrop-blur sm:px-10">
         <div className="flex flex-wrap items-center gap-3">
           <Link
             to="/showcases"

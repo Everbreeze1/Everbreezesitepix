@@ -23,7 +23,9 @@ describe("family: a step's photo carries its workflow and phase", () => {
     // The trigger keys off photo_id and phase_id on the item, so no capture
     // path has to remember to set these by hand.
     expect(MIGRATION).toMatch(/tag_photo_with_workflow_step/);
-    expect(MIGRATION).toMatch(/AFTER INSERT OR UPDATE OF photo_id, phase_id ON public\.project_workflow_items/);
+    expect(MIGRATION).toMatch(
+      /AFTER INSERT OR UPDATE OF photo_id, phase_id ON public\.project_workflow_items/,
+    );
     expect(MIGRATION).toMatch(/WHERE ph\.id = NEW\.phase_id/);
     expect(MIGRATION).toMatch(/workflow_id = _workflow_id/);
     expect(MIGRATION).toMatch(/workflow_phase_id = NEW\.phase_id/);

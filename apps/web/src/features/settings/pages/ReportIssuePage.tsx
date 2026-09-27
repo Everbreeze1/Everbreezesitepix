@@ -280,7 +280,7 @@ export function ReportIssuePage() {
               Feedback
             </h1>
             <p className="font-sans mt-1 text-[13.5px] leading-snug text-muted-foreground">
-              Bugs, ideas and questions &mdash; yours and your crew's.
+              Bugs, ideas and questions - yours and your crew's.
             </p>
           </div>
         </div>

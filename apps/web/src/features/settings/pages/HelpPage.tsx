@@ -759,7 +759,7 @@ export function HelpPage() {
   }, []);
 
   // Which category the reader is currently inside, so the rail can mark it.
-  // The top margin matches the 82px sticky header plus a little breathing room,
+  // The top margin matches the 56px sticky header plus a little breathing room,
   // so a section counts as "current" once it clears the header rather than the
   // moment it touches the top of the window.
   const [activeCat, setActiveCat] = useState("");
@@ -779,7 +779,7 @@ export function HelpPage() {
         );
         setActiveCat(top.target.id);
       },
-      { rootMargin: "-98px 0px -70% 0px" },
+      { rootMargin: "-72px 0px -70% 0px" },
     );
     sections.forEach((el) => io.observe(el));
     return () => io.disconnect();

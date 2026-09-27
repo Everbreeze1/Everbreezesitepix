@@ -326,7 +326,7 @@ const BILLING_FAQ = [
 ];
 
 function ComparisonCell({ value }: { value: Cell }) {
-  if (value === false) return <span className="text-muted-foreground">—</span>;
+  if (value === false) return <span className="text-muted-foreground">-</span>;
   if (value === true) return <Check className="mx-auto h-4 w-4 text-[oklch(0.55_0.14_150)]" />;
   return <span className="font-semibold text-[oklch(0.55_0.14_150)]">{value}</span>;
 }
@@ -344,7 +344,7 @@ function PublicPricingPage() {
             Built to fit your crew size.
           </h1>
           <p className="font-manrope mx-auto mt-4 max-w-[520px] text-[15.5px] leading-[1.6] text-muted-foreground">
-            Every plan includes AI reports, live site maps, and unlimited photo storage — no
+            Every plan includes AI reports, live site maps, and unlimited photo storage - no
             per-feature upgrades. Tell us your crew size and we&apos;ll get you set up with the
             right one.
           </p>

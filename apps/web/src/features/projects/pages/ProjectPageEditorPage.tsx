@@ -1006,10 +1006,10 @@ export function ProjectPageEditorPage() {
 
   return (
     <div className="min-h-screen bg-muted/30">
-      {/* Sticks just below AppHeader (h-[82px], also sticky top-0) rather than at top-0 itself -
+      {/* Sticks just below AppHeader (h-14, also sticky top-0) rather than at top-0 itself -
           otherwise both stick to the same viewport position and AppHeader's higher z-index
           paints over this toolbar as soon as the page scrolls. */}
-      <div className="sticky top-[82px] z-10 border-b border-border bg-background/95 backdrop-blur">
+      <div className="sticky top-14 z-10 border-b border-border bg-background/95 backdrop-blur">
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
           {/* `flex-1` so the title box can take the room the toolbar is not
               using. Document titles now lead with the project's name
