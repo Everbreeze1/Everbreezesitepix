@@ -371,6 +371,7 @@ export async function autoDailyLogService(
       project_id: data.projectId,
       folder_id: null,
       created_by: ctx.userId,
+      revoked_at: new Date().toISOString(), // private until shared, see createProjectPageService
       title,
       content_html: internalNoticeHtml() + sectionHtml,
       source_template: "daily_log",

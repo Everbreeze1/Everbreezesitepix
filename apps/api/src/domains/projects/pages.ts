@@ -773,6 +773,13 @@ export async function createProjectPageService(
       project_id: data.projectId,
       folder_id: data.folderId ?? null,
       created_by: ctx.userId,
+      /*
+       * Private until someone shares it. The public link used to be live the
+       * moment a document existed, so a draft report was readable by anyone who
+       * guessed or was forwarded the URL before the office had reviewed it.
+       * Every other place that creates a page does the same.
+       */
+      revoked_at: new Date().toISOString(),
       title,
       content_html: contentHtml,
       source_template: data.template ?? null,
@@ -942,6 +949,7 @@ export async function duplicateProjectPageService(
       project_id: source.project_id,
       folder_id: source.folder_id,
       created_by: ctx.userId,
+      revoked_at: new Date().toISOString(), // private until shared, see createProjectPageService
       title,
       content_html: source.content_html,
       header_html: source.header_html,
