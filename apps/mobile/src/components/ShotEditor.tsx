@@ -213,9 +213,9 @@ export function ShotEditor({
         canMeasure={canMeasure}
         initialTool={annotating ?? "pen"}
         onCancel={() => setAnnotating(null)}
-        onDone={({ uri }) => {
+        onDone={(result) => {
           setAnnotating(null);
-          onChange({ uri });
+          onChange(result);
         }}
       />
 

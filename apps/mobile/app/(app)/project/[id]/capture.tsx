@@ -1289,14 +1289,14 @@ export default function CaptureScreen() {
           canMeasure={canMeasure}
           initialTool="measure"
           onCancel={() => setMeasuringKey(null)}
-          onDone={({ uri }) => {
-            const shot = { ...measuringShot, uri };
+          onDone={({ uri, width, height }) => {
+            const shot = { ...measuringShot, uri, width, height };
             setMeasuringKey(null);
             if (quick) {
               removeShot(shot.key);
               void quickSave(shot);
             } else {
-              patchShot(shot.key, { uri });
+              patchShot(shot.key, { uri, width, height });
             }
           }}
         />
