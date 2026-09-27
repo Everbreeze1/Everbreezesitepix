@@ -6,6 +6,7 @@ import {
   gridColumns,
   isWide,
   TARGET_TILE,
+  usesRightRail,
 } from "../apps/mobile/src/theme/layout";
 
 /*
@@ -162,5 +163,22 @@ describe("isWide", () => {
     // A phone in landscape is wide, and correctly so: an 844pt line of body
     // text is unreadable whatever device it is on.
     expect(isWide(844)).toBe(true);
+  });
+});
+
+describe("usesRightRail", () => {
+  it("keeps every phone in portrait on the bottom bar", () => {
+    for (const width of PHONES) expect(usesRightRail(width, 800), `${width}`).toBe(false);
+  });
+
+  it("moves tablets to the right edge in either orientation, bar the iPad mini upright", () => {
+    expect(usesRightRail(744, 1133)).toBe(false);
+    for (const width of [820, 1024]) expect(usesRightRail(width, 1180), `${width}`).toBe(true);
+    for (const width of [1024, 1180, 1366, 1280]) expect(usesRightRail(width, 800)).toBe(true);
+  });
+
+  it("moves any screen held on its side, phones included", () => {
+    expect(usesRightRail(667, 375)).toBe(true);
+    expect(usesRightRail(844, 390)).toBe(true);
   });
 });

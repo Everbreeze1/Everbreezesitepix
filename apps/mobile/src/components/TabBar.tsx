@@ -2,7 +2,7 @@ import { Camera } from "@/ui/icons";
 import { Platform, Pressable, View } from "react-native";
 import { router } from "expo-router";
 import type { BottomTabBarProps } from "expo-router/js-tabs";
-import { radius, spacing, useTheme } from "@/theme";
+import { radius, spacing, useRightRail, useTheme } from "@/theme";
 import { Icon, Text } from "@/ui";
 
 /**
@@ -24,9 +24,22 @@ import { Icon, Text } from "@/ui";
  * project and a tab has no argument, so pressing it pushes `/capture-start`
  * onto the parent stack, which asks which job this is and then opens the
  * viewfinder. Modelling it as a tab would leave a tab you can never be "on".
+ *
+ * **On a tablet, or any screen in landscape, the bar becomes a rail down the
+ * right edge**, with the camera at its foot. A bottom bar is right for a phone
+ * held in one hand, where the thumb sweeps the bottom of the screen. A tablet is
+ * held with a hand on each side, most often by someone right handed, and on a
+ * landscape 11 inch screen the bottom centre is the one spot neither thumb can
+ * reach without letting go of the device. The right edge is where the tapping
+ * thumb already rests, so the tabs stack there and the camera sits lowest,
+ * where that thumb lands without moving. A left-hand rail, the Material
+ * default, was rejected for the same reason: it puts navigation under the hand
+ * that is holding the tablet. `_layout.tsx` sets `tabBarPosition` to match, so
+ * the screens lay out beside the rail rather than under it.
  */
 export function TabBar({ state, descriptors, navigation, insets }: BottomTabBarProps) {
   const theme = useTheme();
+  const rail = useRightRail();
 
   /*
    * The bar is always-dark chrome, in both schemes, so the inactive tint is the
@@ -72,11 +85,12 @@ export function TabBar({ state, descriptors, navigation, insets }: BottomTabBarP
           }
         }}
         style={({ pressed }) => ({
-          flex: 1,
+          // Rows of a fixed height on the rail, columns sharing the width on the bar.
+          ...(rail ? { alignSelf: "stretch" as const, minHeight: 56 } : { flex: 1 }),
           alignItems: "center",
           justifyContent: "center",
           gap: 3,
-          paddingVertical: spacing.sm,
+          paddingVertical: rail ? spacing.xs : spacing.sm,
           opacity: pressed ? 0.6 : 1,
         })}
       >
@@ -107,6 +121,74 @@ export function TabBar({ state, descriptors, navigation, insets }: BottomTabBarP
     );
   };
 
+  const cameraButton = (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Take photos"
+      accessibilityHint="Choose a project, then open the camera"
+      onPress={() => router.push("/capture-start")}
+      style={({ pressed }) => [
+        {
+          width: 64,
+          height: 64,
+          borderRadius: radius.pill,
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: theme.colors.primary,
+          // Lifted above the bar so it reads as the primary action rather
+          // than a fifth tab that happens to be orange. The rail has the
+          // height to give it its own space instead.
+          marginTop: rail ? 0 : -26,
+          // The ring is the bar's own colour, so the button looks cut into
+          // the chrome rather than stuck on top of it.
+          borderWidth: 5,
+          borderColor: theme.colors.chrome,
+          opacity: pressed ? 0.85 : 1,
+          transform: [{ scale: pressed ? 0.96 : 1 }],
+        },
+        Platform.select({
+          ios: {
+            shadowColor: theme.colors.primary,
+            shadowOpacity: 0.45,
+            shadowRadius: 14,
+            shadowOffset: { width: 0, height: 4 },
+          },
+          android: { elevation: 8 },
+          default: {},
+        }),
+      ]}
+    >
+      <Icon icon={Camera} size="lg" tone="inverse" />
+    </Pressable>
+  );
+
+  if (rail) {
+    return (
+      <View
+        style={{
+          width: 96 + insets.right,
+          alignItems: "center",
+          backgroundColor: theme.colors.chrome,
+          borderLeftWidth: theme.scheme === "dark" ? 1 : 0,
+          borderLeftColor: theme.colors.border,
+          paddingTop: insets.top + spacing.md,
+          paddingBottom: insets.bottom + spacing.lg,
+          paddingRight: insets.right,
+          gap: spacing.xs,
+        }}
+      >
+        {/*
+          The spacer pushes the tabs down towards the thumb: the top of a
+          tablet's right edge is as far from a resting hand as the bottom
+          centre is, so nothing that is tapped often lives there.
+        */}
+        <View style={{ flex: 1 }} />
+        {state.routes.map(renderTab)}
+        <View style={{ marginTop: spacing.md }}>{cameraButton}</View>
+      </View>
+    );
+  }
+
   return (
     <View
       style={{
@@ -131,45 +213,7 @@ export function TabBar({ state, descriptors, navigation, insets }: BottomTabBarP
     >
       {left.map(renderTab)}
 
-      <View style={{ width: 76, alignItems: "center" }}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Take photos"
-          accessibilityHint="Choose a project, then open the camera"
-          onPress={() => router.push("/capture-start")}
-          style={({ pressed }) => [
-            {
-              width: 64,
-              height: 64,
-              borderRadius: radius.pill,
-              alignItems: "center",
-              justifyContent: "center",
-              backgroundColor: theme.colors.primary,
-              // Lifted above the bar so it reads as the primary action rather
-              // than a fifth tab that happens to be orange.
-              marginTop: -26,
-              // The ring is the bar's own colour, so the button looks cut into
-              // the chrome rather than stuck on top of it.
-              borderWidth: 5,
-              borderColor: theme.colors.chrome,
-              opacity: pressed ? 0.85 : 1,
-              transform: [{ scale: pressed ? 0.96 : 1 }],
-            },
-            Platform.select({
-              ios: {
-                shadowColor: theme.colors.primary,
-                shadowOpacity: 0.45,
-                shadowRadius: 14,
-                shadowOffset: { width: 0, height: 4 },
-              },
-              android: { elevation: 8 },
-              default: {},
-            }),
-          ]}
-        >
-          <Icon icon={Camera} size="lg" tone="inverse" />
-        </Pressable>
-      </View>
+      <View style={{ width: 76, alignItems: "center" }}>{cameraButton}</View>
 
       {right.map(renderTab)}
     </View>

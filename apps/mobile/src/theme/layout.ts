@@ -107,3 +107,30 @@ export function gridColumns(width: number, target = TARGET_TILE): number {
   const fitted = Math.floor(Math.max(0, width) / Math.max(1, target));
   return Math.min(8, Math.max(3, fitted));
 }
+
+/**
+ * The width from which a screen is laid out for a tablet held in the hand.
+ *
+ * 768 rather than the 640 of `isWide`: an iPad mini in portrait (744) is still
+ * held and thumbed like a big phone, and keeping the bottom bar there is what
+ * its owner expects. From 768 up (every 10 inch tablet in either orientation,
+ * and the Android tablets managers carry) the device is gripped at the sides.
+ */
+export const TABLET_MIN_WIDTH = 768;
+
+/**
+ * Whether the primary actions belong on the right edge rather than the bottom.
+ *
+ * True on a tablet, and on any screen in landscape. Both are held with a hand
+ * on each side, and most people tap with the right one, so the thumb that is
+ * free to reach is the one resting on the right edge. The bottom centre, where
+ * a phone keeps its camera button, is the one place on a landscape tablet that
+ * neither thumb can reach without letting go.
+ *
+ * Landscape counts on a phone too: 390pt of height with a bottom bar, a header
+ * and a keyboard leaves almost nothing, and a rail costs width, which a phone
+ * on its side has plenty of.
+ */
+export function usesRightRail(width: number, height: number): boolean {
+  return width >= TABLET_MIN_WIDTH || width > height;
+}

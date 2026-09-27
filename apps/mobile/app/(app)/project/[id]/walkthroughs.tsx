@@ -1,14 +1,14 @@
-import { FlatList, RefreshControl, StyleSheet, View } from "react-native";
+import { FlatList, RefreshControl, View } from "react-native";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { relativeTime } from "@everlumen/shared";
 import { listProjectWalkthroughs } from "@/api/walkthroughs";
+import { ActionRail } from "@/components/ActionRail";
 import { QueueBanner } from "@/components/QueueBanner";
-import { radius, spacing, useTheme } from "@/theme";
+import { spacing, useTheme } from "@/theme";
 import { Video } from "@/ui/icons";
 import {
   Badge,
-  Button,
   Card,
   EmptyState,
   ErrorState,
@@ -174,31 +174,20 @@ export default function ProjectWalkthroughsScreen() {
           there.
         */}
         {isLoading || walkthroughs.length === 0 ? null : (
-          <View style={styles.fab}>
-            <Button
-              label="Record"
-              icon={Video}
-              size="lg"
-              onPress={() => router.push(`/project/${id}/walkthrough-record`)}
-              accessibilityHint="Starts recording a walkthrough of this site"
-              style={{ borderRadius: radius.pill }}
-            />
-          </View>
+          <ActionRail
+            labelled
+            actions={[
+              {
+                key: "record",
+                icon: Video,
+                label: "Record",
+                hint: "Starts recording a walkthrough of this site",
+                onPress: () => router.push(`/project/${id}/walkthrough-record`),
+              },
+            ]}
+          />
         )}
       </View>
     </>
   );
 }
-
-const styles = StyleSheet.create({
-  fab: {
-    position: "absolute",
-    right: spacing.lg,
-    bottom: spacing.xl,
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 6,
-  },
-});

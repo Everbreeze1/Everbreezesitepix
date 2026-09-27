@@ -10,10 +10,11 @@ import {
 } from "@/api/templates";
 import { getProjectContributors } from "@/api/task-comments";
 import { memberLabel } from "@/api/task-mentions";
+import { ActionRail } from "@/components/ActionRail";
 import { QueueBanner } from "@/components/QueueBanner";
 import { TemplatePickerSheet } from "@/components/TemplatePickerSheet";
 import { useAuth } from "@/lib/auth";
-import { spacing, useTheme } from "@/theme";
+import { spacing, useRightRail, useTheme } from "@/theme";
 import { ClipboardCheck, Plus } from "@/ui/icons";
 import {
   Avatar,
@@ -34,6 +35,7 @@ type Filter = "all" | "mine" | "open";
 export default function ProjectChecklistsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const theme = useTheme();
+  const rail = useRightRail();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [picking, setPicking] = useState(false);
@@ -117,15 +119,18 @@ export default function ProjectChecklistsScreen() {
       <Stack.Screen
         options={{
           title: "Checklists",
-          headerRight: () => (
-            <IconButton
-              icon={Plus}
-              accessibilityLabel="Start a checklist from a template"
-              surface={false}
-              tone="primary"
-              onPress={() => setPicking(true)}
-            />
-          ),
+          // On a tablet the same action is the floating button at the lower right.
+          headerRight: rail
+            ? undefined
+            : () => (
+                <IconButton
+                  icon={Plus}
+                  accessibilityLabel="Start a checklist from a template"
+                  surface={false}
+                  tone="primary"
+                  onPress={() => setPicking(true)}
+                />
+              ),
         }}
       />
       <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
@@ -151,7 +156,12 @@ export default function ProjectChecklistsScreen() {
           <FlatList
             data={checklists}
             keyExtractor={(item) => item.id}
-            contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, flexGrow: 1 }}
+            contentContainerStyle={{
+              padding: spacing.lg,
+              gap: spacing.md,
+              flexGrow: 1,
+              paddingBottom: rail ? 120 : spacing.lg,
+            }}
             refreshControl={
               <RefreshControl
                 refreshing={isRefetching}
@@ -228,6 +238,22 @@ export default function ProjectChecklistsScreen() {
                 </Card>
               );
             }}
+          />
+        )}
+
+        {/* Tablet only; hidden while the empty state offers the same thing. */}
+        {isLoading || all.length === 0 ? null : (
+          <ActionRail
+            railOnly
+            actions={[
+              {
+                key: "new-checklist",
+                icon: Plus,
+                label: "New checklist",
+                hint: "Start a checklist from a template",
+                onPress: () => setPicking(true),
+              },
+            ]}
           />
         )}
       </View>

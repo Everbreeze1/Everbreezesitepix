@@ -210,9 +210,17 @@ describe("a screen offers each action once", () => {
 
   it("no other screen floats an unguarded action", () => {
     /*
-     * Only two screens have a FAB. If a third appears, it has to answer the
-     * same question, so this fails rather than quietly letting it through.
+     * Every floating action is now the shared `ActionRail`, which keeps them
+     * all in the lower right where a right-handed thumb rests. Any screen that
+     * floats one has to answer the same question the first two did: is the
+     * empty state already offering this? So each file drawing a rail must
+     * guard it on an empty list, or be listed here with its reason.
+     *
+     * Home is exempt: its rail is tablet-only and replaces the New project
+     * button in the hero row, which is not drawn there, so nothing on the
+     * screen offers the action twice.
      */
+    const EXEMPT = new Set([join(ROOT, "apps/mobile/app/(app)/(tabs)/index.tsx")]);
     const walk = (dir: string, out: string[] = []): string[] => {
       for (const name of readdirSync(dir)) {
         const full = join(dir, name);
@@ -221,11 +229,15 @@ describe("a screen offers each action once", () => {
       }
       return out;
     };
-    const withFab = walk(join(ROOT, "apps/mobile/app")).filter((f) =>
-      readFileSync(f, "utf8").includes("styles.fab"),
-    );
-    expect(withFab).toHaveLength(2);
-    for (const f of withFab) {
+    const floating = walk(join(ROOT, "apps/mobile/app")).filter((f) => {
+      const s = readFileSync(f, "utf8");
+      return s.includes("styles.fab") || s.includes("<ActionRail");
+    });
+    // The two that set the rule are still among them.
+    expect(floating.some((f) => f.endsWith("walkthroughs.tsx"))).toBe(true);
+    expect(floating.some((f) => f.endsWith(join("[id]", "index.tsx")))).toBe(true);
+    for (const f of floating) {
+      if (EXEMPT.has(f)) continue;
       expect(readFileSync(f, "utf8").replace(/\s+/g, " "), f).toMatch(/length === 0 \? null : \(/);
     }
   });

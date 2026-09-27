@@ -14,6 +14,7 @@ import {
   type TaskStatus,
 } from "@/api/task-status";
 import { listProjectTasks, type TaskDraft, type TaskRow } from "@/api/tasks";
+import { ActionRail } from "@/components/ActionRail";
 import { QueueBanner } from "@/components/QueueBanner";
 import { TaskEditorSheet } from "@/components/TaskEditorSheet";
 import { useAuth } from "@/lib/auth";
@@ -25,7 +26,7 @@ import {
 } from "@/offline/handlers";
 import { enqueue } from "@/offline/outbox";
 import { refreshQueue, requestSync } from "@/offline/sync";
-import { HIT_TARGET, radius, spacing, useTheme } from "@/theme";
+import { HIT_TARGET, radius, spacing, useRightRail, useTheme } from "@/theme";
 import { ListTodo, Plus } from "@/ui/icons";
 import {
   Avatar,
@@ -53,6 +54,7 @@ const STATUS_TONE: Record<TaskStatus, BadgeTone> = {
 export default function ProjectTasksScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const theme = useTheme();
+  const rail = useRightRail();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<Filter>("open");
@@ -193,15 +195,18 @@ export default function ProjectTasksScreen() {
       <Stack.Screen
         options={{
           title: "Tasks",
-          headerRight: () => (
-            <IconButton
-              icon={Plus}
-              accessibilityLabel="New task"
-              surface={false}
-              tone="primary"
-              onPress={() => setComposing(true)}
-            />
-          ),
+          // On a tablet the same action is the floating button at the lower right.
+          headerRight: rail
+            ? undefined
+            : () => (
+                <IconButton
+                  icon={Plus}
+                  accessibilityLabel="New task"
+                  surface={false}
+                  tone="primary"
+                  onPress={() => setComposing(true)}
+                />
+              ),
         }}
       />
       <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
@@ -223,7 +228,8 @@ export default function ProjectTasksScreen() {
             contentContainerStyle={{
               padding: spacing.lg,
               gap: spacing.md,
-              paddingBottom: spacing.xxxl,
+              // Room for the floating New task button on a tablet.
+              paddingBottom: rail ? 120 : spacing.xxxl,
               flexGrow: 1,
             }}
             refreshControl={
@@ -261,6 +267,16 @@ export default function ProjectTasksScreen() {
               ))
             )}
           </ScrollView>
+        )}
+
+        {/* Tablet only; hidden while the empty state offers the same thing. */}
+        {isLoading || tasks.length === 0 ? null : (
+          <ActionRail
+            railOnly
+            actions={[
+              { key: "new-task", icon: Plus, label: "New task", onPress: () => setComposing(true) },
+            ]}
+          />
         )}
       </View>
 

@@ -5,6 +5,7 @@ import { router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { PROJECT_STATUS_LABELS, projectDisplayName, relativeTime } from "@everlumen/shared";
 import { formatAddress, listProjects, type ProjectListItem } from "@/api/projects";
+import { ActionRail } from "@/components/ActionRail";
 import { QueueBanner } from "@/components/QueueBanner";
 import { LabelChip, useLabelCatalog } from "@/components/ProjectLabels";
 import { FilterGlyph } from "@/components/ProjectGlyphs";
@@ -21,7 +22,6 @@ import {
   Card,
   EmptyState,
   ErrorState,
-  Icon,
   IconButton,
   PageHeader,
   SearchField,
@@ -35,9 +35,6 @@ import {
  * place to be found rather than being mixed in among the live ones under All.
  */
 type StatusFilter = "all" | "active" | "on_hold" | "completed" | "archived";
-
-/** Diameter of the floating new-project button. */
-const FAB = 60;
 
 export default function ProjectsScreen() {
   const theme = useTheme();
@@ -247,21 +244,16 @@ export default function ProjectsScreen() {
         nothing still shows it, since "Nothing matches" offers only a reset.
       */}
       {isLoading || error || all.length === 0 ? null : (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="New project"
-          onPress={() => router.push("/project-new")}
-          style={({ pressed }) => [
-            styles.newProject,
+        <ActionRail
+          actions={[
             {
-              backgroundColor: theme.colors.primary,
-              shadowColor: theme.colors.primary,
-              opacity: pressed ? 0.85 : 1,
+              key: "new-project",
+              icon: Plus,
+              label: "New project",
+              onPress: () => router.push("/project-new"),
             },
           ]}
-        >
-          <Icon icon={Plus} size="lg" color={theme.colors.primaryForeground} />
-        </Pressable>
+        />
       )}
 
       <ActionSheet
@@ -398,20 +390,5 @@ const styles = StyleSheet.create({
     height: HIT_TARGET,
     alignItems: "center",
     justifyContent: "center",
-  },
-  /* Clear of the tab bar's raised camera, which overhangs the bar by 22. */
-  newProject: {
-    position: "absolute",
-    right: spacing.lg,
-    bottom: spacing.xl,
-    width: FAB,
-    height: FAB,
-    borderRadius: FAB / 2,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowOpacity: 0.35,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 8,
   },
 });

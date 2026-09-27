@@ -7,7 +7,7 @@ import {
   View,
   type LayoutChangeEvent,
 } from "react-native";
-import { radius, spacing, useTheme } from "@/theme";
+import { HIT_TARGET, radius, spacing, useTheme } from "@/theme";
 
 export type CameraMode =
   | "photo"
@@ -59,47 +59,60 @@ const INACTIVE_FG = "rgba(255, 255, 255, 0.72)";
  *
  * The active mode is scrolled towards the middle whenever it changes, so a
  * mode picked at the end of the row does not sit half off screen.
+ *
+ * `vertical` stands the strip on its end, for the tablet and landscape camera,
+ * where it runs down the right edge beside the shutter the way a native tablet
+ * camera draws its modes. Same items, same scrolling, turned ninety degrees.
  */
 export function CameraModeRow({
   modes = CAMERA_MODES,
   value,
   onChange,
   disabled = false,
+  vertical = false,
 }: {
   modes?: CameraModeOption[];
   value: CameraMode;
   onChange: (mode: CameraMode) => void;
   disabled?: boolean;
+  vertical?: boolean;
 }) {
   const theme = useTheme();
   const scrollRef = useRef<ScrollView>(null);
-  const [rowWidth, setRowWidth] = useState(0);
-  const positions = useRef<Partial<Record<CameraMode, { x: number; width: number }>>>({});
+  /** The strip's length along its scrolling axis: width, or height when vertical. */
+  const [rowLength, setRowLength] = useState(0);
+  const positions = useRef<Partial<Record<CameraMode, { start: number; length: number }>>>({});
 
   useEffect(() => {
     const pos = positions.current[value];
-    if (!pos || !rowWidth) return;
-    const target = Math.max(0, pos.x + pos.width / 2 - rowWidth / 2);
-    scrollRef.current?.scrollTo({ x: target, animated: true });
-  }, [value, rowWidth]);
+    if (!pos || !rowLength) return;
+    const target = Math.max(0, pos.start + pos.length / 2 - rowLength / 2);
+    scrollRef.current?.scrollTo(
+      vertical ? { y: target, animated: true } : { x: target, animated: true },
+    );
+  }, [value, rowLength, vertical]);
 
   function onItemLayout(id: CameraMode, event: LayoutChangeEvent) {
-    const { x, width } = event.nativeEvent.layout;
-    positions.current[id] = { x, width };
+    const { x, y, width, height } = event.nativeEvent.layout;
+    positions.current[id] = vertical ? { start: y, length: height } : { start: x, length: width };
   }
 
   return (
     <View
-      style={styles.bar}
-      onLayout={(event) => setRowWidth(event.nativeEvent.layout.width)}
+      style={vertical ? styles.column : styles.bar}
+      onLayout={(event) => {
+        const { width, height } = event.nativeEvent.layout;
+        setRowLength(vertical ? height : width);
+      }}
       accessibilityRole="radiogroup"
       accessibilityLabel="Camera mode"
     >
       <ScrollView
         ref={scrollRef}
-        horizontal
+        horizontal={!vertical}
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={vertical ? styles.columnContent : styles.content}
       >
         {modes.map((mode) => {
           const active = mode.id === value;
@@ -114,7 +127,7 @@ export function CameraModeRow({
               hitSlop={4}
               onLayout={(event) => onItemLayout(mode.id, event)}
               onPress={() => onChange(mode.id)}
-              style={styles.item}
+              style={[styles.item, vertical && styles.columnItem]}
             >
               <Text
                 style={[styles.label, { color: active ? theme.colors.primary : INACTIVE_FG }]}
@@ -147,6 +160,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     alignItems: "center",
   },
+  /* As tall as its modes, and scrolls only once they outgrow the edge. */
+  column: {
+    backgroundColor: CHROME_BAR,
+    borderRadius: radius.xl,
+    overflow: "hidden",
+    maxHeight: "100%",
+  },
+  columnContent: {
+    paddingVertical: spacing.sm,
+    alignItems: "stretch",
+  },
+  /* Right-aligned so the words line up against the shutter beside them. */
+  columnItem: { alignItems: "flex-end", minHeight: HIT_TARGET },
   item: {
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,

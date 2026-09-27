@@ -31,11 +31,12 @@ import {
 import { getUnreadNotificationCount } from "@/api/notifications";
 import { listGalleryPhotoPage, listProjectCovers, type GalleryPhotoItem } from "@/api/photos";
 import { listProjects, type ProjectListItem } from "@/api/projects";
+import { ActionRail } from "@/components/ActionRail";
 import { BrandMark } from "@/components/BrandMark";
 import { QueueBanner } from "@/components/QueueBanner";
 import { useAuth } from "@/lib/auth";
 import { useQueue } from "@/offline/use-queue";
-import { contentWidth, gridColumns, radius, spacing, useTheme } from "@/theme";
+import { contentWidth, gridColumns, radius, spacing, useRightRail, useTheme } from "@/theme";
 import {
   Activity,
   Bell,
@@ -186,6 +187,7 @@ function initialsOf(name: string | null, email: string | null | undefined): stri
 
 export default function HomeScreen() {
   const theme = useTheme();
+  const rail = useRightRail();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const queue = useQueue();
@@ -559,24 +561,32 @@ export default function HomeScreen() {
         {/*
           The two things the app is opened to do, above every list so that no
           amount of data can push them off the first screen.
+
+          Not on a tablet or in landscape. There the page is a centred column
+          and this row would sit in the middle of the screen, out of reach of
+          the thumb resting on the right edge. The camera is already the foot
+          of the tab rail on that edge, so New project floats beside it (see
+          the `ActionRail` at the end) and the row is not drawn at all.
         */}
-        <View style={{ flexDirection: "row", gap: spacing.md, paddingHorizontal: spacing.lg }}>
-          <HeroAction
-            icon={Plus}
-            text="New project"
-            fill={theme.colors.foreground}
-            ink={theme.colors.background}
-            onPress={() => router.push("/project-new")}
-          />
-          <HeroAction
-            icon={Camera}
-            text="Capture photo"
-            fill={theme.colors.accent}
-            ink={theme.colors.primary}
-            accessibilityHint="Choose a project, then open the camera"
-            onPress={() => router.push("/capture-start")}
-          />
-        </View>
+        {rail ? null : (
+          <View style={{ flexDirection: "row", gap: spacing.md, paddingHorizontal: spacing.lg }}>
+            <HeroAction
+              icon={Plus}
+              text="New project"
+              fill={theme.colors.foreground}
+              ink={theme.colors.background}
+              onPress={() => router.push("/project-new")}
+            />
+            <HeroAction
+              icon={Camera}
+              text="Capture photo"
+              fill={theme.colors.accent}
+              ink={theme.colors.primary}
+              accessibilityHint="Choose a project, then open the camera"
+              onPress={() => router.push("/capture-start")}
+            />
+          </View>
+        )}
 
         {loading ? (
           <SkeletonList rows={4} />
@@ -696,6 +706,18 @@ export default function HomeScreen() {
           </>
         )}
       </Screen>
+
+      <ActionRail
+        railOnly
+        actions={[
+          {
+            key: "new-project",
+            icon: Plus,
+            label: "New project",
+            onPress: () => router.push("/project-new"),
+          },
+        ]}
+      />
     </View>
   );
 }

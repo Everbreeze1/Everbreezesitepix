@@ -1,6 +1,7 @@
 import { FolderKanban, House, Images, User } from "@/ui/icons";
 import Tabs from "expo-router/js-tabs";
 import { TabBar } from "@/components/TabBar";
+import { useRightRail } from "@/theme";
 import { Icon } from "@/ui";
 
 /**
@@ -24,10 +25,19 @@ import { Icon } from "@/ui";
  *
  * `headerShown` is off because the parent stack draws the header. Two
  * navigators both rendering one would stack two title bars on every tab.
+ *
+ * On a tablet or in landscape the bar is a rail on the right edge (see
+ * `TabBar`), and `tabBarPosition` tells the navigator to lay the screens out
+ * beside it rather than above it. Read here, from the same hook the bar uses,
+ * so the two can never disagree after a rotation.
  */
 export default function TabsLayout() {
+  const rail = useRightRail();
   return (
-    <Tabs screenOptions={{ headerShown: false }} tabBar={(props) => <TabBar {...props} />}>
+    <Tabs
+      screenOptions={{ headerShown: false, tabBarPosition: rail ? "right" : "bottom" }}
+      tabBar={(props) => <TabBar {...props} />}
+    >
       <Tabs.Screen
         name="index"
         options={{

@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import { ActionRail } from "@/components/ActionRail";
 import { Alert, View } from "react-native";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -26,7 +27,7 @@ import {
   type FolderGroup,
 } from "@/api/folders-view";
 import { TemplatePickerSheet } from "@/ui/TemplatePickerSheet";
-import { spacing } from "@/theme";
+import { spacing, useRightRail } from "@/theme";
 import {
   Copy,
   FileText,
@@ -65,6 +66,7 @@ import {
  * documents is worse than one that says "6 files, open them on the web".
  */
 export default function ProjectDocumentsScreen() {
+  const rail = useRightRail();
   const { id } = useLocalSearchParams<{ id: string }>();
   const queryClient = useQueryClient();
   const [failure, setFailure] = useState<string | null>(null);
@@ -319,32 +321,35 @@ export default function ProjectDocumentsScreen() {
            * stays below, because filing is something you do once a job rather
            * than every visit, and it opens an inline field that needs the room.
            */
-          headerRight: () => (
-            <View style={{ flexDirection: "row", alignItems: "center" }}>
-              {/*
+          // On a tablet the same action is the floating button at the lower right.
+          headerRight: rail
+            ? undefined
+            : () => (
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                  {/*
                 Two actions rather than one that opens a chooser. Starting a
                 blank page is the frequent one and must stay a single tap;
                 starting from a template is the deliberate one, and it is what
                 somebody standing on site reaches for when the job needs a
                 handover certificate rather than a note.
               */}
-              <IconButton
-                icon={LayoutTemplate}
-                accessibilityLabel="Start from a template"
-                surface={false}
-                tone="primary"
-                onPress={() => setTemplatePicker(true)}
-              />
-              <IconButton
-                icon={Plus}
-                accessibilityLabel="New page"
-                surface={false}
-                tone="primary"
-                disabled={create.isPending}
-                onPress={() => create.mutate()}
-              />
-            </View>
-          ),
+                  <IconButton
+                    icon={LayoutTemplate}
+                    accessibilityLabel="Start from a template"
+                    surface={false}
+                    tone="primary"
+                    onPress={() => setTemplatePicker(true)}
+                  />
+                  <IconButton
+                    icon={Plus}
+                    accessibilityLabel="New page"
+                    surface={false}
+                    tone="primary"
+                    disabled={create.isPending}
+                    onPress={() => create.mutate()}
+                  />
+                </View>
+              ),
         }}
       />
 
@@ -353,7 +358,7 @@ export default function ProjectDocumentsScreen() {
         padded={false}
         refreshing={query.isRefetching}
         onRefresh={() => void query.refetch()}
-        bottomInset={spacing.xxl}
+        bottomInset={rail ? 180 : spacing.xxl}
       >
         {query.isLoading ? (
           <SkeletonList rows={5} />
@@ -588,6 +593,32 @@ export default function ProjectDocumentsScreen() {
           </View>
         )}
       </Screen>
+
+      {/*
+        Tablet only, and hidden while the empty state offers New page. The
+        template action is the quieter one above it, New page the primary one
+        nearest the thumb, the same order of importance as the header.
+      */}
+      {query.isLoading || pages.length + files.length === 0 ? null : (
+        <ActionRail
+          railOnly
+          actions={[
+            {
+              key: "from-template",
+              icon: LayoutTemplate,
+              label: "Start from a template",
+              onPress: () => setTemplatePicker(true),
+            },
+            {
+              key: "new-page",
+              icon: Plus,
+              label: "New page",
+              disabled: create.isPending,
+              onPress: () => create.mutate(),
+            },
+          ]}
+        />
+      )}
 
       <TemplatePickerSheet
         visible={templatePicker}

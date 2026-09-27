@@ -37,7 +37,7 @@ import { enqueue, newOutboxId } from "@/offline/outbox";
 import { recordSessionPhoto } from "@/offline/capture-session";
 import { refreshQueue, requestSync } from "@/offline/sync";
 import type { PhotoUploadPayload } from "@/offline/handlers";
-import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
+import { HIT_TARGET, radius, spacing, typography, useRightRail, useTheme } from "@/theme";
 import { Icon } from "@/ui";
 import { Images, MapPin, RefreshCw, X } from "@/ui/icons";
 
@@ -115,6 +115,17 @@ export default function CaptureScreen() {
   const [editingKey, setEditingKey] = useState<string | null>(null);
   /** The shot Measure mode has just taken, open in the annotator's Measure tool. */
   const [measuringKey, setMeasuringKey] = useState<string | null>(null);
+
+  /*
+   * Tablet and landscape layout: the shutter, modes, library and flip stand in
+   * a column down the right edge, where a right-handed person's thumb rests
+   * while both hands hold the device, and the viewfinder fills the rest. A row
+   * along the bottom, the phone layout, is out of reach there. `sideWidth` is
+   * that column as laid out, so the viewfinder and the overlays stop at it.
+   */
+  const side = useRightRail();
+  const [sideWidth, setSideWidth] = useState(0);
+  const viewRight = side ? sideWidth : 0;
   const keyCounter = useRef(0);
 
   /*
@@ -920,12 +931,110 @@ export default function CaptureScreen() {
     ? (formatAddress(project) ?? projectDisplayName(project))
     : "Loading job";
 
+  /*
+   * The capture controls, built once and placed by the layout below: in a row
+   * under the viewfinder on a phone, in a column on its right on a tablet.
+   */
+  const recentStrips = (
+    <>
+      {quick && quickSaved.length > 0 ? (
+        <View style={styles.strip} accessibilityLabel={`${quickSaved.length} saved this session`}>
+          <Text style={styles.quickCount}>{quickSaved.length} SAVED</Text>
+          {quickSaved.slice(0, STRIP_MAX).map((uri, i) => (
+            <Image key={`${uri}-${i}`} source={{ uri }} style={styles.stripThumb} />
+          ))}
+        </View>
+      ) : null}
+      {shots.length > 0 ? (
+        <View style={styles.strip}>
+          {stripShots.map((shot) => (
+            <Image key={shot.key} source={{ uri: shot.uri }} style={styles.stripThumb} />
+          ))}
+          {hiddenCount > 0 ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`${hiddenCount} more. Review all ${shots.length}`}
+              style={[styles.stripThumb, styles.stripMore]}
+              onPress={() => setReviewing(true)}
+            >
+              <Text style={styles.stripMoreText}>+{hiddenCount}</Text>
+            </Pressable>
+          ) : null}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Add from photo library"
+            style={[styles.stripThumb, styles.stripMore]}
+            onPress={() => void pickFromLibrary()}
+          >
+            <Icon icon={Images} size="md" color={CHROME_FG} />
+          </Pressable>
+        </View>
+      ) : null}
+    </>
+  );
+  const lastShotButton = lastShot ? (
+    /*
+     * The last shot opens review, where the batch gets its caption,
+     * tags and a last look at the phase before Save. The count on it is
+     * the old "Review N" label, kept so nobody loses track of a burst.
+     */
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Review ${shots.length} photo${shots.length === 1 ? "" : "s"}`}
+      style={styles.lastShot}
+      onPress={() => setReviewing(true)}
+    >
+      <Image source={{ uri: lastShot.uri }} style={styles.lastShotImage} />
+      <View style={[styles.countBadge, { backgroundColor: theme.colors.primary }]}>
+        <Text style={[styles.countText, { color: theme.colors.primaryForeground }]}>
+          {shots.length}
+        </Text>
+      </View>
+    </Pressable>
+  ) : (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Add from photo library"
+      style={[styles.lastShot, styles.libraryButton]}
+      onPress={() => void pickFromLibrary()}
+    >
+      <Icon icon={Images} size="lg" color={CHROME_FG} />
+    </Pressable>
+  );
+  const shutterButton = (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={mode === "scan" ? "Scan document" : "Take photo"}
+      disabled={busy}
+      accessibilityHint={
+        quick
+          ? "Saves the photo straight away"
+          : "Adds a photo to this batch without leaving the camera"
+      }
+      style={styles.shutter}
+      onPress={() => void takeShot()}
+    >
+      <View style={styles.shutterInner} />
+    </Pressable>
+  );
+  const flipButton = (
+    <Pressable
+      accessibilityRole="button"
+      style={styles.flipButton}
+      hitSlop={8}
+      accessibilityLabel="Switch camera"
+      onPress={() => setFacing(facing === "back" ? "front" : "back")}
+    >
+      <Icon icon={RefreshCw} size="lg" color={CHROME_FG} />
+    </Pressable>
+  );
+
   return (
     <View style={styles.cameraRoot}>
       <Stack.Screen options={{ headerShown: false }} />
       <CameraView
         ref={cameraRef}
-        style={StyleSheet.absoluteFill}
+        style={[StyleSheet.absoluteFill, { right: viewRight }]}
         facing={facing}
         flash={flash}
         animateShutter
@@ -936,7 +1045,7 @@ export default function CaptureScreen() {
         square a wall up in the frame, not to be noticed.
       */}
       {gridOn ? (
-        <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        <View style={[StyleSheet.absoluteFill, { right: viewRight }]} pointerEvents="none">
           <View style={[styles.gridLine, styles.gridV, { left: "33.333%" }]} />
           <View style={[styles.gridLine, styles.gridV, { left: "66.666%" }]} />
           <View style={[styles.gridLine, styles.gridH, { top: "33.333%" }]} />
@@ -944,7 +1053,12 @@ export default function CaptureScreen() {
         </View>
       ) : null}
 
-      <View style={[styles.topArea, { top: insets.top + spacing.sm }]}>
+      <View
+        style={[
+          styles.topArea,
+          { top: insets.top + spacing.sm, right: viewRight, left: side ? insets.left : 0 },
+        ]}
+      >
         <View style={styles.topBar}>
           <Pressable
             accessibilityRole="button"
@@ -1058,7 +1172,7 @@ export default function CaptureScreen() {
         will happen to the shot so the greyscale strip is not a surprise.
       */}
       {mode === "scan" ? (
-        <View style={styles.scanOverlay} pointerEvents="none">
+        <View style={[styles.scanOverlay, { right: viewRight }]} pointerEvents="none">
           <View style={styles.scanFrame} />
           <Text style={styles.scanHint}>Scan: high-contrast document capture</Text>
         </View>
@@ -1069,7 +1183,7 @@ export default function CaptureScreen() {
         opens in the Measure tool the moment it is taken.
       */}
       {mode === "measure" ? (
-        <View style={styles.scanOverlay} pointerEvents="none">
+        <View style={[styles.scanOverlay, { right: viewRight }]} pointerEvents="none">
           <View style={[styles.reticle, { borderColor: theme.colors.primary }]} />
           <Text style={styles.scanHint}>
             Measure: stand 3 to 6 feet away, phone parallel to the surface
@@ -1086,119 +1200,85 @@ export default function CaptureScreen() {
       {offscreenSurface}
 
       {error ? (
-        <Text style={[styles.cameraError, { bottom: insets.bottom + 268 }]}>{error}</Text>
+        <Text style={[styles.cameraError, { bottom: insets.bottom + (side ? 120 : 268) }]}>
+          {error}
+        </Text>
       ) : null}
 
-      <View style={[styles.bottomArea, { bottom: insets.bottom + spacing.lg }]}>
-        {/*
-          Recent shots in this batch, newest last. The library tile rides at
-          the end of the strip once there is a batch, because the bottom-left
-          slot it had on an empty camera is now the last shot.
-        */}
-        {quick && quickSaved.length > 0 ? (
-          <View style={styles.strip} accessibilityLabel={`${quickSaved.length} saved this session`}>
-            <Text style={styles.quickCount}>{quickSaved.length} SAVED</Text>
-            {quickSaved.slice(0, STRIP_MAX).map((uri, i) => (
-              <Image key={`${uri}-${i}`} source={{ uri }} style={styles.stripThumb} />
-            ))}
+      {side ? (
+        <>
+          {/*
+            Recent shots float at the foot of the viewfinder, clear of the
+            control column.
+          */}
+          <View
+            style={[
+              styles.bottomArea,
+              { bottom: insets.bottom + spacing.lg, left: insets.left, right: viewRight },
+            ]}
+            pointerEvents="box-none"
+          >
+            {recentStrips}
           </View>
-        ) : null}
 
-        {shots.length > 0 ? (
-          <View style={styles.strip}>
-            {stripShots.map((shot) => (
-              <Image key={shot.key} source={{ uri: shot.uri }} style={styles.stripThumb} />
-            ))}
-            {hiddenCount > 0 ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`${hiddenCount} more. Review all ${shots.length}`}
-                style={[styles.stripThumb, styles.stripMore]}
-                onPress={() => setReviewing(true)}
-              >
-                <Text style={styles.stripMoreText}>+{hiddenCount}</Text>
-              </Pressable>
-            ) : null}
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Add from photo library"
-              style={[styles.stripThumb, styles.stripMore]}
-              onPress={() => void pickFromLibrary()}
-            >
-              <Icon icon={Images} size="md" color={CHROME_FG} />
-            </Pressable>
+          {/*
+            The control column, like a native tablet camera: modes beside the
+            shutter, the shutter at the height the right thumb rests, flip above
+            it and the batch (or the library) below.
+          */}
+          <View
+            style={[
+              styles.sidePanel,
+              {
+                paddingTop: insets.top + spacing.lg,
+                paddingBottom: insets.bottom + spacing.lg,
+                paddingRight: insets.right + spacing.lg,
+              },
+            ]}
+            onLayout={(event) => setSideWidth(event.nativeEvent.layout.width)}
+          >
+            <CameraModeRow
+              vertical
+              modes={cameraModes(canMeasure)}
+              value={mode}
+              onChange={changeMode}
+              disabled={busy}
+            />
+            <View style={styles.sideControls}>
+              {flipButton}
+              {shutterButton}
+              {lastShotButton}
+            </View>
           </View>
-        ) : null}
+        </>
+      ) : (
+        <View style={[styles.bottomArea, { bottom: insets.bottom + spacing.lg }]}>
+          {/*
+            Recent shots in this batch, newest last. The library tile rides at
+            the end of the strip once there is a batch, because the bottom-left
+            slot it had on an empty camera is now the last shot.
+          */}
+          {recentStrips}
 
-        <View style={styles.bottomBar}>
-          {lastShot ? (
-            /*
-             * The last shot opens review, where the batch gets its caption,
-             * tags and a last look at the phase before Save. The count on it is
-             * the old "Review N" label, kept so nobody loses track of a burst.
-             */
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Review ${shots.length} photo${shots.length === 1 ? "" : "s"}`}
-              style={styles.lastShot}
-              onPress={() => setReviewing(true)}
-            >
-              <Image source={{ uri: lastShot.uri }} style={styles.lastShotImage} />
-              <View style={[styles.countBadge, { backgroundColor: theme.colors.primary }]}>
-                <Text style={[styles.countText, { color: theme.colors.primaryForeground }]}>
-                  {shots.length}
-                </Text>
-              </View>
-            </Pressable>
-          ) : (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Add from photo library"
-              style={[styles.lastShot, styles.libraryButton]}
-              onPress={() => void pickFromLibrary()}
-            >
-              <Icon icon={Images} size="lg" color={CHROME_FG} />
-            </Pressable>
-          )}
+          <View style={styles.bottomBar}>
+            {lastShotButton}
+            {shutterButton}
+            {flipButton}
+          </View>
 
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={mode === "scan" ? "Scan document" : "Take photo"}
+          {/*
+            Modes under the shutter, as a native camera shows them. Photo and
+            Before/After and Scan change what the shutter does here; Video and
+            Walkthrough open the walkthrough recorder for this project.
+          */}
+          <CameraModeRow
+            modes={cameraModes(canMeasure)}
+            value={mode}
+            onChange={changeMode}
             disabled={busy}
-            accessibilityHint={
-              quick
-                ? "Saves the photo straight away"
-                : "Adds a photo to this batch without leaving the camera"
-            }
-            style={styles.shutter}
-            onPress={() => void takeShot()}
-          >
-            <View style={styles.shutterInner} />
-          </Pressable>
-
-          <Pressable
-            accessibilityRole="button"
-            style={styles.flipButton}
-            hitSlop={8}
-            accessibilityLabel="Switch camera"
-            onPress={() => setFacing(facing === "back" ? "front" : "back")}
-          >
-            <Icon icon={RefreshCw} size="lg" color={CHROME_FG} />
-          </Pressable>
+          />
         </View>
-
-        {/*
-          Modes under the shutter, as a native camera shows them. Photo and
-          Before/After and Scan change what the shutter does here; Video and
-          Walkthrough open the walkthrough recorder for this project.
-        */}
-        <CameraModeRow
-          modes={cameraModes(canMeasure)}
-          value={mode}
-          onChange={changeMode}
-          disabled={busy}
-        />
-      </View>
+      )}
 
       {measuringShot ? (
         <ShotAnnotator
@@ -1417,6 +1497,23 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   bottomArea: { position: "absolute", left: 0, right: 0, gap: spacing.lg },
+  sidePanel: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    right: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    paddingLeft: spacing.md,
+    backgroundColor: "#000",
+  },
+  sideControls: {
+    alignSelf: "stretch",
+    width: 96,
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
   strip: { flexDirection: "row", gap: spacing.sm, paddingHorizontal: spacing.xl },
   stripThumb: {
     width: 56,

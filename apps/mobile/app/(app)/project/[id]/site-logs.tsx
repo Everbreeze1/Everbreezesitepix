@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import { ActionRail } from "@/components/ActionRail";
 import { Alert, View } from "react-native";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -10,7 +11,7 @@ import {
   siteLogSummary,
   type SiteLogRow,
 } from "@/api/site-log-notes";
-import { spacing } from "@/theme";
+import { spacing, useRightRail } from "@/theme";
 import { FileText, Plus, Trash2 } from "@/ui/icons";
 import {
   Button,
@@ -38,6 +39,7 @@ import {
  * This screen is the list. Everything about one log lives in `site-log/[logId]`.
  */
 export default function ProjectSiteLogsScreen() {
+  const rail = useRightRail();
   const { id } = useLocalSearchParams<{ id: string }>();
   const queryClient = useQueryClient();
   const [failure, setFailure] = useState<string | null>(null);
@@ -102,16 +104,19 @@ export default function ProjectSiteLogsScreen() {
            * shrink as the list grows: below the rows, the cost of creating one
            * more rises with how many you already have.
            */
-          headerRight: () => (
-            <IconButton
-              icon={Plus}
-              accessibilityLabel="Start a log"
-              surface={false}
-              tone="primary"
-              disabled={create.isPending}
-              onPress={() => create.mutate()}
-            />
-          ),
+          // On a tablet the same action is the floating button at the lower right.
+          headerRight: rail
+            ? undefined
+            : () => (
+                <IconButton
+                  icon={Plus}
+                  accessibilityLabel="Start a log"
+                  surface={false}
+                  tone="primary"
+                  disabled={create.isPending}
+                  onPress={() => create.mutate()}
+                />
+              ),
         }}
       />
 
@@ -120,7 +125,7 @@ export default function ProjectSiteLogsScreen() {
         padded={false}
         refreshing={query.isRefetching}
         onRefresh={() => void query.refetch()}
-        bottomInset={spacing.xxl}
+        bottomInset={rail ? 120 : spacing.xxl}
       >
         {query.isLoading ? (
           <SkeletonList rows={4} />
@@ -201,6 +206,22 @@ export default function ProjectSiteLogsScreen() {
           </View>
         )}
       </Screen>
+
+      {/* Tablet only; hidden while the empty state offers the same thing. */}
+      {query.isLoading || logs.length === 0 ? null : (
+        <ActionRail
+          railOnly
+          actions={[
+            {
+              key: "new-log",
+              icon: Plus,
+              label: "Start a log",
+              disabled: create.isPending,
+              onPress: () => create.mutate(),
+            },
+          ]}
+        />
+      )}
     </>
   );
 }

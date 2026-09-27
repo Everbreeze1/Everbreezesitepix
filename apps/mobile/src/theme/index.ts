@@ -1,4 +1,5 @@
-import { useColorScheme } from "react-native";
+import { useColorScheme, useWindowDimensions } from "react-native";
+import { usesRightRail } from "./layout";
 import {
   elevation,
   HIT_TARGET,
@@ -13,11 +14,13 @@ import {
 
 export {
   CONTENT_MAX_WIDTH,
+  TABLET_MIN_WIDTH,
   TARGET_TILE,
   contentInset,
   contentWidth,
   gridColumns,
   isWide,
+  usesRightRail,
 } from "./layout";
 
 export {
@@ -70,3 +73,12 @@ export function useTheme(): Theme {
  * `useTheme()` anywhere a hook is legal, or dark mode will not follow.
  */
 export const colors = palettes.light;
+
+/**
+ * Whether this screen, at its current size and orientation, puts its primary
+ * actions on a right-hand rail. See `usesRightRail`; re-evaluated on rotation.
+ */
+export function useRightRail(): boolean {
+  const { width, height } = useWindowDimensions();
+  return usesRightRail(width, height);
+}
