@@ -87,3 +87,6 @@ apps/mobile/ios/
 *.keystore
 *.jks
 keystore.properties
+
+# Local tool output dumped at the repo root
+*.err

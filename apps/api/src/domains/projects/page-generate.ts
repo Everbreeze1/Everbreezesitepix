@@ -399,6 +399,7 @@ export async function generateProjectPageService(
       project_id: data.projectId,
       folder_id: data.folderId ?? null,
       created_by: ctx.userId,
+      revoked_at: new Date().toISOString(), // private until shared, see createProjectPageService
       title,
       content_html: contentHtml,
       source_template: data.template,

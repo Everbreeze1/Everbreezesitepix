@@ -334,6 +334,11 @@ export function ProjectsPage() {
   // lands on the Calendar rather than on the project list.
   const [tab, setTab] = useState<TabKey>(routeSearch.tab ?? "projects");
   const [query, setQuery] = useState(routeSearch.q ?? "");
+  // The header search navigates here with ?q=; follow it when this page is
+  // already mounted, since useState only reads the URL once.
+  useEffect(() => {
+    if (routeSearch.q !== undefined) setQuery(routeSearch.q);
+  }, [routeSearch.q]);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   /** Stage ids, plus NO_STAGE for "not in a pipeline". Empty means no filter. */
   const [selectedStageIds, setSelectedStageIds] = useState<string[]>([]);

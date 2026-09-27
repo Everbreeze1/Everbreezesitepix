@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/everlumen/client";
 import { useAuth } from "@/hooks/use-auth";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { STARTER_TEMPLATES } from "./checklist-starters";
 
 /*
  * The Checklist Library page, laid out exactly as the Main-html reference
@@ -290,10 +292,19 @@ function ChecklistEditor({
 export function ChecklistLibraryContent({
   createTick,
   onCreate,
+  startersOpen = false,
+  onStartersOpenChange,
 }: {
   /** Incremented by the hub's "New checklist" button. */
   createTick: number;
   onCreate: () => void;
+  /**
+   * The pre-built checklist picker, opened by the hub's "Start from a
+   * template" button. The same STARTER_TEMPLATES the /settings/checklists
+   * Starters dialog copies from, so a checklist is identical either way.
+   */
+  startersOpen?: boolean;
+  onStartersOpenChange?: (open: boolean) => void;
 }) {
   const [loading, setLoading] = useState(true);
   const [templates, setTemplates] = useState<ChecklistTemplateRow[]>([]);
@@ -304,6 +315,8 @@ export function ChecklistLibraryContent({
   const [name, setName] = useState("");
   const [localItems, setLocalItems] = useState<ChecklistItem[]>([]);
   const [saving, setSaving] = useState(false);
+  /** Name of the starter being copied, so only its card shows as busy. */
+  const [installing, setInstalling] = useState<string | null>(null);
 
   const prevCreateTick = useRef(createTick);
   useEffect(() => {
@@ -474,8 +487,105 @@ export function ChecklistLibraryContent({
     }
   }
 
+  /*
+   * Copies a starter into the account's own rows (there are no ownerless
+   * built-ins to point at) and opens it in the editor, so the author lands on
+   * what they just made rather than hunting for it in the grid.
+   */
+  async function createFromStarter(s: (typeof STARTER_TEMPLATES)[number]) {
+    if (!user) return;
+    setInstalling(s.name);
+    try {
+      const { data, error } = await supabase
+        .from("checklist_templates" as any)
+        .insert({
+          created_by: user.id,
+          name: s.name,
+          description: s.description,
+          category: s.category ?? null,
+        })
+        .select("id")
+        .single();
+      if (error || !data) throw error ?? new Error("Failed to create checklist");
+      const templateId = (data as any).id as string;
+      const { data: rows, error: itemsError } = await supabase
+        .from("checklist_template_items" as any)
+        .insert(
+          s.items.map((it, position) => ({
+            template_id: templateId,
+            position,
+            label: it.label,
+            required: !!it.required,
+            item_type: it.item_type,
+            description: it.description ?? null,
+          })),
+        )
+        .select("id, label, position");
+      if (itemsError) throw itemsError;
+      toast.success(`Created “${s.name}”`);
+      onStartersOpenChange?.(false);
+      await load();
+      const items = ((rows as any[]) ?? [])
+        .sort((a, b) => a.position - b.position)
+        .map((r) => ({ id: r.id as string, label: (r.label as string) ?? "" }));
+      setEditing({
+        id: templateId,
+        name: s.name,
+        archived: false,
+        updated_at: new Date().toISOString(),
+        itemCount: items.length,
+        usedInBlueprints: 0,
+        blueprintNames: [],
+      });
+      setName(s.name);
+      setLocalItems(items);
+      setView("editor");
+    } catch (e) {
+      toast.error((e as { message?: string })?.message ?? "Couldn't create the checklist");
+    } finally {
+      setInstalling(null);
+    }
+  }
+
   return (
     <div className="mx-auto w-full max-w-[1200px] px-4 pb-10 sm:px-10">
+      <Dialog open={startersOpen} onOpenChange={(o) => !installing && onStartersOpenChange?.(o)}>
+        <DialogContent className="max-h-[85vh] max-w-lg overflow-hidden p-0">
+          <DialogHeader className="border-b border-border px-5 py-4">
+            <DialogTitle>Start from a pre-built checklist</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[60vh] space-y-2 overflow-y-auto px-5 py-4">
+            <p className="text-[11.5px] leading-relaxed text-muted-foreground">
+              Each one comes fully populated. Rename, reorder, or delete anything after.
+            </p>
+            {STARTER_TEMPLATES.map((s) => (
+              <button
+                key={s.name}
+                disabled={!!installing}
+                onClick={() => void createFromStarter(s)}
+                className="flex w-full items-start gap-3 rounded-xl border border-border/60 bg-card px-3.5 py-3 text-left transition-colors hover:border-primary/40 disabled:opacity-50"
+              >
+                <span className="mt-0.5 shrink-0 text-primary">
+                  <ChecklistCardIcon />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-bold">
+                    {s.name}
+                    {installing === s.name && "…"}
+                  </span>
+                  <span className="mt-0.5 block text-[11.5px] leading-snug text-muted-foreground">
+                    {s.description}
+                  </span>
+                  <span className="mt-1 block text-[11px] font-semibold text-muted-foreground">
+                    {s.category ? `${s.category} · ` : ""}
+                    {s.items.length} items
+                  </span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
       {loading && templates.length === 0 ? (
         <div className="py-16 text-center text-[13px] text-faint">Loading checklists&hellip;</div>
       ) : view === "editor" ? (
