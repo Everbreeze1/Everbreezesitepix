@@ -1,13 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, Images, Search, SlidersHorizontal } from "@/ui/icons";
-import {
-  FlatList,
-  Modal,
-  Pressable,
-  RefreshControl,
-  useWindowDimensions,
-  View,
-} from "react-native";
+import { FlatList, Pressable, RefreshControl, useWindowDimensions, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { randomUUID } from "expo-crypto";
@@ -21,7 +14,7 @@ import {
   type GalleryFilters,
 } from "@/api/gallery-filters";
 import { GalleryFilterSheet } from "@/components/GalleryFilterSheet";
-import { PhotoLightboxActions } from "@/components/PhotoLightboxActions";
+import { PhotoViewer } from "@/components/photo-viewer";
 import { mergeTags, phasePatch, trashPhotos, type PhotoPatch } from "@/api/photo-edit";
 import { generateSummaryFromPhotos } from "@/api/summaries";
 import { photoSelectionError } from "@/api/summary-view";
@@ -32,7 +25,6 @@ import { enqueue } from "@/offline/outbox";
 import { refreshQueue, requestSync } from "@/offline/sync";
 import { gridColumns, HIT_TARGET, radius, spacing, useTheme } from "@/theme";
 import {
-  Button,
   EmptyState,
   ErrorState,
   Icon,
@@ -204,11 +196,6 @@ export default function GalleryScreen() {
 
   const filtered =
     search.trim() !== "" || (filter !== "all" && filter !== "project") || refineCount > 0;
-
-  const lightboxPhoto = useMemo(
-    () => visible.find((photo) => photo.id === lightboxId) ?? null,
-    [visible, lightboxId],
-  );
 
   const loadMore = useCallback(() => {
     if (query.hasNextPage && !query.isFetchingNextPage) void query.fetchNextPage();
@@ -660,77 +647,20 @@ export default function GalleryScreen() {
         onApply={setRefine}
       />
 
-      <Modal
-        visible={lightboxPhoto !== null}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setLightboxId(null)}
-      >
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Close photo"
-          onPress={() => setLightboxId(null)}
-          style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.94)", justifyContent: "center" }}
-        >
-          {lightboxPhoto ? (
-            <>
-              <PhotoThumb
-                uri={urls[lightboxPhoto.id]}
-                width="100%"
-                height="70%"
-                contentFit="contain"
-                rounded={0}
-                showLabel
-                onDark
-              />
-              <View
-                style={{
-                  position: "absolute",
-                  bottom: 48,
-                  left: spacing.xl,
-                  right: spacing.xl,
-                  gap: spacing.sm,
-                }}
-              >
-                <Text variant="bodyStrong" style={{ color: "#fff" }} numberOfLines={2}>
-                  {displayCaption(lightboxPhoto.caption, "Photo")}
-                </Text>
-                <Text variant="caption" style={{ color: "rgba(255,255,255,0.75)" }}>
-                  {formatPhotoDateGroup(lightboxPhoto.taken_at ?? lightboxPhoto.created_at)}
-                  {lightboxPhoto.phase ? ` · ${lightboxPhoto.phase}` : ""}
-                </Text>
-                {/*
-                 * The project link is the point of a cross-project gallery. A
-                 * photo you found here is usually the start of a job you now
-                 * want to be inside, not the end of the search.
-                 */}
-                {/*
-                  The project grid's lightbox acts: annotate, AI analysis and
-                  comments. A photo found in the cross-project library is just
-                  as likely to be the one somebody needs to mark up or ask about.
-                */}
-                <PhotoLightboxActions
-                  photo={lightboxPhoto}
-                  uri={urls[lightboxPhoto.id]}
-                  onLeave={() => setLightboxId(null)}
-                />
-                {lightboxPhoto.project_name ? (
-                  <Button
-                    label={`Open ${lightboxPhoto.project_name}`}
-                    variant="secondary"
-                    size="sm"
-                    onPress={() => {
-                      const projectId = lightboxPhoto.project_id;
-                      setLightboxId(null);
-                      router.push(`/project/${projectId}`);
-                    }}
-                  />
-                ) : null}
-              </View>
-            </>
-          ) : null}
-        </Pressable>
-      </Modal>
+      {/*
+        The shared photo viewer, the same one the project grid opens: the web
+        lightbox and its details panel. "Open project" is in its header, since a
+        photo found in the library is usually the start of a job you now want
+        to be inside.
+      */}
+      <PhotoViewer
+        photos={visible}
+        urls={urls}
+        photoId={lightboxId}
+        onChangePhoto={setLightboxId}
+        onClose={() => setLightboxId(null)}
+        onEndReached={loadMore}
+      />
     </View>
   );
 }

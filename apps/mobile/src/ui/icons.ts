@@ -101,3 +101,11 @@ export { default as UserRound } from "lucide-react-native/dist/esm/icons/user-ro
 export { default as Moon } from "lucide-react-native/dist/esm/icons/moon";
 export { default as Smartphone } from "lucide-react-native/dist/esm/icons/smartphone";
 export { default as Sun } from "lucide-react-native/dist/esm/icons/sun";
+export { default as Circle } from "lucide-react-native/dist/esm/icons/circle";
+export { default as CircleDashed } from "lucide-react-native/dist/esm/icons/circle-dashed";
+export { default as Globe } from "lucide-react-native/dist/esm/icons/globe";
+export { default as Maximize } from "lucide-react-native/dist/esm/icons/maximize";
+export { default as Minimize } from "lucide-react-native/dist/esm/icons/minimize";
+export { default as StickyNote } from "lucide-react-native/dist/esm/icons/sticky-note";
+export { default as ZoomIn } from "lucide-react-native/dist/esm/icons/zoom-in";
+export { default as ZoomOut } from "lucide-react-native/dist/esm/icons/zoom-out";

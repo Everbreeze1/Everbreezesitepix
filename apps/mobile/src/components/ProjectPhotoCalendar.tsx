@@ -27,7 +27,7 @@ import { EmptyState, IconButton, PhotoThumb, Text } from "@/ui";
  * A month grid shaded by how much was shot each day, counted on the server so
  * a busy month is not undercounted by whatever page of photos the grid had
  * loaded. Tapping a day lists that day's photos underneath; tapping a photo
- * opens it in the screen's lightbox.
+ * opens the day in the photo viewer.
  */
 export function ProjectPhotoCalendar({
   projectId,
@@ -37,7 +37,15 @@ export function ProjectPhotoCalendar({
   projectId: string;
   /** The content width the grid is laid out in. */
   width: number;
-  onOpenPhoto: (photo: PhotoListItem, url: string | null) => void;
+  /**
+   * `day` is every photo of the picked day with its URLs, so the photo viewer
+   * can page through the day rather than open one photo on its own.
+   */
+  onOpenPhoto: (
+    photo: PhotoListItem,
+    url: string | null,
+    day?: { photos: PhotoListItem[]; urls: Record<string, string> },
+  ) => void;
 }) {
   const theme = useTheme();
   const [month, setMonth] = useState<Month>(() => thisMonth());
@@ -198,7 +206,13 @@ export function ProjectPhotoCalendar({
                 accessibilityRole="button"
                 accessibilityLabel={photo.caption?.trim() || "Photo"}
                 accessibilityHint="Opens the photo full screen"
-                onPress={() => onOpenPhoto(photo, dayPhotos.data?.urls[photo.id] ?? null)}
+                onPress={() =>
+                  onOpenPhoto(
+                    photo,
+                    dayPhotos.data?.urls[photo.id] ?? null,
+                    dayPhotos.data ?? undefined,
+                  )
+                }
                 style={{ width: thumb, height: thumb }}
               >
                 <PhotoThumb

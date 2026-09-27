@@ -74,6 +74,12 @@ export type CreateTaskInput = TaskDraft & {
   id: string;
   projectId: string;
   createdBy: string;
+  /**
+   * Photos the task starts out covering. Set when a task is raised from the
+   * photo viewer, the way web's PhotoTasksPanel links the new task to the
+   * photo on screen. Absent everywhere else, which writes the empty list.
+   */
+  photoIds?: string[];
 };
 
 /**
@@ -107,7 +113,7 @@ export async function createTask(input: CreateTaskInput): Promise<void> {
     priority: input.priority,
     status: "open",
     completed_at: null,
-    photo_ids: [],
+    photo_ids: input.photoIds ?? [],
   } as never);
 
   if (error) throw new Error(error.message);

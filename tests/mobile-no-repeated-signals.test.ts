@@ -337,26 +337,27 @@ describe("rows with their own controls drop the chevron", () => {
  * This slipped past an earlier sweep of mine that accepted a role OR a label.
  * A role without a name is not accessible; it is a button called nothing.
  */
-describe("the lightbox scrims are named", () => {
-  const SCRIMS = [
+describe("the photo viewer names its close control", () => {
+  /*
+   * The two hand-rolled lightboxes this used to check are gone; both screens
+   * open the shared viewer now. A tap on the photo there hides the chrome (web's
+   * full-screen), so closing is an explicit, labelled button rather than a scrim.
+   */
+  const SCREENS = [
     "apps/mobile/app/(app)/(tabs)/gallery.tsx",
     "apps/mobile/app/(app)/project/[id]/index.tsx",
   ];
 
-  for (const file of SCRIMS) {
-    it(`${file.split("/").pop()} labels its close target`, () => {
+  for (const file of SCREENS) {
+    it(`${file.split("/").pop()} opens the shared viewer and can close it`, () => {
       const s = read(file).replace(/\s+/g, " ");
-      const at = s.indexOf("setLightboxId(null)");
-      expect(at, "no lightbox in this file any more").toBeGreaterThan(-1);
-      expect(s).toContain('accessibilityLabel="Close photo"');
+      expect(s).toContain("<PhotoViewer");
+      expect(s).toMatch(/onClose=\{\(\) => \{? ?setLightboxId\(null\)/);
     });
   }
 
-  it("both still close on a tap, which is the gesture that matters", () => {
-    for (const file of SCRIMS) {
-      expect(read(file).replace(/\s+/g, " "), file).toContain(
-        "onPress={() => setLightboxId(null)}",
-      );
-    }
+  it("labels the close button for what it does", () => {
+    const s = read("apps/mobile/src/components/photo-viewer/PhotoViewer.tsx");
+    expect(s).toContain('label="Close photo"');
   });
 });

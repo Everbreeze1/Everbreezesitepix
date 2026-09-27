@@ -143,27 +143,32 @@ describe("no action row pushes a control off the screen", () => {
    * green, and `PhotoSharesSheet` - built specifically so share links could be
    * withdrawn - had no reachable entry point on that screen at all.
    */
-  const screen = () => readFileSync(join(ROOT, "app/(app)/project/[id]/index.tsx"), "utf8");
+  /*
+   * The lightbox that bug lived in is gone: every screen now opens the shared
+   * photo viewer, whose actions are icon buttons at the right of the top bar.
+   * The same rule holds there in the other direction: the title column is the
+   * one that gives way (flex 1, minWidth 0, one line), so a long description
+   * can never push Share or Close off the right edge.
+   */
+  const viewer = () =>
+    readFileSync(join(ROOT, "src/components/photo-viewer/PhotoViewer.tsx"), "utf8");
 
-  const actionRow = () => {
-    const s = screen();
-    const start = s.indexOf("lightboxActions: {");
-    expect(start, "lightboxActions style should exist").toBeGreaterThan(-1);
-    return s.slice(start, s.indexOf("}", start));
+  const topBar = () => {
+    const s = viewer();
+    const start = s.indexOf("const topBar = (");
+    expect(start, "the viewer's top bar should exist").toBeGreaterThan(-1);
+    return s.slice(start, s.indexOf("const pager =", start));
   };
 
-  it("is bounded on both sides, so it has a width to wrap inside", () => {
-    // `right` alone gives the row nowhere to stop.
-    const row = actionRow();
-    expect(row).toMatch(/left:/);
-    expect(row).toMatch(/right:/);
+  it("lets the title shrink rather than the buttons", () => {
+    const bar = topBar();
+    expect(bar).toContain("flex: 1, minWidth: 0");
+    expect(bar).toContain("numberOfLines={1}");
   });
 
-  it("wraps rather than overflowing", () => {
-    /*
-     * The part that keeps this fixed. A fifth action, a longer word, or a
-     * larger system font size should push a line down, not push a button off.
-     */
-    expect(actionRow()).toMatch(/flexWrap: "wrap"/);
+  it("keeps Share and Close in the bar", () => {
+    const bar = topBar();
+    expect(bar).toContain('label="Share photo"');
+    expect(bar).toContain('label="Close photo"');
   });
 });

@@ -2,12 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
   ActivityIndicator,
-  Modal,
   Pressable,
   RefreshControl,
   SectionList,
   StyleSheet,
-  Text,
   View,
   useWindowDimensions,
 } from "react-native";
@@ -62,6 +60,7 @@ import {
   setProjectShareEnabled,
   isShareLive,
 } from "@/api/sharing";
+import { ActionRail } from "@/components/ActionRail";
 import { QueueBanner } from "@/components/QueueBanner";
 import { ProjectHero, ProjectHeroButton } from "@/components/ProjectHero";
 import { ProjectTabs, type ProjectTab } from "@/components/ProjectTabs";
@@ -69,6 +68,7 @@ import { ProjectStatusChip } from "@/components/ProjectStatusChip";
 import { ProjectWorkflowStrip } from "@/components/ProjectWorkflowStrip";
 import { ProjectLabels } from "@/components/ProjectLabels";
 import { ProjectPhotoCalendar } from "@/components/ProjectPhotoCalendar";
+import { PhotoViewer } from "@/components/photo-viewer";
 import { ProjectVideos } from "@/components/ProjectVideos";
 import { PhotoFilterSheet } from "@/components/PhotoFilterSheet";
 import { listProjectVideos } from "@/api/project-videos";
@@ -101,10 +101,9 @@ import {
 import { useQueue } from "@/offline/use-queue";
 import { enqueue } from "@/offline/outbox";
 import { refreshQueue, requestSync } from "@/offline/sync";
-import { gridColumns, HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
+import { gridColumns, radius, spacing, useTheme } from "@/theme";
 import {
   DailyLogCard,
-  PhotoSharesSheet,
   ProjectBlueprint,
   ProjectCrew,
   ActionSheet,
@@ -226,17 +225,20 @@ export default function ProjectDetailScreen() {
   const [showTags, setShowTags] = useState(false);
   const [media, setMedia] = useState<MediaFilter>("all");
   const [filtersOpen, setFiltersOpen] = useState(false);
-  /** A photo opened from the Calendar tab, which may not be in the loaded grid. */
+  /*
+   * A day opened from the Calendar tab. Its photos may not be in the loaded
+   * grid, so the viewer pages through that day rather than the grid, as web's
+   * calendar viewer does.
+   */
   const [calendarPick, setCalendarPick] = useState<{
-    photo: PhotoListItem;
-    url: string | null;
+    photos: PhotoListItem[];
+    urls: Record<string, string>;
   } | null>(null);
   const [tab, setTab] = useState<InPlaceTab>("photos");
   const [sort, setSort] = useState<"newest" | "oldest">("newest");
   // Seeded from the param rather than set in an effect, so the lightbox is
   // already open on the first render instead of flashing the grid first.
   const [lightboxId, setLightboxId] = useState<string | null>(deepLinkPhoto ?? null);
-  const [sharing, setSharing] = useState<{ photoId: string; caption: string } | null>(null);
   /*
    * Selection lives as a Set of ids rather than a flag plus a list, so a photo
    * scrolled far out of view cannot fall out of the selection when the list
@@ -390,14 +392,12 @@ export default function ProjectDetailScreen() {
 
   const tileSize = (screenWidth - spacing.lg * 2 - GRID_GAP * (columns - 1)) / columns;
 
-  const lightboxPhoto =
-    filtered.find((photo) => photo.id === lightboxId) ??
-    (calendarPick?.photo.id === lightboxId ? calendarPick.photo : null);
-  const lightboxUrl = lightboxPhoto
-    ? (urls[lightboxPhoto.id] ??
-      (calendarPick?.photo.id === lightboxPhoto.id ? calendarPick.url : null) ??
-      undefined)
-    : undefined;
+  /*
+   * What the photo viewer pages through: the day picked on the Calendar tab,
+   * or the grid as filtered and sorted on screen.
+   */
+  const viewerPhotos = calendarPick?.photos ?? filtered;
+  const viewerUrls = calendarPick?.urls ?? urls;
 
   const loadMore = useCallback(() => {
     /*
@@ -513,25 +513,6 @@ export default function ProjectDetailScreen() {
       setShareError(e instanceof Error ? e.message : "Could not create the link");
     }
   }, [id, project?.name]);
-
-  /**
-   * Show the links already open on this photograph, and offer another.
-   *
-   * A share link is a jobsite photograph on the open internet with no login in
-   * front of it, so the sheet leads with what already exists rather than
-   * quietly adding to it.
-   */
-  const sharePhoto = useCallback((photoId: string, caption: string | null) => {
-    /*
-     * Opens the links sheet rather than minting one on the spot.
-     *
-     * The old path created a FRESH token per tap and showed nothing, so three
-     * taps left three independently live URLs on the open internet with nothing
-     * on the phone able to count or withdraw them.
-     */
-    setShareError(null);
-    setSharing({ photoId, caption: displayCaption(caption, "Photo") });
-  }, []);
 
   const toggle = useCallback((photoId: string) => {
     setSelected((current) => {
@@ -1032,8 +1013,8 @@ export default function ProjectDetailScreen() {
                     <ProjectPhotoCalendar
                       projectId={String(id)}
                       width={screenWidth - spacing.lg * 2}
-                      onOpenPhoto={(photo, url) => {
-                        setCalendarPick({ photo, url });
+                      onOpenPhoto={(photo, _url, day) => {
+                        setCalendarPick(day ?? null);
                         setLightboxId(photo.id);
                       }}
                     />
@@ -1293,22 +1274,17 @@ export default function ProjectDetailScreen() {
             onAction={(action) => void applyBulk(action)}
           />
         ) : filtered.length === 0 ? null : (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Capture"
-            accessibilityHint="Opens the camera for this project"
-            onPress={() => router.push(`/project/${id}/capture`)}
-            style={({ pressed }) => [
-              styles.fab,
+          <ActionRail
+            actions={[
               {
-                backgroundColor: theme.colors.primary,
-                shadowColor: theme.colors.primary,
-                opacity: pressed ? 0.85 : 1,
+                key: "capture",
+                icon: Camera,
+                label: "Capture",
+                hint: "Opens the camera for this project",
+                onPress: () => router.push(`/project/${id}/capture`),
               },
             ]}
-          >
-            <Icon icon={Camera} size="lg" color={theme.colors.primaryForeground} />
-          </Pressable>
+          />
         )}
       </View>
 
@@ -1402,147 +1378,24 @@ export default function ProjectDetailScreen() {
         ]}
       />
 
-      <Modal
-        visible={Boolean(lightboxPhoto)}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setLightboxId(null)}
-      >
-        <Pressable
-          accessibilityRole="button"
-          /*
-           * Labelled, like the gallery's lightbox. Without this the scrim takes
-           * its accessible name from the caption text inside it, so a screen
-           * reader announces the photograph's caption as a button - which says
-           * nothing about what tapping does, and tapping closes the photo.
-           */
-          accessibilityLabel="Close photo"
-          style={styles.lightbox}
-          onPress={() => setLightboxId(null)}
-        >
-          {lightboxPhoto ? (
-            <>
-              <PhotoThumb
-                uri={lightboxUrl}
-                width="100%"
-                height="70%"
-                contentFit="contain"
-                rounded={0}
-                showLabel
-                onDark
-              />
-              <View style={styles.lightboxActions}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Annotate this photo"
-                  onPress={() => {
-                    const photo = lightboxPhoto;
-                    setLightboxId(null);
-                    router.push({
-                      pathname: "/photo/[id]/annotate",
-                      params: {
-                        id: photo.id,
-                        uri: lightboxUrl ?? "",
-                        projectId: String(id),
-                        caption: photo.caption ?? "",
-                        phase: photo.phase ?? "untagged",
-                      },
-                    });
-                  }}
-                  style={styles.lightboxAction}
-                >
-                  <Text style={[typography.bodyStrong, { color: "#fff" }]}>Annotate</Text>
-                </Pressable>
-
-                {/*
-                  Analyse sits next to Annotate because they are the same kind
-                  of act: both take this one photograph and add to it. It reads
-                  the equipment plate and finds visible defects, which is worth
-                  doing while still standing in front of the thing.
-                */}
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Analyse this photo"
-                  onPress={() => {
-                    const photo = lightboxPhoto;
-                    setLightboxId(null);
-                    router.push({
-                      pathname: "/photo/[id]/analysis",
-                      params: {
-                        id: photo.id,
-                        uri: lightboxUrl ?? "",
-                        caption: photo.caption ?? "",
-                      },
-                    });
-                  }}
-                  style={styles.lightboxAction}
-                >
-                  <Text style={[typography.bodyStrong, { color: "#fff" }]}>Analyse</Text>
-                </Pressable>
-
-                {/*
-                  Comments last, because the first three change the photograph
-                  and this one talks about it. `photo_comments` has been in the
-                  database since July and the web has had a panel for it all
-                  along; the phone could not read a word of it.
-                */}
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Comment on this photo"
-                  onPress={() => {
-                    const photo = lightboxPhoto;
-                    setLightboxId(null);
-                    router.push({
-                      pathname: "/photo/[id]/comments",
-                      params: {
-                        id: photo.id,
-                        uri: lightboxUrl ?? "",
-                        projectId: String(id),
-                        caption: photo.caption ?? "",
-                      },
-                    });
-                  }}
-                  style={styles.lightboxAction}
-                >
-                  <Text style={[typography.bodyStrong, { color: "#fff" }]}>Comments</Text>
-                </Pressable>
-
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Share this photo"
-                  onPress={() => {
-                    const photo = lightboxPhoto;
-                    setLightboxId(null);
-                    sharePhoto(photo.id, photo.caption);
-                  }}
-                  style={styles.lightboxAction}
-                >
-                  <Text style={[typography.bodyStrong, { color: "#fff" }]}>Share</Text>
-                </Pressable>
-              </View>
-
-              <View style={styles.lightboxMeta}>
-                <Text style={[typography.bodyStrong, { color: "#fff" }]} numberOfLines={2}>
-                  {displayCaption(lightboxPhoto.caption, "Photo")}
-                </Text>
-                <Text style={[typography.caption, { color: "rgba(255,255,255,0.75)" }]}>
-                  {formatPhotoDateGroup(lightboxPhoto.taken_at ?? lightboxPhoto.created_at)}
-                  {lightboxPhoto.phase ? ` · ${lightboxPhoto.phase}` : ""}
-                </Text>
-              </View>
-            </>
-          ) : null}
-        </Pressable>
-      </Modal>
-
-      {sharing ? (
-        <PhotoSharesSheet
-          visible
-          onClose={() => setSharing(null)}
-          photoId={sharing.photoId}
-          caption={sharing.caption}
-        />
-      ) : null}
+      {/*
+        The shared photo viewer: the web lightbox and its details panel, with
+        Annotate, AI analysis, Share, tags, description, tasks and comments on
+        the photo itself. Opens on the deep-linked photo when there is one.
+      */}
+      <PhotoViewer
+        photos={viewerPhotos}
+        urls={viewerUrls}
+        photoId={lightboxId}
+        onChangePhoto={setLightboxId}
+        onClose={() => {
+          setLightboxId(null);
+          setCalendarPick(null);
+        }}
+        projectId={String(id)}
+        onEndReached={calendarPick ? undefined : loadMore}
+        inProject
+      />
     </>
   );
 }
@@ -1567,65 +1420,4 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.45)",
     borderRadius: radius.pill,
   },
-  /* A round camera button; the fill and glow come from the theme at render. */
-  fab: {
-    position: "absolute",
-    right: spacing.lg,
-    bottom: spacing.xl,
-    width: 64,
-    height: 64,
-    borderRadius: radius.pill,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowOpacity: 0.35,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 8,
-  },
-  lightbox: { flex: 1, backgroundColor: "rgba(0,0,0,0.94)", justifyContent: "center" },
-  lightboxImage: { width: "100%", height: "78%" },
-  /*
-   * One right-anchored row, not two absolutely positioned pills.
-   *
-   * Share was originally placed with `right: spacing.xl + 150`, a number
-   * chosen to clear the word "Annotate" at the current font size. It happened
-   * to work and would have collided the first time either label changed or the
-   * OS font scale went up. A row cannot drift.
-   */
-  /*
-   * Bounded on both sides, and allowed to wrap.
-   *
-   * This was anchored to `right` only, with no left edge and no wrap, so the
-   * row grew leftwards off the screen. Three pills fitted; the fourth did not.
-   * Measured on a 1080px screen: Annotate ended at 1008, Analyse at 644,
-   * Comments at 0 - already flush against the left edge - which put Share at a
-   * negative x and made it unreachable. Not clipped visually and still in the
-   * layout, so it drew nothing, took no taps, and merged into the parent
-   * accessibility node, where the only trace of it was a screen-wide element
-   * labelled "Share this photo, Photo, Jul 17 . before".
-   *
-   * It went unnoticed because Share was the newest of the four and the row had
-   * fitted the previous three, so nothing about adding one more looked risky.
-   * With `left` set the row has a width to wrap inside, so a fifth action, a
-   * longer word, or a larger font size pushes a line down instead of off.
-   */
-  lightboxActions: {
-    position: "absolute",
-    top: 56,
-    left: spacing.xl,
-    right: spacing.xl,
-    flexDirection: "row-reverse",
-    flexWrap: "wrap",
-    justifyContent: "flex-start",
-    gap: spacing.sm,
-  },
-  lightboxAction: {
-    backgroundColor: "rgba(255,255,255,0.18)",
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-    minHeight: HIT_TARGET,
-    justifyContent: "center",
-  },
-  lightboxMeta: { position: "absolute", bottom: 56, left: spacing.xl, right: spacing.xl, gap: 4 },
 });
