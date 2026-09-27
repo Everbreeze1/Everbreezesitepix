@@ -1,32 +1,37 @@
 import { useMemo, useState } from "react";
 import { FolderPlus, Plus, Search } from "@/ui/icons";
-import { FlatList, Pressable, RefreshControl, StyleSheet, View } from "react-native";
+import {
+  FlatList,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  View,
+  useWindowDimensions,
+} from "react-native";
 import { router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
-import { PROJECT_STATUS_LABELS, projectDisplayName, relativeTime } from "@everlumen/shared";
-import { formatAddress, listProjects, type ProjectListItem } from "@/api/projects";
+import { PROJECT_STATUS_LABELS, projectDisplayName } from "@everlumen/shared";
+import { formatAddress, listProjects } from "@/api/projects";
+import { listProjectBoards } from "@/api/pipelines";
+import type { PipelineStage } from "@/api/pipeline-view";
+import { listProjectCardExtras } from "@/api/project-cards";
+import { cardColumns } from "@/api/project-cards-view";
 import { ActionRail } from "@/components/ActionRail";
 import { QueueBanner } from "@/components/QueueBanner";
-import { LabelChip, useLabelCatalog } from "@/components/ProjectLabels";
+import { useLabelCatalog } from "@/components/ProjectLabels";
 import { FilterGlyph } from "@/components/ProjectGlyphs";
-import { ProjectCrewAvatars, useProjectCrews } from "@/components/ProjectCrewAvatars";
-import {
-  ProjectFilterPills,
-  ProjectStatusPill,
-  projectStatusLabel,
-  type ProjectFilterOption,
-} from "@/components/ProjectStatusPill";
-import { HIT_TARGET, radius, spacing, useTheme } from "@/theme";
+import { useProjectCrews } from "@/components/ProjectCrewAvatars";
+import { ProjectListCard } from "@/components/ProjectListCard";
+import { ProjectFilterPills, type ProjectFilterOption } from "@/components/ProjectStatusPill";
+import { HIT_TARGET, spacing, useTheme } from "@/theme";
 import {
   ActionSheet,
-  Card,
   EmptyState,
   ErrorState,
   IconButton,
   PageHeader,
   SearchField,
   SkeletonList,
-  Text,
 } from "@/ui";
 
 /*
@@ -35,6 +40,9 @@ import {
  * place to be found rather than being mixed in among the live ones under All.
  */
 type StatusFilter = "all" | "active" | "on_hold" | "completed" | "archived";
+
+/** What a card shows when its photos could not be read at all. */
+const FAILED = { urls: [], count: null, latestAt: null, stageId: null };
 
 export default function ProjectsScreen() {
   const theme = useTheme();
@@ -62,6 +70,44 @@ export default function ProjectsScreen() {
    */
   const projectIds = useMemo(() => all.map((project) => project.id), [all]);
   const crews = useProjectCrews(projectIds);
+
+  /*
+   * Photos for every card in one read (plus one signing batch), keyed on the
+   * ids like the crews. Separate from the list query so the cards draw the
+   * moment the jobs arrive and the strips fill in behind them; a failure here
+   * leaves the strips saying so and the jobs still reachable.
+   */
+  const extrasQuery = useQuery({
+    queryKey: ["project-card-extras", projectIds.join(",")],
+    queryFn: () => listProjectCardExtras(projectIds),
+    enabled: projectIds.length > 0,
+    // Signed URLs last an hour; refetching well inside that keeps them live.
+    staleTime: 10 * 60 * 1000,
+  });
+  const extras = extrasQuery.data;
+
+  // Same key as the status chip and the Pipelines screen: one shared fetch.
+  const boardsQuery = useQuery({
+    queryKey: ["project-boards"],
+    queryFn: listProjectBoards,
+    staleTime: 60_000,
+  });
+  const stages = useMemo(() => {
+    const out: Record<string, PipelineStage> = {};
+    for (const board of boardsQuery.data ?? []) {
+      for (const stage of board.stages ?? []) out[stage.id] = stage;
+    }
+    return out;
+  }, [boardsQuery.data]);
+
+  const { colorOf } = useLabelCatalog();
+
+  /* One column on a phone, a grid of cards on a tablet. */
+  const { width } = useWindowDimensions();
+  const columns = cardColumns(width);
+  const gap = spacing.md;
+  const pad = columns > 1 ? spacing.xl : spacing.lg;
+  const cellWidth = (width - pad * 2 - gap * (columns - 1)) / columns;
 
   /*
    * Counts come off the unfiltered list, so a chip reading "On hold 3" keeps
@@ -188,12 +234,15 @@ export default function ProjectsScreen() {
         />
       ) : (
         <FlatList
+          key={`cols-${columns}`}
           data={projects}
           keyExtractor={(item) => item.id}
+          numColumns={columns}
+          columnWrapperStyle={columns > 1 ? { gap } : undefined}
           contentContainerStyle={{
-            padding: spacing.lg,
+            padding: pad,
             paddingTop: spacing.xl,
-            gap: spacing.md,
+            gap,
             // Clears the raised camera button, which overhangs the bar by 22,
             // and the new-project button floating above the last card.
             paddingBottom: 140,
@@ -233,7 +282,22 @@ export default function ProjectsScreen() {
               />
             )
           }
-          renderItem={({ item }) => <ProjectCard project={item} crew={crews[item.id]} />}
+          renderItem={({ item }) => {
+            const card = extras?.[item.id] ?? (extrasQuery.isError ? FAILED : undefined);
+            const stageId = card?.stageId ?? null;
+            return (
+              <View style={columns > 1 ? { width: cellWidth } : undefined}>
+                <ProjectListCard
+                  project={item}
+                  extras={card}
+                  stage={stageId ? (stages[stageId] ?? null) : null}
+                  crew={crews[item.id]}
+                  colorOf={colorOf}
+                  onPress={() => router.push(`/project/${item.id}`)}
+                />
+              </View>
+            );
+          }}
         />
       )}
 
@@ -280,107 +344,6 @@ export default function ProjectsScreen() {
         ]}
       />
     </View>
-  );
-}
-
-/** "Client · Street", without repeating the client when the name already is it. */
-function cardTitle(project: ProjectListItem): string {
-  const name = projectDisplayName(project);
-  const client = project.client_name?.trim();
-  if (!client || name.toLowerCase().includes(client.toLowerCase())) return name;
-  return `${client} · ${name}`;
-}
-
-/** "Folsom, CA", falling back to the free-text location. */
-function cardPlace(project: ProjectListItem): string | null {
-  const cityState = [project.city, project.state].filter(Boolean).join(", ");
-  if (cityState) return cityState;
-  // The street is already the title for most jobs, so only the loose
-  // `location` text is worth a second line here.
-  return project.location?.trim() || null;
-}
-
-function ProjectCard({
-  project,
-  crew,
-}: {
-  project: ProjectListItem;
-  crew?: { name: string | null; uri: string | null }[];
-}) {
-  const theme = useTheme();
-  const title = cardTitle(project);
-  const place = cardPlace(project);
-  const address = formatAddress(project);
-  const label = projectStatusLabel(project.status);
-  const done = project.status === "completed";
-  // Same chips as the web project card, coloured from the workspace catalog.
-  const { colorOf } = useLabelCatalog();
-  const labels = project.labels ?? [];
-
-  return (
-    <Card
-      onPress={() => router.push(`/project/${project.id}`)}
-      accessibilityLabel={`${title}${address ? `, ${address}` : ""}, ${label}`}
-      style={{
-        borderRadius: radius.xl,
-        backgroundColor: done ? theme.colors.background : undefined,
-      }}
-    >
-      {/*
-        `minWidth: 0` for the reason `ListRow` needed the same: a flex child
-        defaults to its content width as its minimum, so a long name is
-        measured against the width it wanted rather than the width it has, and
-        `numberOfLines` then cuts far too early.
-      */}
-      <View style={{ flexDirection: "row", alignItems: "flex-start", gap: spacing.md }}>
-        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-          <Text
-            variant="bodyStrong"
-            numberOfLines={2}
-            style={{ fontSize: 17, fontWeight: "700", opacity: done ? 0.75 : 1 }}
-          >
-            {title}
-          </Text>
-          {place ? (
-            <Text variant="caption" tone="muted" numberOfLines={2} style={{ fontSize: 14 }}>
-              {place}
-            </Text>
-          ) : null}
-        </View>
-        <ProjectStatusPill status={project.status} />
-      </View>
-
-      {labels.length > 0 ? (
-        <View
-          style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.xs, marginTop: spacing.sm }}
-        >
-          {labels.slice(0, 4).map((name) => (
-            <LabelChip key={name} name={name} color={colorOf(name)} size="sm" />
-          ))}
-          {labels.length > 4 ? (
-            <Text variant="caption" tone="muted" style={{ alignSelf: "center" }}>
-              {`+${labels.length - 4}`}
-            </Text>
-          ) : null}
-        </View>
-      ) : null}
-
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
-          marginTop: spacing.md,
-          minHeight: 28,
-          gap: spacing.sm,
-        }}
-      >
-        <ProjectCrewAvatars people={crew} />
-        <Text variant="caption" tone="muted" numberOfLines={1} style={{ marginLeft: "auto" }}>
-          {relativeTime(project.updated_at)}
-        </Text>
-      </View>
-    </Card>
   );
 }
 

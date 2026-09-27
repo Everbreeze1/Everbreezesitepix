@@ -5,14 +5,20 @@ import { formatCoords, hasCoords, mapsLink } from "@/api/photo-viewer-view";
 import { HIT_TARGET, radius, spacing, typography } from "@/theme";
 import {
   Calendar,
-  ExternalLink,
+  Check,
+  CircleCheck,
+  CircleDashed,
+  History,
   Images,
   MapPin,
+  Navigation,
   PenLine,
+  Plus,
   Sparkles,
   StickyNote,
   Tag,
   User,
+  X,
 } from "@/ui/icons";
 import type { LucideIcon } from "@/ui";
 import { TagPill } from "./TagPill";
@@ -138,10 +144,10 @@ export function SmallButton({
   );
 }
 
-const PHASES: { value: "before" | "after" | "untagged"; label: string }[] = [
-  { value: "before", label: "Before" },
-  { value: "after", label: "After" },
-  { value: "untagged", label: "None" },
+const PHASES: { value: "before" | "after" | "untagged"; label: string; icon: LucideIcon }[] = [
+  { value: "before", label: "Before", icon: History },
+  { value: "after", label: "After", icon: CircleCheck },
+  { value: "untagged", label: "None", icon: CircleDashed },
 ];
 
 /**
@@ -209,11 +215,11 @@ export function PhotoDetailsTab({
             <TagPill key={tag} name={tag} onRemove={() => onRemoveTag(tag)} />
           ))}
           <SmallButton
-            label={photo.tags.length === 0 ? "Add tags" : "Edit"}
-            icon={Tag}
+            label={photo.tags.length === 0 ? "Add tags" : "Add"}
+            icon={photo.tags.length === 0 ? Tag : Plus}
             dashed
             onPress={onOpenTags}
-            accessibilityLabel={photo.tags.length === 0 ? "Add tags" : "Edit tags"}
+            accessibilityLabel={photo.tags.length === 0 ? "Add tags" : "Add or remove tags"}
           />
         </View>
       </Section>
@@ -266,6 +272,7 @@ export function PhotoDetailsTab({
               </Text>
               <SmallButton
                 label="Cancel"
+                icon={X}
                 onPress={() => {
                   setEditing(false);
                   setDraft(description ?? "");
@@ -273,6 +280,7 @@ export function PhotoDetailsTab({
               />
               <SmallButton
                 label="Save"
+                icon={Check}
                 primary
                 disabled={!changed}
                 onPress={() => {
@@ -317,6 +325,7 @@ export function PhotoDetailsTab({
         >
           {PHASES.map((option, index) => {
             const on = phase === option.value;
+            const Glyph = option.icon;
             return (
               <Pressable
                 key={option.value}
@@ -329,6 +338,8 @@ export function PhotoDetailsTab({
                 style={({ pressed }) => ({
                   flex: 1,
                   minHeight: HIT_TARGET,
+                  flexDirection: "row",
+                  gap: 6,
                   alignItems: "center",
                   justifyContent: "center",
                   borderLeftWidth: index === 0 ? 0 : 1,
@@ -336,6 +347,7 @@ export function PhotoDetailsTab({
                   backgroundColor: on ? c.primary : pressed ? c.raised : "transparent",
                 })}
               >
+                <Glyph size={16} color={on ? c.primaryForeground : c.muted} />
                 <Text
                   style={[
                     typography.bodyStrong,
@@ -368,21 +380,52 @@ export function PhotoDetailsTab({
           />
           {maps ? (
             <SmallButton
-              label={gps ? "Open photo location in Maps" : "Open project address in Maps"}
-              icon={ExternalLink}
+              label="Open in Maps"
+              icon={Navigation}
+              accessibilityLabel={
+                gps ? "Open photo location in Maps" : "Open project address in Maps"
+              }
               onPress={() => void Linking.openURL(maps)}
             />
           ) : null}
         </View>
       </Section>
 
-      <Section>
-        <SectionHeader icon={Sparkles} label="AI analysis" />
-        <Text style={[typography.caption, { color: c.muted, marginBottom: spacing.sm }]}>
-          Read the equipment plate and look for visible defects.
-        </Text>
-        <SmallButton label="Analyse this photo" icon={Sparkles} onPress={onAnalyse} />
-      </Section>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Analyse this photo with AI"
+        accessibilityHint="Reads the equipment plate and looks for visible defects"
+        onPress={onAnalyse}
+        style={({ pressed }) => ({
+          flexDirection: "row",
+          alignItems: "center",
+          gap: spacing.md,
+          borderRadius: radius.lg,
+          borderWidth: 1,
+          borderColor: "rgba(220, 135, 72, 0.4)",
+          backgroundColor: pressed ? "rgba(220, 135, 72, 0.22)" : "rgba(220, 135, 72, 0.12)",
+          padding: spacing.md,
+        })}
+      >
+        <View
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: 20,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: c.primary,
+          }}
+        >
+          <Sparkles size={20} color={c.primaryForeground} />
+        </View>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={[typography.bodyStrong, { color: c.foreground }]}>AI analysis</Text>
+          <Text style={[typography.caption, { color: c.muted }]}>
+            Read the equipment plate and look for visible defects.
+          </Text>
+        </View>
+      </Pressable>
     </ScrollView>
   );
 }

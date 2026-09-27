@@ -15,7 +15,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { createLibraryTag, type LibraryTag } from "@/api/photo-viewer";
 import { normalizeTag, TAG_PRESET_COLORS } from "@/api/photo-viewer-view";
 import { HIT_TARGET, radius, spacing, typography } from "@/theme";
-import { Check, Plus, Search } from "@/ui/icons";
+import { Check, Plus, Search, Tag, X } from "@/ui/icons";
 import { TAG_LIBRARY_KEY, TagPill, useTagLibrary } from "./TagPill";
 import { viewerColors as c } from "./viewer-theme";
 
@@ -144,7 +144,7 @@ export function PhotoTagSheet({
       >
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Close tags"
+          accessibilityLabel="Dismiss tags"
           onPress={onClose}
           style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)" }}
         />
@@ -164,15 +164,44 @@ export function PhotoTagSheet({
             alignSelf: "center",
           }}
         >
-          <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <View style={{ alignItems: "center", marginTop: -spacing.sm }}>
+            <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: c.faint }} />
+          </View>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
+            <Tag size={18} color={c.primary} />
             <Text style={[typography.heading, { color: c.foreground, flex: 1 }]}>
               Tag this photo
             </Text>
             {photoTags.length > 0 ? (
-              <Text style={[typography.caption, { color: c.muted }]}>
-                {photoTags.length} selected
-              </Text>
+              <View
+                style={{
+                  borderRadius: radius.pill,
+                  paddingHorizontal: spacing.sm,
+                  paddingVertical: 2,
+                  backgroundColor: c.raised,
+                }}
+              >
+                <Text style={[typography.caption, { color: c.foreground, fontWeight: "700" }]}>
+                  {photoTags.length} selected
+                </Text>
+              </View>
             ) : null}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close tags"
+              onPress={onClose}
+              hitSlop={6}
+              style={({ pressed }) => ({
+                width: 36,
+                height: 36,
+                borderRadius: 18,
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: pressed ? c.glassPressed : c.raised,
+              })}
+            >
+              <X size={18} color={c.foreground} />
+            </Pressable>
           </View>
 
           <View
@@ -305,8 +334,11 @@ export function PhotoTagSheet({
 
           <Pressable
             accessibilityRole="button"
+            accessibilityLabel="Done"
             onPress={onClose}
             style={({ pressed }) => ({
+              flexDirection: "row",
+              gap: spacing.xs,
               minHeight: HIT_TARGET,
               borderRadius: radius.md,
               alignItems: "center",
@@ -314,6 +346,7 @@ export function PhotoTagSheet({
               backgroundColor: pressed ? c.glassPressed : c.raised,
             })}
           >
+            <Check size={18} color={c.foreground} strokeWidth={2.5} />
             <Text style={[typography.bodyStrong, { color: c.foreground }]}>Done</Text>
           </Pressable>
         </View>

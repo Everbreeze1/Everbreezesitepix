@@ -134,3 +134,49 @@ describe("one viewer", () => {
     );
   });
 });
+
+/*
+ * The owner's note on the first APK: "right now you have words only to
+ * describe editing functions" and "the iconography is important". The web
+ * viewer is icon-led: a pencil, sparkles, full-screen corners, the share glyph
+ * and a cross in the top bar, zoom glyphs over the photo, an icon on every tab
+ * and a send arrow in the composer. These hold the phone to the same.
+ */
+describe("icon-led like the web viewer", () => {
+  const dir = "apps/mobile/src/components/photo-viewer";
+
+  it("draws every top-bar action as a labelled icon", () => {
+    const s = read(`${dir}/PhotoViewer.tsx`);
+    const bar = s.slice(s.indexOf("const topBar = ("), s.indexOf("const pager ="));
+    for (const [icon, label] of [
+      ["PenLine", "Annotate"],
+      ["Sparkles", "Analyse with AI"],
+      ["Maximize", "Full screen"],
+      ["Share2", "Share photo"],
+      ["X", "Close photo"],
+    ]) {
+      expect(bar).toMatch(new RegExp(`icon=\\{${icon}\\}\\s+label="${label}"`));
+    }
+  });
+
+  it("offers zoom and a way back out of full screen on a phone too", () => {
+    const s = read(`${dir}/PhotoViewer.tsx`);
+    expect(s.match(/label="Zoom in"/g)?.length).toBeGreaterThanOrEqual(2);
+    expect(s).toContain('label="Exit full screen"');
+  });
+
+  it("puts an icon on every tab and on the composer's actions", () => {
+    const panel = read(`${dir}/PhotoPanel.tsx`);
+    expect(panel.match(/<TabButton\s+icon=\{/g)?.length).toBe(3);
+    const thread = read(`${dir}/PhotoCommentsThread.tsx`);
+    expect(thread).toContain('accessibilityLabel="Mention a teammate"');
+    expect(thread).toContain("<Send ");
+    expect(thread).toContain("MENTION TEAMMATE");
+  });
+
+  it("shares through icon tiles, not stacked text buttons", () => {
+    const sheet = read(`${dir}/PhotoShareSheet.tsx`);
+    expect(sheet).not.toContain("<Button");
+    expect(sheet.match(/<ShareTile/g)?.length).toBeGreaterThanOrEqual(3);
+  });
+});

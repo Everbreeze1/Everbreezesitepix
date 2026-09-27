@@ -5,9 +5,9 @@ import {
   Building2,
   Calendar,
   ExternalLink,
-  FolderKanban,
   MapPin,
   MessageSquare,
+  Navigation,
   SquareCheckBig,
   StickyNote,
 } from "@/ui/icons";
@@ -35,6 +35,7 @@ export function PanelHeader({
   taskCount,
   commentCount,
   grabber,
+  onGrabber,
 }: {
   projectName: string;
   address: string | null;
@@ -49,13 +50,22 @@ export function PanelHeader({
   commentCount: number | null;
   /** Draws the sheet's grab bar (phone). */
   grabber?: boolean;
+  /** Tapping the grab bar raises or lowers the sheet, for anyone who will not drag. */
+  onGrabber?: () => void;
 }) {
   return (
     <View style={{ backgroundColor: c.chrome }}>
       {grabber ? (
-        <View style={{ alignItems: "center", paddingTop: spacing.sm, paddingBottom: 2 }}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Raise or lower photo details"
+          onPress={onGrabber}
+          disabled={!onGrabber}
+          hitSlop={{ top: 8, bottom: 4, left: 60, right: 60 }}
+          style={{ alignItems: "center", paddingTop: spacing.sm, paddingBottom: 2 }}
+        >
           <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: c.faint }} />
-        </View>
+        </Pressable>
       ) : null}
       <View
         style={{
@@ -103,26 +113,41 @@ export function PanelHeader({
               </View>
             ) : null}
             {hasGps ? (
-              <View
-                accessibilityLabel="This photo has GPS"
-                style={{ flexDirection: "row", alignItems: "center", gap: 4 }}
+              /* Web's GPS badge, which links to the map. */
+              <Pressable
+                accessibilityRole="link"
+                accessibilityLabel="This photo has GPS. Open it in Maps"
+                disabled={!mapsUrl}
+                onPress={() => mapsUrl && void Linking.openURL(mapsUrl)}
+                hitSlop={8}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 4,
+                  paddingHorizontal: 6,
+                  paddingVertical: 1,
+                  borderRadius: radius.pill,
+                  backgroundColor: "rgba(80, 180, 110, 0.14)",
+                }}
               >
                 <MapPin size={12} color={c.success} />
-                <Text style={[typography.caption, { color: c.faint }]}>GPS</Text>
-              </View>
+                <Text style={[typography.caption, { color: c.success, fontWeight: "700" }]}>
+                  GPS
+                </Text>
+              </Pressable>
             ) : null}
           </View>
         </View>
         <View style={{ flexDirection: "row", gap: spacing.xs }}>
           {mapsUrl ? (
             <RoundButton
-              icon={ExternalLink}
+              icon={Navigation}
               label={hasGps ? "Open photo location in Maps" : "Open project address in Maps"}
               onPress={() => void Linking.openURL(mapsUrl)}
             />
           ) : null}
           {onOpenProject ? (
-            <RoundButton icon={FolderKanban} label="Open project" onPress={onOpenProject} />
+            <RoundButton icon={ExternalLink} label="Open project" onPress={onOpenProject} />
           ) : null}
         </View>
       </View>
@@ -224,9 +249,10 @@ function TabButton({
         gap: 6,
       }}
     >
-      <Glyph size={15} color={active ? c.foreground : c.muted} />
+      <Glyph size={17} color={active ? c.primary : c.muted} strokeWidth={active ? 2.4 : 2} />
       <Text
         style={[typography.caption, { fontWeight: "700", color: active ? c.foreground : c.muted }]}
+        numberOfLines={1}
       >
         {label}
       </Text>
@@ -236,10 +262,16 @@ function TabButton({
             borderRadius: radius.pill,
             paddingHorizontal: 6,
             paddingVertical: 1,
-            backgroundColor: active ? "rgba(233,228,220,0.16)" : "rgba(233,228,220,0.08)",
+            backgroundColor: active ? c.primary : "rgba(233,228,220,0.1)",
           }}
         >
-          <Text style={{ fontSize: 11, fontWeight: "700", color: active ? c.foreground : c.muted }}>
+          <Text
+            style={{
+              fontSize: 11,
+              fontWeight: "700",
+              color: active ? c.primaryForeground : c.muted,
+            }}
+          >
             {count}
           </Text>
         </View>

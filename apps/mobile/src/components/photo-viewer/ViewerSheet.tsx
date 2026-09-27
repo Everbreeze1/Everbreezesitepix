@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 import { radius } from "@/theme";
 import { viewerColors as c } from "./viewer-theme";
@@ -20,7 +20,12 @@ export type SheetSnap = "peek" | "half" | "full";
  * Only the handle (grab bar, project header and tabs) drags the sheet. The tab
  * contents scroll on their own, so reading a thread never yanks the panel.
  * Animated on the UI thread with Reanimated; no sheet library was added.
+ * Settles on a critically damped spring that carries the fling's velocity,
+ * so a flick glides into place instead of snapping on a fixed timer.
  */
+
+/** Firm and without bounce: a panel of text should not wobble. */
+const SPRING = { damping: 28, stiffness: 260, mass: 0.9, overshootClamping: true } as const;
 export function ViewerSheet({
   height,
   topLimit,
@@ -55,7 +60,7 @@ export function ViewerSheet({
   const start = useSharedValue(target);
 
   useEffect(() => {
-    top.value = withTiming(target, { duration: 220 });
+    top.value = withSpring(target, SPRING);
   }, [target, top]);
 
   const { full, half, peek } = positions;
@@ -79,7 +84,7 @@ export function ViewerSheet({
       for (const option of options) {
         if (Math.abs(option[1] - projected) < Math.abs(best[1] - projected)) best = option;
       }
-      top.value = withTiming(best[1], { duration: 200 });
+      top.value = withSpring(best[1], { ...SPRING, velocity: e.velocityY });
       scheduleOnRN(onSnap, best[0]);
     });
 

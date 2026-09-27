@@ -47,6 +47,8 @@ import {
   ChevronRight,
   Maximize,
   Minimize,
+  PanelRightClose,
+  PanelRightOpen,
   PenLine,
   RotateCcw,
   Share2,
@@ -417,6 +419,7 @@ function ViewerBody({
       taskCount={tasksQuery.data?.tasks.length ?? null}
       commentCount={commentsQuery.data?.length ?? null}
       grabber={!tablet}
+      onGrabber={() => setSnap(snap === "peek" ? "half" : "peek")}
     />
   );
 
@@ -498,16 +501,36 @@ function ViewerBody({
         </Text>
       </View>
       {/* Right-aligned, for the right thumb: the owner's call and web's order. */}
+      {/*
+        Icons, as on the web's top bar: pencil to annotate, sparkles for AI,
+        the full-screen corners, the share glyph and a close cross. Every one
+        carries its name for a screen reader. Annotate is the one primary
+        action, so it is the one drawn in the brand colour.
+      */}
       <View style={{ flexDirection: "row", gap: spacing.xs }}>
-        <BarButton icon={PenLine} label="Annotate" onPress={annotate} disabled={!projectId} />
+        <BarButton
+          icon={PenLine}
+          label="Annotate"
+          onPress={annotate}
+          disabled={!projectId}
+          primary
+        />
         <BarButton icon={Sparkles} label="Analyse with AI" onPress={analyse} />
         {tablet ? (
           <BarButton
-            icon={panelOpen ? Maximize : Minimize}
-            label={panelOpen ? "Full screen" : "Exit full screen"}
+            icon={panelOpen ? PanelRightClose : PanelRightOpen}
+            label={panelOpen ? "Hide details" : "Show details"}
             onPress={() => setPanelOpen((v) => !v)}
           />
         ) : null}
+        <BarButton
+          icon={Maximize}
+          label="Full screen"
+          onPress={() => {
+            setChromeHidden(true);
+            if (tablet) setPanelOpen(false);
+          }}
+        />
         <BarButton icon={Share2} label="Share photo" onPress={() => setShareOpen(true)} />
         <BarButton icon={X} label="Close photo" onPress={onClose} />
       </View>
@@ -654,6 +677,56 @@ function ViewerBody({
           <View style={{ position: "absolute", top: 0, left: 0, right: 0 }}>{topBar}</View>
         ) : null}
 
+        {/*
+          Zoom on a phone: pinch and double tap still work, and these are the
+          web's zoom out / reset / zoom in for anyone who does not know that.
+          A column at the right edge under the top bar, clear of the sheet,
+          and only while the sheet is lowered so it never floats over text.
+        */}
+        {!tablet && !chromeHidden && snap === "peek" && list.length > 0 && topBarHeight > 0 ? (
+          <View
+            style={{
+              position: "absolute",
+              top: topBarHeight + spacing.md,
+              right: Math.max(insets.right, spacing.md),
+              gap: 2,
+              padding: 4,
+              borderRadius: radius.pill,
+              borderWidth: 1,
+              borderColor: c.border,
+              backgroundColor: c.glass,
+            }}
+          >
+            <BarButton icon={ZoomIn} label="Zoom in" onPress={() => zoom("zoomIn")} bare />
+            <BarButton icon={RotateCcw} label="Reset zoom" onPress={() => zoom("reset")} bare />
+            <BarButton icon={ZoomOut} label="Zoom out" onPress={() => zoom("zoomOut")} bare />
+          </View>
+        ) : null}
+
+        {/*
+          Full screen hides every control, so one stays behind to say how to
+          get them back: a tap on the photo does it too, but nobody guesses that.
+        */}
+        {chromeHidden ? (
+          <View
+            style={{
+              position: "absolute",
+              top: insets.top + spacing.sm,
+              right: Math.max(insets.right, spacing.md),
+            }}
+          >
+            <BarButton
+              icon={Minimize}
+              label="Exit full screen"
+              onPress={() => {
+                setChromeHidden(false);
+                if (tablet) setPanelOpen(true);
+              }}
+              glass
+            />
+          </View>
+        ) : null}
+
         {!tablet && area > 0 ? (
           <ViewerSheet
             height={area}
@@ -753,12 +826,18 @@ function BarButton({
   onPress,
   disabled,
   bare,
+  primary,
+  glass,
 }: {
   icon: LucideIcon;
   label: string;
   onPress: () => void;
   disabled?: boolean;
   bare?: boolean;
+  /** The one brand-coloured action in the bar. */
+  primary?: boolean;
+  /** Floating over the photograph with nothing behind it. */
+  glass?: boolean;
 }) {
   return (
     <Pressable
@@ -774,15 +853,19 @@ function BarButton({
         borderRadius: HIT_TARGET / 2,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: pressed
-          ? "rgba(233,228,220,0.22)"
-          : bare
-            ? "transparent"
-            : "rgba(233,228,220,0.1)",
-        opacity: disabled ? 0.4 : 1,
+        backgroundColor: primary
+          ? c.primary
+          : pressed
+            ? "rgba(233,228,220,0.22)"
+            : bare
+              ? "transparent"
+              : glass
+                ? c.glass
+                : "rgba(233,228,220,0.1)",
+        opacity: disabled ? 0.4 : primary && pressed ? 0.85 : 1,
       })}
     >
-      <Glyph size={20} color={c.foreground} />
+      <Glyph size={20} color={primary ? c.primaryForeground : c.foreground} strokeWidth={2.1} />
     </Pressable>
   );
 }

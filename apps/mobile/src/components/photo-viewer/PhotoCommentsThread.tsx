@@ -95,6 +95,8 @@ export function PhotoCommentsThread({
 
   const comments = useMemo(() => commentsQuery.data ?? [], [commentsQuery.data]);
   const people = peopleQuery.data ?? [];
+  const me = people.find((person) => person.userId === user?.id) ?? null;
+  const myName = me?.fullName ?? me?.email ?? user?.email ?? null;
   const query = mentionQuery(body, cursor);
   const candidates = mentionCandidates(people, query, user?.id ?? null);
 
@@ -215,6 +217,19 @@ export function PhotoCommentsThread({
     [body, cursor],
   );
 
+  /* Web's @ button: starts a mention at the caret, opening the picker. */
+  const startMention = useCallback(() => {
+    const before = body.slice(0, cursor);
+    const after = body.slice(cursor);
+    const lead = before.length > 0 && !/\s$/.test(before) ? " " : "";
+    const next = `${before}${lead}@${after}`;
+    const at = before.length + lead.length + 1;
+    setBody(next);
+    setCursor(at);
+    setCaret({ start: at, end: at });
+    inputRef.current?.focus();
+  }, [body, cursor]);
+
   const confirmDelete = useCallback(
     (comment: PhotoComment) => {
       Alert.alert("Delete this comment?", "It will be removed for everybody on the job.", [
@@ -269,13 +284,23 @@ export function PhotoCommentsThread({
             empty ? (
               <>{empty}</>
             ) : (
-              <View style={{ alignItems: "center", gap: spacing.sm, padding: spacing.xl }}>
-                <MessageSquare size={28} color={c.muted} />
+              <View
+                style={{
+                  alignItems: "center",
+                  gap: spacing.sm,
+                  padding: spacing.xl,
+                  borderRadius: radius.lg,
+                  borderWidth: 1,
+                  borderStyle: "dashed",
+                  borderColor: c.border,
+                }}
+              >
+                <MessageSquare size={26} color={c.muted} />
                 <Text style={[typography.bodyStrong, { color: c.foreground }]}>
-                  No comments yet
+                  No messages yet
                 </Text>
                 <Text style={[typography.caption, { color: c.muted, textAlign: "center" }]}>
-                  Ask a question about this photo, or use @ to pull a teammate in.
+                  Start the conversation for this photo. Use @ to pull a teammate in.
                 </Text>
               </View>
             )
@@ -303,7 +328,31 @@ export function PhotoCommentsThread({
         over the list: the keyboard already owns the bottom half of a phone.
       */}
       {candidates.length > 0 ? (
-        <View style={{ paddingHorizontal: spacing.md, paddingBottom: spacing.sm, gap: spacing.xs }}>
+        <View
+          style={{
+            marginHorizontal: spacing.md,
+            marginBottom: spacing.sm,
+            paddingVertical: spacing.xs,
+            borderRadius: radius.lg,
+            borderWidth: 1,
+            borderColor: c.border,
+            backgroundColor: c.card,
+            overflow: "hidden",
+          }}
+        >
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 6,
+              paddingHorizontal: spacing.md,
+              paddingTop: spacing.xs,
+              paddingBottom: 2,
+            }}
+          >
+            <AtSign size={12} color={c.muted} />
+            <Text style={[typography.overline, { color: c.muted }]}>MENTION TEAMMATE</Text>
+          </View>
           {candidates.map((person) => (
             <Pressable
               key={person.userId}
@@ -314,12 +363,10 @@ export function PhotoCommentsThread({
                 flexDirection: "row",
                 alignItems: "center",
                 gap: spacing.sm,
-                paddingVertical: spacing.sm,
+                minHeight: HIT_TARGET,
+                paddingVertical: 6,
                 paddingHorizontal: spacing.md,
-                borderRadius: radius.md,
-                backgroundColor: pressed ? c.border : c.card,
-                borderWidth: 1,
-                borderColor: c.border,
+                backgroundColor: pressed ? c.border : "transparent",
               })}
             >
               <Avatar name={person.fullName ?? person.email} size="sm" />
@@ -348,6 +395,9 @@ export function PhotoCommentsThread({
         }}
       >
         <View style={{ flexDirection: "row", alignItems: "flex-end", gap: spacing.sm }}>
+          <View style={{ height: HIT_TARGET, justifyContent: "center" }}>
+            <Avatar name={myName} size="sm" />
+          </View>
           <TextInput
             ref={inputRef}
             value={body}
@@ -362,7 +412,7 @@ export function PhotoCommentsThread({
             }}
             onFocus={onComposerFocus}
             selection={caret}
-            placeholder="Write a message, use @ to mention"
+            placeholder="Write a message"
             placeholderTextColor={c.muted}
             multiline
             accessibilityLabel="Add a comment"
@@ -375,7 +425,8 @@ export function PhotoCommentsThread({
                 maxHeight: 140,
                 borderWidth: 1,
                 borderColor: formError ? c.destructive : c.input,
-                borderRadius: radius.md,
+                backgroundColor: c.card,
+                borderRadius: radius.xl,
                 paddingHorizontal: spacing.md,
                 paddingTop: 10,
                 paddingBottom: 10,
@@ -383,6 +434,22 @@ export function PhotoCommentsThread({
               },
             ]}
           />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Mention a teammate"
+            onPress={startMention}
+            hitSlop={4}
+            style={({ pressed }) => ({
+              width: 36,
+              height: HIT_TARGET,
+              borderRadius: radius.md,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: pressed ? c.border : "transparent",
+            })}
+          >
+            <AtSign size={20} color={c.muted} />
+          </Pressable>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Post comment"

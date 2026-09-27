@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ActivityIndicator, Alert, Share, Switch, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, Share, Switch, View } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createPhotoShareToken,
@@ -13,7 +13,7 @@ import { expiryLabel, revokeWarning } from "@/api/photo-shares-view";
 import { liveShareRows } from "@/api/photo-viewer-view";
 import { radius, spacing, useTheme } from "@/theme";
 import { AtSign, Globe, Link2, Share2 } from "@/ui/icons";
-import { Button, Icon, Sheet, Text } from "@/ui";
+import { Icon, Sheet, Text, type LucideIcon } from "@/ui";
 
 /**
  * Share one photo: web's `SharePhotoDialog`, plus the two things a phone adds.
@@ -131,18 +131,45 @@ export function PhotoShareSheet({
       subtitle="Anyone with the link can view this photo. They see nothing else on the project."
     >
       <View style={{ gap: spacing.md }}>
-        {CAN_SHARE_PHOTO_FILE ? (
-          <Button
-            label={sendingFile ? "Preparing photo" : "Send the photo"}
-            icon={Share2}
-            variant="secondary"
-            fullWidth
-            loading={sendingFile}
-            disabled={!imageUrl}
-            onPress={() => void sendFile()}
-            accessibilityHint="Opens the share sheet with the photo itself"
+        {/*
+          The three ways a photo leaves the viewer, as icon tiles with a short
+          label under each, the way a phone's own share row looks, rather than
+          three full-width buttons of text stacked on top of each other.
+        */}
+        <View style={{ flexDirection: "row", gap: spacing.sm }}>
+          {CAN_SHARE_PHOTO_FILE ? (
+            <ShareTile
+              icon={Share2}
+              label="Send photo"
+              accessibilityLabel="Send the photo"
+              accessibilityHint="Opens the share sheet with the photo itself"
+              busy={sendingFile}
+              disabled={!imageUrl}
+              onPress={() => void sendFile()}
+            />
+          ) : null}
+          <ShareTile
+            icon={Link2}
+            label="Send link"
+            accessibilityLabel="Copy or send link"
+            accessibilityHint={
+              url
+                ? "Opens the share sheet, which can copy the link or send it"
+                : "Turn on link sharing below first"
+            }
+            disabled={!url}
+            onPress={() => void sendLink()}
           />
-        ) : null}
+          {onAskTeammate ? (
+            <ShareTile
+              icon={AtSign}
+              label="Ask teammate"
+              accessibilityLabel="Ask a teammate about it"
+              accessibilityHint="Opens the comments with an @ mention ready, which notifies them"
+              onPress={onAskTeammate}
+            />
+          ) : null}
+        </View>
 
         <View
           style={{
@@ -190,30 +217,25 @@ export function PhotoShareSheet({
         ) : null}
 
         {current && url ? (
-          <View style={{ gap: spacing.sm }}>
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                gap: spacing.sm,
-                padding: spacing.md,
-                borderRadius: radius.md,
-                backgroundColor: theme.colors.muted,
-              }}
-            >
-              <Icon icon={Link2} size="sm" tone="muted" />
-              <Text variant="caption" selectable numberOfLines={2} style={{ flex: 1 }}>
-                {url}
-              </Text>
-            </View>
-            <Button
-              label="Copy or send link"
-              icon={Link2}
-              fullWidth
-              onPress={() => void sendLink()}
-              accessibilityHint="Opens the share sheet, which can copy the link or send it"
-            />
-          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Share link ${url}`}
+            onPress={() => void sendLink()}
+            style={({ pressed }) => ({
+              flexDirection: "row",
+              alignItems: "center",
+              gap: spacing.sm,
+              padding: spacing.md,
+              borderRadius: radius.md,
+              backgroundColor: pressed ? theme.colors.secondary : theme.colors.muted,
+            })}
+          >
+            <Icon icon={Link2} size="sm" tone="muted" />
+            <Text variant="caption" selectable numberOfLines={2} style={{ flex: 1 }}>
+              {url}
+            </Text>
+            <Icon icon={Share2} size="sm" tone="primary" />
+          </Pressable>
         ) : null}
 
         {/*
@@ -233,17 +255,6 @@ export function PhotoShareSheet({
           </Text>
         ) : null}
 
-        {onAskTeammate ? (
-          <Button
-            label="Ask a teammate about it"
-            icon={AtSign}
-            variant="ghost"
-            fullWidth
-            onPress={onAskTeammate}
-            accessibilityHint="Opens the comments with an @ mention ready, which notifies them"
-          />
-        ) : null}
-
         {failure ? (
           <Text variant="caption" tone="destructive">
             {failure}
@@ -251,5 +262,68 @@ export function PhotoShareSheet({
         ) : null}
       </View>
     </Sheet>
+  );
+}
+
+/** One way to share: a round icon over a short label. */
+function ShareTile({
+  icon,
+  label,
+  accessibilityLabel,
+  accessibilityHint,
+  onPress,
+  disabled,
+  busy,
+}: {
+  icon: LucideIcon;
+  label: string;
+  accessibilityLabel: string;
+  accessibilityHint?: string;
+  onPress: () => void;
+  disabled?: boolean;
+  busy?: boolean;
+}) {
+  const theme = useTheme();
+  const off = disabled || busy;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      accessibilityHint={accessibilityHint}
+      accessibilityState={{ disabled: Boolean(off), busy: Boolean(busy) }}
+      disabled={off}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        flex: 1,
+        alignItems: "center",
+        gap: spacing.sm,
+        paddingVertical: spacing.md,
+        borderRadius: radius.lg,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        backgroundColor: pressed ? theme.colors.secondary : theme.colors.card,
+        opacity: disabled ? 0.45 : 1,
+      })}
+    >
+      <View
+        style={{
+          width: 48,
+          height: 48,
+          borderRadius: 24,
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: theme.colors.accent,
+        }}
+      >
+        {busy ? (
+          <ActivityIndicator color={theme.colors.primary} />
+        ) : (
+          <Icon icon={icon} size="md" tone="primary" />
+        )}
+      </View>
+      <Text variant="caption" style={{ fontWeight: "700" }} numberOfLines={1}>
+        {label}
+      </Text>
+    </Pressable>
   );
 }
