@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import { Platform, View } from "react-native";
 import Constants from "expo-constants";
-import * as Location from "expo-location";
 import { router, Stack } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import MapView, { Marker, PROVIDER_GOOGLE, type Region } from "react-native-maps";
@@ -14,6 +13,7 @@ import {
   regionFor,
   type Coord,
 } from "@/api/map-view";
+import { useDeviceLocation } from "@/lib/use-device-location";
 import { radius, spacing, useTheme } from "@/theme";
 import { FolderKanban, LocateFixed, MapPin, TriangleAlert } from "@/ui/icons";
 import {
@@ -48,16 +48,6 @@ import {
  * puts the ones that have coordinates on a map.
  */
 
-/**
- * How long to wait for a live fix before giving up on sorting.
- *
- * Eight seconds is past the point where somebody is still looking at the list
- * wondering, and well short of the indefinite wait `getCurrentPositionAsync`
- * defaults to. The screen is fully usable throughout: this only decides whether
- * the rows get distances on them.
- */
-const FIX_TIMEOUT_MS = 8000;
-
 /** Set by `app.config.js` when the build was given a Google Maps Android key. */
 const googleMapsConfigured = Boolean(
   (Constants.expoConfig?.extra as { googleMapsConfigured?: boolean } | undefined)
@@ -67,9 +57,8 @@ const googleMapsConfigured = Boolean(
 export default function MapScreen() {
   const theme = useTheme();
   const mapRef = useRef<MapView | null>(null);
-  const [here, setHere] = useState<Coord | null>(null);
-  /** No usable fix: denied, switched off, or no signal before the deadline. */
-  const [noFix, setNoFix] = useState(false);
+  // Nearest-first sorting; the map itself needs no permission at all.
+  const { here, noFix } = useDeviceLocation();
 
   const query = useQuery({ queryKey: ["projects"], queryFn: listProjects });
 
@@ -88,84 +77,6 @@ export default function MapScreen() {
     platform: Platform.OS,
     pinCount: pinned.length,
   });
-
-  /**
-   * Ask for a fix once, and carry on without one.
-   *
-   * Location is a convenience here, not a requirement: it sorts the list. A
-   * screen that blocks on the permission dialog would leave somebody who
-   * declined it staring at nothing, when the map itself needs no permission at
-   * all.
-   *
-   * **`getCurrentPositionAsync` can hang forever, and on a jobsite it does.**
-   * It resolves when the device gets a fix, and a phone in a basement, a
-   * steel-framed building or an emulator with no GPS never gets one: it does
-   * not throw, it simply never settles. The first version of this screen
-   * awaited it bare, so the list silently never sorted AND never showed the
-   * line explaining why, which is the worst of both. Found on the device; no
-   * test would have caught it.
-   *
-   * So: take the cached fix first, which is instant when there is one, and race
-   * the live read against a timer.
-   */
-  useEffect(() => {
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-
-    void (async () => {
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (cancelled) return;
-        if (status !== "granted") {
-          setNoFix(true);
-          return;
-        }
-
-        /*
-         * The last known fix, first. It returns immediately or not at all, and
-         * for "which of these sites am I at" a fix from ten minutes ago is the
-         * same answer as one from now.
-         */
-        const cached = await Location.getLastKnownPositionAsync();
-        if (cancelled) return;
-        if (cached) {
-          setHere({ latitude: cached.coords.latitude, longitude: cached.coords.longitude });
-        }
-
-        /*
-         * Then the live one, against a deadline.
-         *
-         * `Balanced` and not `Highest`: this picks which of several sites you
-         * are at, which is a hundred-metre question, and the high-accuracy fix
-         * costs seconds and battery to answer it no better.
-         */
-        const fix = await Promise.race([
-          Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
-          new Promise<null>((resolve) => {
-            timer = setTimeout(() => resolve(null), FIX_TIMEOUT_MS);
-          }),
-        ]);
-        if (cancelled) return;
-
-        if (fix) {
-          setHere({ latitude: fix.coords.latitude, longitude: fix.coords.longitude });
-        } else if (!cached) {
-          // Timed out with nothing cached to fall back on. Say so, rather than
-          // leaving a list that looks sorted by distance and is not.
-          setNoFix(true);
-        }
-      } catch {
-        // Location switched off at the OS level throws rather than returning a
-        // status. Same outcome: no sorting, everything else works.
-        if (!cancelled) setNoFix(true);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-      if (timer) clearTimeout(timer);
-    };
-  }, []);
 
   const focus = useCallback((coord: Coord) => {
     mapRef.current?.animateToRegion({ ...coord, latitudeDelta: 0.01, longitudeDelta: 0.01 }, 400);

@@ -2,6 +2,9 @@ import { useSearch } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { qk } from "@/lib/query-keys";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { useAssignableTeammates } from "@/hooks/use-assignable-teammates";
+import { photoMatchesSearch, photoSearchOrFilter } from "@/lib/photo-search";
 import {
   Upload,
   Sparkles,
@@ -29,6 +32,8 @@ import {
   Check,
   CheckSquare,
   ChevronDown,
+  Search,
+  UserRound,
 } from "lucide-react";
 import { startOfMonth } from "date-fns";
 import { PhotoCalendar } from "@/features/gallery/components/PhotoCalendar";
@@ -105,6 +110,8 @@ interface Photo {
   hidden?: boolean | null;
   phase?: string | null;
   tags?: string[] | null;
+  /** Who took or uploaded it; drives the "Taken by" filter. */
+  uploaded_by?: string | null;
 }
 
 interface Project {
@@ -179,6 +186,17 @@ export function GalleryPage() {
   const [tagFilter, setTagFilter] = useState<string[]>([]);
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
+  /*
+   * "Taken by" and free-text search. Both are sent to the server so the page
+   * of photos is a page of matches, not the newest 200 filtered down on the
+   * client (see lib/photo-search.ts), and both are re-applied on the client
+   * so a calendar day narrows the same way. The search box is debounced: one
+   * query per pause in typing, not one per keystroke.
+   */
+  const [uploaderFilter, setUploaderFilter] = useState<string[]>([]);
+  const [textSearch, setTextSearch] = useState<string>("");
+  const searchTerm = useDebouncedValue(textSearch.trim(), 300);
+  const { teammates } = useAssignableTeammates();
 
   /**
    * Grid vs calendar.
@@ -438,6 +456,9 @@ export function GalleryPage() {
     // off the range entirely. Pin both ends to local time explicitly.
     if (dateFrom) q = q.gte("created_at", new Date(`${dateFrom}T00:00:00`).toISOString());
     if (dateTo) q = q.lte("created_at", new Date(`${dateTo}T23:59:59.999`).toISOString());
+    if (uploaderFilter.length > 0) q = q.in("uploaded_by", uploaderFilter);
+    const searchOr = photoSearchOrFilter(searchTerm, projects);
+    if (searchOr) q = q.or(searchOr);
     const { data } = await q;
     // Walkthrough captures are ordinary photos and belong here. See the note in
     // ProjectDetailPage's `load` for why the three exclusions that used to sit
@@ -482,6 +503,8 @@ export function GalleryPage() {
       projectFilter,
       dateFrom,
       dateTo,
+      uploaderFilter,
+      searchTerm,
     }),
     queryFn: loadPhotos,
     // Calendar mode has no use for a page of recent photos - it loads a day at
@@ -599,11 +622,21 @@ export function GalleryPage() {
     };
   }, []);
 
-  // Client-side tag filter (any-of)
-  const visiblePhotos =
-    tagFilter.length === 0
-      ? photos
-      : photos.filter((p) => (p.tags ?? []).some((t) => tagFilter.includes(t)));
+  const projectsById = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
+
+  // Client-side tag filter (any-of), plus "Taken by" and search re-applied so a
+  // calendar day, which the server query does not load, narrows the same way.
+  const visiblePhotos = useMemo(
+    () =>
+      photos.filter(
+        (p) =>
+          (tagFilter.length === 0 || (p.tags ?? []).some((t) => tagFilter.includes(t))) &&
+          (uploaderFilter.length === 0 ||
+            (!!p.uploaded_by && uploaderFilter.includes(p.uploaded_by))) &&
+          photoMatchesSearch(p, searchTerm, projectsById),
+      ),
+    [photos, tagFilter, uploaderFilter, searchTerm, projectsById],
+  );
 
   /*
    * The reference mockup groups the gallery into one section per project -
@@ -652,10 +685,9 @@ export function GalleryPage() {
       const next = s.filter((id) => onScreen.has(id));
       return next.length === s.length ? s : next;
     });
-    // Keyed on the two states that produce `visiblePhotos` rather than the
-    // array itself, which is rebuilt by `.filter()` on every single render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [photos, tagFilter]);
+    // `visiblePhotos` is memoised, so this runs when the visible set changes,
+    // not on every render.
+  }, [visiblePhotos]);
 
   /*
    * Escape drops out of picking - but only against the bare grid. Any layer
@@ -686,7 +718,13 @@ export function GalleryPage() {
     ? (projects.find((pr) => pr.id === selectionProjectId)?.name ?? "Project")
     : "Gallery photos";
 
-  const filtersActive = projectFilter.length > 0 || tagFilter.length > 0 || !!dateFrom || !!dateTo;
+  const filtersActive =
+    projectFilter.length > 0 ||
+    tagFilter.length > 0 ||
+    uploaderFilter.length > 0 ||
+    !!searchTerm ||
+    !!dateFrom ||
+    !!dateTo;
   /**
    * A gallery with nothing in it gets the empty state on its own.
    *
@@ -1332,6 +1370,22 @@ export function GalleryPage() {
       */}
       {projects.length > 0 && showFilterBar && (
         <div className="mt-5 flex flex-wrap items-center gap-2.5">
+          {/* Search: caption, or the job's name or address. */}
+          <label className="relative inline-flex h-9 items-center">
+            <Search
+              className="pointer-events-none absolute left-3 h-3.5 w-3.5 text-muted-foreground"
+              aria-hidden
+            />
+            <input
+              type="search"
+              value={textSearch}
+              onChange={(e) => setTextSearch(e.target.value)}
+              placeholder="Search photos"
+              aria-label="Search photos by caption, project or address"
+              className="h-9 w-48 rounded-lg border border-border bg-card pl-8 pr-3 text-[12.5px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring sm:w-56"
+            />
+          </label>
+
           {/* Projects multi-select */}
           <Popover>
             <PopoverTrigger asChild>
@@ -1518,6 +1572,79 @@ export function GalleryPage() {
             </PopoverContent>
           </Popover>
 
+          {/* Taken by. Only worth a control when more than one person could
+              have taken the photos; a solo account would see just itself. */}
+          {teammates.length > 1 && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-3.5 text-[12.5px] font-medium text-muted-foreground transition hover:text-foreground"
+                >
+                  <UserRound className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                  <span>Taken by:</span>
+                  <span
+                    className={cn(uploaderFilter.length > 0 ? "font-semibold text-foreground" : "")}
+                  >
+                    {uploaderFilter.length === 0
+                      ? "Anyone"
+                      : uploaderFilter.length === 1
+                        ? (() => {
+                            const t = teammates.find((m) => m.userId === uploaderFilter[0]);
+                            return t?.fullName || t?.email || "1 selected";
+                          })()
+                        : `${uploaderFilter.length} selected`}
+                  </span>
+                  <ChevronDown className="h-3 w-3 shrink-0 opacity-70" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-72 p-2">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Taken by
+                  </span>
+                  {uploaderFilter.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setUploaderFilter([])}
+                      className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+                <div className="max-h-64 space-y-0.5 overflow-y-auto">
+                  {teammates.map((m) => {
+                    const active = uploaderFilter.includes(m.userId);
+                    return (
+                      <button
+                        key={m.userId}
+                        type="button"
+                        onClick={() =>
+                          setUploaderFilter((s) =>
+                            s.includes(m.userId)
+                              ? s.filter((x) => x !== m.userId)
+                              : [...s, m.userId],
+                          )
+                        }
+                        className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition ${active ? "bg-primary/10 text-foreground" : "hover:bg-muted"}`}
+                      >
+                        <span
+                          className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${active ? "border-primary bg-primary text-primary-foreground" : "border-border"}`}
+                        >
+                          {active && <CheckCircle2 className="h-3 w-3" />}
+                        </span>
+                        <span className="truncate">
+                          {m.userId === user?.id ? "You" : m.fullName || m.email || "Teammate"}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </PopoverContent>
+            </Popover>
+          )}
+
           {filtersActive && (
             <Button
               variant="ghost"
@@ -1526,6 +1653,8 @@ export function GalleryPage() {
               onClick={() => {
                 setProjectFilter([]);
                 setTagFilter([]);
+                setUploaderFilter([]);
+                setTextSearch("");
                 setDateFrom("");
                 setDateTo("");
               }}

@@ -166,6 +166,40 @@ export function byDistance<T extends Coord>(
 }
 
 /**
+ * How close counts as "you are on this job".
+ *
+ * A few hundred metres: a Balanced fix is good to about a hundred, and a big
+ * site plus its car park is easily another hundred or two. Past this the job
+ * is still first in the list, just not called out as the one you are at.
+ */
+export const ON_SITE_METRES = 300;
+
+/**
+ * The capture picker's order: nearest job first, then the rest as they were.
+ *
+ * Unlike `byDistance`, rows with no usable coordinates are kept, not dropped,
+ * because the picker has to offer every job, not only the geocoded ones. They
+ * go after the located rows in their incoming order (the caller's
+ * last-worked-on order). With no fix, nothing moves.
+ */
+export function nearestJobsFirst<T extends Locatable>(
+  rows: T[],
+  from: Coord | null,
+): (T & { metres: number | null })[] {
+  if (!from) return rows.map((row) => ({ ...row, metres: null }));
+  const located: (T & { metres: number })[] = [];
+  const rest: (T & { metres: null })[] = [];
+  for (const row of rows) {
+    const coord = isRealCoord(row.latitude, row.longitude);
+    if (coord) located.push({ ...row, metres: distanceMetres(from, coord) });
+    else rest.push({ ...row, metres: null });
+  }
+  // Array.prototype.sort is stable, so equal distances keep last-worked-on order.
+  located.sort((a, b) => a.metres - b.metres);
+  return [...located, ...rest];
+}
+
+/**
  * What the screen says when it cannot draw a map.
  *
  * Three distinct situations that all look like "no map" and want different

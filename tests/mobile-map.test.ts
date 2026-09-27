@@ -6,6 +6,8 @@ import {
   isRealCoord,
   locatable,
   mapUnavailable,
+  nearestJobsFirst,
+  ON_SITE_METRES,
   regionFor,
 } from "../apps/mobile/src/api/map-view";
 
@@ -213,5 +215,28 @@ describe("mapUnavailable", () => {
     expect(mapUnavailable({ googleMapsConfigured: false, platform: "android", pinCount: 0 })).toBe(
       "no_key",
     );
+  });
+});
+
+describe("nearestJobsFirst", () => {
+  const here = { latitude: 51.5, longitude: -0.12 };
+  const rows = [
+    { id: "far", latitude: 51.6, longitude: -0.12 },
+    { id: "none", latitude: null, longitude: null },
+    { id: "near", latitude: 51.5005, longitude: -0.12 },
+    { id: "null-island", latitude: 0, longitude: 0 },
+  ];
+
+  it("leaves order alone with no fix", () => {
+    const out = nearestJobsFirst(rows, null);
+    expect(out.map((r) => r.id)).toEqual(["far", "none", "near", "null-island"]);
+    expect(out.every((r) => r.metres === null)).toBe(true);
+  });
+
+  it("puts located jobs nearest first and keeps the rest after, in order", () => {
+    const out = nearestJobsFirst(rows, here);
+    expect(out.map((r) => r.id)).toEqual(["near", "far", "none", "null-island"]);
+    expect(out[0].metres).toBeLessThan(ON_SITE_METRES);
+    expect(out[2].metres).toBeNull();
   });
 });

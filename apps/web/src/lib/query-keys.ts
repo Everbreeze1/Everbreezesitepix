@@ -24,7 +24,13 @@ export const qk = {
    * every filter variant for that user, since React Query matches by key prefix. */
   galleryPhotos: (
     userId: string,
-    filters?: { projectFilter: string[]; dateFrom: string; dateTo: string },
+    filters?: {
+      projectFilter: string[];
+      dateFrom: string;
+      dateTo: string;
+      uploaderFilter: string[];
+      searchTerm: string;
+    },
   ) =>
     filters
       ? (["gallery", "photos", userId, filters] as const)

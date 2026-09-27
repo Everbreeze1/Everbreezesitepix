@@ -5,8 +5,11 @@ import { router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { projectDisplayName, relativeTime } from "@everlumen/shared";
 import { formatAddress, listProjects } from "@/api/projects";
+import { distanceLabel, nearestJobsFirst, ON_SITE_METRES } from "@/api/map-view";
+import { useDeviceLocation } from "@/lib/use-device-location";
 import { radius, spacing, useTheme } from "@/theme";
 import {
+  Badge,
   Button,
   EmptyState,
   ErrorState,
@@ -22,8 +25,10 @@ import {
  *
  * The camera button in the tab bar cannot open the viewfinder directly, because
  * a photo has to be filed against a project and a tab carries no argument. This
- * is that one question, asked once, with the list ordered by `updated_at` so
- * the job someone is standing on is almost always the first row.
+ * is that one question, asked once, with the job someone is standing on as
+ * the first row: nearest first when the phone has a fix, and by `updated_at`
+ * (last worked on) when it does not. A crew member on site should be able to
+ * tap the top row without searching.
  *
  * `router.replace` rather than `push` on the way out. This screen has done its
  * job by then, and leaving it on the stack means backing out of the camera
@@ -32,6 +37,7 @@ import {
 export default function CaptureStartScreen() {
   const theme = useTheme();
   const [search, setSearch] = useState("");
+  const { here, noFix } = useDeviceLocation();
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["projects"],
@@ -39,7 +45,7 @@ export default function CaptureStartScreen() {
   });
 
   const projects = useMemo(() => {
-    const all = data ?? [];
+    const all = nearestJobsFirst(data ?? [], here);
     const needle = search.trim().toLowerCase();
     if (!needle) return all;
     return all.filter((project) => {
@@ -49,7 +55,7 @@ export default function CaptureStartScreen() {
         address.toLowerCase().includes(needle)
       );
     });
-  }, [data, search]);
+  }, [data, search, here]);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
@@ -59,6 +65,15 @@ export default function CaptureStartScreen() {
           <Text variant="caption" tone="muted">
             Pick the job you are on. Photos upload in the background, so this works with no signal.
           </Text>
+          {here ? (
+            <Text variant="caption" tone="muted">
+              Nearest jobs first.
+            </Text>
+          ) : noFix ? (
+            <Text variant="caption" tone="muted">
+              No location fix, so jobs are in the order they were last worked on.
+            </Text>
+          ) : null}
         </View>
         <SearchField
           value={search}
@@ -111,6 +126,14 @@ export default function CaptureStartScreen() {
                 icon={MapPin}
                 title={projectDisplayName(item)}
                 subtitle={formatAddress(item) ?? `Updated ${relativeTime(item.updated_at)}`}
+                right={
+                  item.metres === null ? undefined : index === 0 &&
+                    item.metres <= ON_SITE_METRES ? (
+                    <Badge label="You're here" tone="success" />
+                  ) : (
+                    <Badge label={distanceLabel(item.metres)} tone="neutral" />
+                  )
+                }
                 onPress={() => router.replace(`/project/${item.id}/capture`)}
                 accessibilityHint="Opens the camera for this project"
               />
