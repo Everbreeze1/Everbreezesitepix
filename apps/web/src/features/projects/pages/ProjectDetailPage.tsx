@@ -2873,7 +2873,7 @@ export function ProjectDetailPage() {
             userIds={assignees}
             canAssign={canAssign}
             onAssign={() => setAssignOpen(true)}
-            caption="Scheduling only — doesn't change who can see this project."
+            caption="Scheduling only - doesn't change who can see this project."
           />
         </div>
         <div className="hidden w-px shrink-0 bg-border sm:block" />
@@ -2914,15 +2914,26 @@ export function ProjectDetailPage() {
         className="mb-[22px]"
         value={panel ?? "photos"}
         items={[
-          { key: "photos", label: "Photos" },
-          { key: "documents", label: "Documents" },
-          { key: "reports", label: "Reports" },
-          { key: "checklists", label: "Checklists" },
+          { key: "photos", label: "Photos", count: photos.length },
+          { key: "documents", label: "Documents", count: counts.documents },
+          // Pages only - summaries are counted on Walkthroughs, where they live.
+          {
+            key: "reports",
+            label: "Reports",
+            count: counts.reports,
+          },
+          { key: "checklists", label: "Checklists", count: counts.checklists },
           // Recordings and the summaries written from them both live behind this tab.
-          { key: "walkthroughs", label: "Walkthroughs" },
-          { key: "workflows", label: "Workflows" },
-          { key: "tasks", label: "Tasks" },
-          { key: "calendar", label: "Calendar" },
+          {
+            key: "walkthroughs",
+            label: "Walkthroughs",
+            count: walkthroughs.length + summaries.length,
+          },
+          { key: "workflows", label: "Workflows", count: counts.workflows },
+          { key: "tasks", label: "Tasks", count: counts.tasksOpen },
+          // No count: the calendar is a view of the photos already counted on
+          // the Photos tab, so a number here would double-count the same work.
+          { key: "calendar", label: "Calendar", count: null },
         ]}
         onChange={(key) => {
           if (key === "photos") {

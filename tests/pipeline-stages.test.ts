@@ -35,6 +35,27 @@ const TAB_STRIP = read("apps/web/src/features/projects/components/PipelineTabStr
 const EDGE_SCROLL = read("apps/web/src/hooks/use-edge-scroll.ts");
 const DETAIL_PAGE = read("apps/web/src/features/projects/pages/ProjectDetailPage.tsx");
 
+/*
+ * The kebab menu on a Projects list row. Product decision on the redesign: the
+ * list row no longer changes status or stage - that is done from the status
+ * chip in the project header and by moving the card on the pipeline board - so
+ * several rules below now pin that the row menu stays out of it.
+ */
+const ROW_MENU = PROJECTS_PAGE.slice(
+  PROJECTS_PAGE.indexOf("function RowActions("),
+  PROJECTS_PAGE.indexOf("function ProjectTableRow("),
+);
+const expectRowMenuOffersNoStatusOrStage = () => {
+  // Guards the slice itself: an empty string would pass every not.toContain.
+  expect(ROW_MENU).toContain("<DropdownMenuContent");
+  expect(ROW_MENU).toContain("Archive project");
+  expect(ROW_MENU).not.toContain("Set pipeline stage");
+  expect(ROW_MENU).not.toContain("Set status");
+  expect(ROW_MENU).not.toContain("stageOptions");
+  expect(ROW_MENU).not.toContain("PROJECT_STATUS_LABELS");
+  expect(ROW_MENU).not.toContain("DropdownMenuSub");
+};
+
 /**
  * A stage is a field, not a tag.
  *
@@ -326,9 +347,12 @@ describe("pipeline stages", () => {
       // A field on the project should read wherever the project does, not only
       // on the one screen that draws it as a column.
       expect(PROJECTS_PAGE).toContain("stageLookup[p.pipeline_stage_id]");
-      expect(PROJECTS_PAGE).toContain("Set pipeline stage");
+      // Setting it is the project's chip and the board's card menu; the list
+      // row only reads it (see ROW_MENU above).
       expect(STATUS_CHIP).toContain("setProjectPipelineStage");
       expect(DETAIL_PAGE).toContain("<ProjectStatusChip");
+      expect(BOARD_VIEW).toContain("Move to stage");
+      expectRowMenuOffersNoStatusOrStage();
     });
 
     it("filters the project list by stage, and by having no stage at all", () => {
@@ -359,7 +383,9 @@ describe("pipeline stages", () => {
       // for a team with no pipeline it holds the three buckets and nothing
       // else, which for them is the only status there has ever been.
       expect(STATUS_CHIP).toContain("{boards.length > 0 && (");
-      expect(PROJECTS_PAGE).toContain("stageOptions.length > 0 &&");
+      // The list row used to carry the same guarded stage row; it now has no
+      // stage row at all, pipeline or not.
+      expectRowMenuOffersNoStatusOrStage();
     });
   });
 
@@ -628,7 +654,8 @@ describe("one status, not two", () => {
       // Offering both is offering a way to make them disagree again.
       expect(STATUS_CHIP).toContain("{current ? (");
       expect(STATUS_CHIP).toContain("counts as");
-      expect(PROJECTS_PAGE).toContain("{stage ? (");
+      // The list row offers neither, so it cannot offer both.
+      expectRowMenuOffersNoStatusOrStage();
     });
 
     it("does not flash the bucket at a job whose stage has not loaded yet", () => {
@@ -641,7 +668,8 @@ describe("one status, not two", () => {
 
     it("says what a move will do to the bucket before the move is made", () => {
       expect(STATUS_CHIP).toContain("PROJECT_STATUS_LABELS[s.status]");
-      expect(PROJECTS_PAGE).toContain("PROJECT_STATUS_LABELS[s.status]");
+      // The list row makes no moves, so it has nothing to preview.
+      expectRowMenuOffersNoStatusOrStage();
     });
 
     it("labels a project card with its stage, and keeps one badge", () => {

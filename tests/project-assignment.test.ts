@@ -217,13 +217,17 @@ describe("family: the crew is a decision, the log is a record", () => {
     const src = read("apps/web/src/features/projects/pages/ProjectDetailPage.tsx");
     // No contributor chip beside the Assign control any more.
     expect(src).not.toMatch(/<ContributorsChip/);
-    // The header (everything before the Visual documentation section) has no
-    // attribution; the photos section has it, directly under its heading.
-    const header = src.slice(0, src.indexOf("Visual documentation"));
+    // The header (everything before the photos section's "The field, on
+    // record" heading) has no attribution; the photos section has it, on the
+    // heading's own row. Matched on the rendered heading, not the phrase, which
+    // a comment near the top of the file also uses.
+    const heading = src.indexOf(">The field, on record</h2>");
+    expect(heading).toBeGreaterThan(-1);
+    const header = src.slice(0, heading);
     expect(header).not.toMatch(/Logged by/);
-    const docs = src.slice(src.indexOf("Visual documentation"));
-    expect(docs).toContain("The field, on record");
-    expect(docs).toMatch(/ProjectActivityLine contributors=\{contributorRows\}/);
+    expect(header).not.toMatch(/attributionText\(/);
+    const docs = src.slice(heading);
+    expect(docs).toMatch(/attributionText\(contributorRows\)/);
   });
 
   it("the crew explains itself in permanent words, not a hover", () => {
@@ -231,7 +235,9 @@ describe("family: the crew is a decision, the log is a record", () => {
     expect(crew).toContain("caption?: string");
     const detail = read("apps/web/src/features/projects/pages/ProjectDetailPage.tsx");
     const usage = detail.slice(detail.indexOf("<ProjectCrew"));
-    expect(usage.slice(0, 500)).toContain(`caption="Who this job is assigned to."`);
+    expect(usage.slice(0, 500)).toContain(
+      `caption="Scheduling only - doesn't change who can see this project."`,
+    );
   });
 
   it("crew and attribution are different things, because they answer different questions", () => {
@@ -244,14 +250,18 @@ describe("family: the crew is a decision, the log is a record", () => {
      * Both header rows opened as bare initials, and the crew's initials read as
      * an unexplained count. The header now says "Crew · Sam, Alex" without a
      * hover; the projects grid keeps the bare stack, so the label is an opt-in
-     * the header takes and the cards do not.
+     * the header takes and the cards do not. Since the project-page redesign
+     * the header takes it as the `reference` block: a "Crew · who's staffed"
+     * eyebrow over the avatars and the names spelled out beside them.
      */
     const crew = read("apps/web/src/features/projects/components/ProjectCrew.tsx");
     expect(crew).toContain("labeled = false");
     expect(crew).toMatch(/`Crew /);
+    expect(crew).toContain("reference = false");
+    expect(crew).toContain("Crew · who's staffed");
     const detail = read("apps/web/src/features/projects/pages/ProjectDetailPage.tsx");
     const usage = detail.slice(detail.indexOf("<ProjectCrew"));
-    expect(usage.slice(0, 300)).toContain("labeled");
+    expect(usage.slice(0, 300)).toMatch(/<ProjectCrew\s+reference\b/);
   });
 });
 

@@ -328,9 +328,9 @@ export function RunnerDetailHeader({
 }) {
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
   return (
-    // top-[82px] clears the app header (AppHeader is `sticky top-0 h-[82px]`,
+    // top-14 clears the app header (AppHeader is `sticky top-0 h-14`,
     // and the page itself is the scroll container). z-10 keeps this under it.
-    <div className="sticky top-[82px] z-10 rounded-t-2xl border-b border-border/60 bg-gradient-to-b from-card via-card to-card/95 px-4 pb-3 pt-3.5 backdrop-blur sm:px-6">
+    <div className="sticky top-14 z-10 rounded-t-2xl border-b border-border/60 bg-gradient-to-b from-card via-card to-card/95 px-4 pb-3 pt-3.5 backdrop-blur sm:px-6">
       <button
         type="button"
         onClick={onBack}

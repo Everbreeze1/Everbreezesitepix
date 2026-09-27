@@ -948,10 +948,10 @@ export function ChecklistDocumentPage() {
 
   return (
     <div className="min-h-screen bg-muted/30">
-      {/* Sticks below AppHeader (h-[82px], also sticky top-0) rather than at
+      {/* Sticks below AppHeader (h-14, also sticky top-0) rather than at
           top-0 itself - otherwise both claim the same viewport position and the
           app header paints over this bar as soon as the page scrolls. */}
-      <div className="sticky top-[82px] z-10 border-b border-border bg-background/95 backdrop-blur">
+      <div className="sticky top-14 z-10 border-b border-border bg-background/95 backdrop-blur">
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <Button

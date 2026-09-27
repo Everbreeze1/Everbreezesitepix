@@ -47,7 +47,7 @@ export function AppHeader() {
   const initials = getInitials(profile?.full_name, user?.email);
 
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-border bg-background px-4 sm:px-5">
+    <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-border bg-background px-4 sm:px-5">
       <div className="flex items-center gap-2 md:hidden">
         <SidebarTrigger />
         <BrandLogo size={28} />
@@ -69,7 +69,8 @@ export function AppHeader() {
           title="Toggle light / dark"
           className="flex h-8 w-8 items-center justify-center rounded-lg bg-secondary text-muted-foreground transition-colors hover:text-foreground"
         >
-          {themeReady && (theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />)}
+          {themeReady &&
+            (theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />)}
         </button>
 
         <Popover open={notifOpen} onOpenChange={setNotifOpen}>
@@ -108,7 +109,7 @@ export function AppHeader() {
             ) : (
               <ScrollArea className="max-h-[400px]">
                 <div className="divide-y divide-border">
-{recent.map((n) => (
+                  {recent.map((n) => (
                     <button
                       key={n.id}
                       type="button"

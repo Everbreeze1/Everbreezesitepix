@@ -21,9 +21,7 @@
     </li>
     <li className="mt-2 flex items-center gap-2">
       <Check className="h-4 w-4 shrink-0 text-white/90" strokeWidth={1.33} />
-      <span className="font-manrope text-xs font-bold leading-4 text-white/90">
-        Cancel anytime
-      </span>
+      <span className="font-manrope text-xs font-bold leading-4 text-white/90">Cancel anytime</span>
     </li>
   </ul>
-</div>
+</div>;

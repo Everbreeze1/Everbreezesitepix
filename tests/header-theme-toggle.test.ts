@@ -35,8 +35,8 @@ describe("the app header carries a day / night toggle", () => {
   const CODE = read(APP_HEADER);
 
   it("renders a button that says which way it switches", () => {
-    expect(CODE).toContain("Switch to night mode");
-    expect(CODE).toContain("Switch to day mode");
+    expect(CODE).toContain("Switch to dark");
+    expect(CODE).toContain("Switch to light");
   });
 
   it("shows the sun in night mode and the moon in day mode", () => {
@@ -64,7 +64,7 @@ describe("the app header carries a day / night toggle", () => {
 
   it("sits in the header, next to the bell", () => {
     const header = CODE.slice(CODE.indexOf("<header"));
-    const toggleAt = header.indexOf("Switch to night mode");
+    const toggleAt = header.indexOf("Switch to dark");
     const bellAt = header.indexOf('aria-label="Notifications"');
     expect(toggleAt).toBeGreaterThan(-1);
     expect(bellAt).toBeGreaterThan(-1);
@@ -75,8 +75,8 @@ describe("the app header carries a day / night toggle", () => {
     // "+ New project" is `hidden ... sm:inline-flex` on purpose. The toggle is
     // the whole ask, so it must not pick up the same treatment.
     const button = CODE.slice(
-      CODE.indexOf("Switch to night mode") - 400,
-      CODE.indexOf("Switch to night mode") + 800,
+      CODE.indexOf("Switch to dark") - 400,
+      CODE.indexOf("Switch to dark") + 800,
     );
     expect(button).not.toMatch(/\bhidden\b/);
   });

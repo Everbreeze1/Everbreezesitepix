@@ -81,8 +81,8 @@ function HowItWorksPage() {
             Capture. Organize. Report.
           </h1>
           <p className="font-manrope mx-auto mt-5 max-w-xl text-[15.5px] leading-[1.6] text-white/60">
-            Everlumen fits the way crews already work. No new process to learn - just open the
-            app and capture.
+            Everlumen fits the way crews already work. No new process to learn - just open the app
+            and capture.
           </p>
         </div>
       </section>
@@ -99,14 +99,16 @@ function HowItWorksPage() {
                   alt="Capture a photo on site - automatically stamped with time, date and location"
                   className="h-full w-full object-cover opacity-70"
                 />
-
               </div>
               <div className="mt-5 flex items-center gap-3">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-gold font-manrope text-[13px] font-bold text-sidebar">1</span>
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-gold font-manrope text-[13px] font-bold text-sidebar">
+                  1
+                </span>
                 <h3 className="font-manrope text-base font-semibold text-white">Capture</h3>
               </div>
               <p className="font-manrope mt-3 max-w-[280px] text-[13.5px] leading-[1.55] text-white/60">
-                Snap a photo or record a walkthrough. It is stamped with time, date, and location automatically.
+                Snap a photo or record a walkthrough. It is stamped with time, date, and location
+                automatically.
               </p>
             </div>
 
@@ -118,14 +120,16 @@ function HowItWorksPage() {
                   alt="Photos organized automatically into the right project, sorted and searchable"
                   className="h-full w-full object-cover opacity-70"
                 />
-
               </div>
               <div className="mt-5 flex items-center gap-3">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-gold font-manrope text-[13px] font-bold text-sidebar">2</span>
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-gold font-manrope text-[13px] font-bold text-sidebar">
+                  2
+                </span>
                 <h3 className="font-manrope text-base font-semibold text-white">Organize</h3>
               </div>
               <p className="font-manrope mt-3 max-w-[280px] text-[13.5px] leading-[1.55] text-white/60">
-                Every photo lands on the right project automatically - sorted, searchable, and mapped.
+                Every photo lands on the right project automatically - sorted, searchable, and
+                mapped.
               </p>
             </div>
 
@@ -137,10 +141,11 @@ function HowItWorksPage() {
                   alt="AI-generated progress report drafted from your site photos"
                   className="h-full w-full object-cover opacity-70"
                 />
-
               </div>
               <div className="mt-5 flex items-center gap-3">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-gold font-manrope text-[13px] font-bold text-sidebar">3</span>
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-gold font-manrope text-[13px] font-bold text-sidebar">
+                  3
+                </span>
                 <h3 className="font-manrope text-base font-semibold text-white">Report</h3>
               </div>
               <p className="font-manrope mt-3 max-w-[280px] text-[13.5px] leading-[1.55] text-white/60">
@@ -225,4 +230,3 @@ function HowItWorksPage() {
     </div>
   );
 }
-

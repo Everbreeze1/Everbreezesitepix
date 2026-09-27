@@ -284,6 +284,8 @@ import {
   getPublicProjectPageService,
   listProjectDocumentTreeInputSchema,
   listProjectDocumentTreeService,
+  listReportPagesInputSchema,
+  listReportPagesService,
   moveDocumentInputSchema,
   moveDocumentService,
   publicProjectPageInputSchema,
@@ -670,7 +672,13 @@ export const rpcRegistry: Record<string, RpcEntry> = {
       z
         .object({
           email: z.string().trim().toLowerCase().email().max(200),
-          role: z.enum(["admin", "member"]).default("member"),
+          // Same list the invite form offers (`assignableRoles`). This used to
+          // be ["admin", "member"], so choosing Manager, Standard or Restricted
+          // failed validation and only Admin invites went through. `member`
+          // stays accepted as the historical spelling of Standard.
+          role: z
+            .enum(["admin", "manager", "standard", "restricted", "member"])
+            .default("standard"),
           origin: z.string().url().max(300).optional(),
         })
         .parse(d),
@@ -1457,6 +1465,10 @@ export const rpcRegistry: Record<string, RpcEntry> = {
   listProjectDocumentTree: authed(
     (d) => listProjectDocumentTreeInputSchema.parse(d),
     listProjectDocumentTreeService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+  ),
+  listReportPages: authed(
+    (d) => listReportPagesInputSchema.parse(d ?? {}),
+    listReportPagesService as (ctx: ServiceContext, data: never) => Promise<unknown>,
   ),
   createDocumentFolder: authed(
     (d) => createDocumentFolderInputSchema.parse(d),

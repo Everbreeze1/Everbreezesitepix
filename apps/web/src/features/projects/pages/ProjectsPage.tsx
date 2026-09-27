@@ -48,12 +48,7 @@ import {
 } from "@/components/ui/reference";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { TagPillRow, TagPill } from "@/features/photos/components/TagPill";
@@ -79,11 +74,7 @@ import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
 import { EmptyState } from "@/components/EmptyState";
 import { toast } from "sonner";
 import { listProjectGroups } from "@/features/projects/api";
-import {
-  listProjectBoards,
-  type PipelineStage,
-  type ProjectBoard,
-} from "@/features/projects/api";
+import { listProjectBoards, type PipelineStage, type ProjectBoard } from "@/features/projects/api";
 import { GroupCard } from "@/features/projects/components/GroupCard";
 import {
   CreateGroupDialog,
@@ -501,8 +492,14 @@ export function ProjectsPage() {
           .select("project_id, storage_path, thumb_path, image_url, uploaded_by, created_at")
           .in("project_id", ids)
           .order("created_at", { ascending: false }),
-        (supabase as any).from("project_reports").select("project_id, name, created_at").in("project_id", ids),
-        (supabase as any).from("project_checklists").select("project_id, name, created_at").in("project_id", ids),
+        (supabase as any)
+          .from("project_reports")
+          .select("project_id, name, created_at")
+          .in("project_id", ids),
+        (supabase as any)
+          .from("project_checklists")
+          .select("project_id, name, created_at")
+          .in("project_id", ids),
       ]);
       const samplesByProject: Record<
         string,
@@ -569,13 +566,17 @@ export function ProjectsPage() {
         }
       };
       const rc: Record<string, number> = {};
-      ((rep as Array<{ project_id: string; name?: string | null; created_at?: string }>) ?? []).forEach((r) => {
+      (
+        (rep as Array<{ project_id: string; name?: string | null; created_at?: string }>) ?? []
+      ).forEach((r) => {
         rc[r.project_id] = (rc[r.project_id] ?? 0) + 1;
         noteBlueprint(r.project_id, r.name, r.created_at);
       });
 
       const cc: Record<string, number> = {};
-      ((cl as Array<{ project_id: string; name?: string | null; created_at?: string }>) ?? []).forEach((r) => {
+      (
+        (cl as Array<{ project_id: string; name?: string | null; created_at?: string }>) ?? []
+      ).forEach((r) => {
         cc[r.project_id] = (cc[r.project_id] ?? 0) + 1;
         noteBlueprint(r.project_id, r.name, r.created_at);
       });
@@ -1082,12 +1083,21 @@ export function ProjectsPage() {
   // Four destinations, one per kind of thing. Labels match the reference
   // mockup exactly (All Projects / Project Groups / Pipeline / Schedule).
   const tabs = [
-    { key: "projects", label: "All Projects" },
-    { key: "groups", label: "Project Groups" },
+    { key: "projects", label: "All Projects", count: totalCount - archivedCount },
+    { key: "groups", label: "Project Groups", count: groups.length },
     // Key stays "boards" (route/state/table naming); only the label is
     // user-facing, and "Pipeline" describes what the columns actually are.
-    { key: "boards", label: "Pipeline" },
-    { key: "schedule", label: "Schedule" },
+    { key: "boards", label: "Pipeline", count: boards.length },
+    /*
+     * The one count on this strip that is not "how many of these exist".
+     *
+     * The other three are inventory. This one is a workload: open work that is
+     * due today or already late. "Schedule 214" because a task is due next
+     * spring says nothing; "Schedule 3" when three things are waiting on you
+     * today is the entire feature in one number, and it is legible without
+     * opening the tab. See attentionCount().
+     */
+    { key: "schedule", label: "Schedule", count: attentionCount(schedule) },
   ];
 
   /**
@@ -1119,7 +1129,12 @@ export function ProjectsPage() {
       setStatusFilter(pill);
     }
   };
-  const filterPills: Array<{ key: FilterPillKey; label: string; count: number; toneClass: string }> = [
+  const filterPills: Array<{
+    key: FilterPillKey;
+    label: string;
+    count: number;
+    toneClass: string;
+  }> = [
     { key: "all", label: "All", count: totalCount, toneClass: "text-foreground" },
     { key: "active", label: "Active", count: activeCount, toneClass: "text-status-active" },
     { key: "on_hold", label: "On hold", count: onHoldCount, toneClass: "text-status-hold" },
@@ -1200,7 +1215,9 @@ export function ProjectsPage() {
       <Input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder={tab === "groups" ? "Search groupsÃ¢â‚¬Â¦" : "Search projects by name or addressÃ¢â‚¬Â¦"}
+        placeholder={
+          tab === "groups" ? "Search groupsÃ¢â‚¬Â¦" : "Search projects by name or addressÃ¢â‚¬Â¦"
+        }
         className="h-8 rounded-lg border-border bg-card/80 pl-8 pr-8 text-xs shadow-none placeholder:text-muted-foreground"
       />
       {query && (
@@ -1763,7 +1780,7 @@ export function ProjectsPage() {
           {/* Underline tabs, the same control every reference screen shares. */}
           <ReferenceTabStrip
             className="mt-6"
-            items={tabs.map((t) => ({ key: t.key, label: t.label }))}
+            items={tabs.map((t) => ({ key: t.key, label: t.label, count: t.count }))}
             value={tab}
             onChange={(key) => {
               const next = key as TabKey;
@@ -1808,11 +1825,16 @@ export function ProjectsPage() {
                       "inline-flex items-center gap-1.5 rounded-full border px-3.5 py-[7px] text-[12.5px] font-semibold transition",
                       selected
                         ? "border-foreground bg-foreground text-background"
-                        : "border-border bg-card text-muted-foreground hover:text-foreground"
+                        : "border-border bg-card text-muted-foreground hover:text-foreground",
                     )}
                   >
                     {pill.label}
-                    <span className={cn("font-mono text-[11px]", selected ? "text-background/70" : pill.toneClass)}>
+                    <span
+                      className={cn(
+                        "font-mono text-[11px]",
+                        selected ? "text-background/70" : pill.toneClass,
+                      )}
+                    >
                       {pill.count}
                     </span>
                   </button>
@@ -1837,7 +1859,7 @@ export function ProjectsPage() {
             </div>
           )}
 
-{/* Projects / Groups / Pipelines / Calendar */}
+          {/* Projects / Groups / Pipelines / Calendar */}
           <div>
             {/*
               No header on the Pipelines tab: the pipeline strip below already
@@ -1935,6 +1957,7 @@ export function ProjectsPage() {
                   hasQueryOrFilter={hasActiveFilters}
                   onClearFilters={clearAllFilters}
                   blueprintNames={blueprintNames}
+                  stageLookup={stageLookup}
                   coverUrls={coverUrls}
                   coverPaths={coverPaths}
                   coverThumbPaths={coverThumbPaths}
@@ -2101,7 +2124,10 @@ function GroupsGrid({
   );
 }
 
-function statusTone(s: string, archived?: boolean | null): "active" | "hold" | "complete" | "archived" {
+function statusTone(
+  s: string,
+  archived?: boolean | null,
+): "active" | "hold" | "complete" | "archived" {
   if (archived) return "archived";
   if (s === "on_hold") return "hold";
   if (s === "completed") return "complete";
@@ -2197,12 +2223,14 @@ function CrewCell({
  */
 function RowActions({
   project,
+  crewCount,
   canAssign,
   onAssign,
   onStar,
   onArchive,
 }: {
   project: ProjectRow;
+  crewCount: number;
   canAssign: boolean;
   onAssign: () => void;
   onStar: (id: string, next: boolean) => void;
@@ -2223,12 +2251,33 @@ function RowActions({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-40">
           <DropdownMenuItem onClick={() => onStar(project.id, !project.starred)}>
-            <Star className={cn("mr-2 h-4 w-4", project.starred ? "fill-current text-foreground" : "text-muted-foreground")} />
+            <Star
+              className={cn(
+                "mr-2 h-4 w-4",
+                project.starred ? "fill-current text-foreground" : "text-muted-foreground",
+              )}
+            />
             {project.starred ? "Unstar project" : "Star project"}
           </DropdownMenuItem>
+          {/*
+            Staffing a job from the list it is on. The empty crew cell's "+"
+            only covers a job with nobody on it; this reaches the rest. Hidden
+            when the viewer cannot assign, since the server would refuse.
+          */}
+          {canAssign && (
+            <DropdownMenuItem onClick={onAssign}>
+              <UsersIcon className="mr-2 h-4 w-4 text-muted-foreground" />
+              {crewCount === 0 ? "Assign teammates" : `Change crew (${crewCount})`}
+            </DropdownMenuItem>
+          )}
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => onArchive(project.id, !project.archived)}>
-            <Archive className={cn("mr-2 h-4 w-4", project.archived ? "text-status-complete" : "text-muted-foreground")} />
+            <Archive
+              className={cn(
+                "mr-2 h-4 w-4",
+                project.archived ? "text-status-complete" : "text-muted-foreground",
+              )}
+            />
             {project.archived ? "Restore project" : "Archive project"}
           </DropdownMenuItem>
         </DropdownMenuContent>
@@ -2247,6 +2296,7 @@ function ProjectTableRow({
   coverUrl,
   coverPath,
   coverThumbPath,
+  stage,
   assigned,
   canAssign,
   onAssign,
@@ -2254,6 +2304,8 @@ function ProjectTableRow({
   onArchive,
 }: {
   project: ProjectRow;
+  /** The pipeline stage the job stands in, if any. It owns the bucket. */
+  stage?: { name: string; boardName: string };
   blueprintName?: string;
   coverUrl?: string;
   coverPath?: string;
@@ -2274,6 +2326,7 @@ function ProjectTableRow({
   }, [members, assigned]);
   const extra = assigned.length - crew.length;
   const loc = projectLocation(project);
+  const badge = { label: statusLabel(project.status, project.archived) };
 
   return (
     <div className="group relative">
@@ -2305,19 +2358,31 @@ function ProjectTableRow({
             )}
           </span>
         </span>
-        <span>
+        {/*
+          One badge, not two. Where a job stands in a pipeline the stage is the
+          more precise status and decides the bucket, so the pill names the
+          stage and keeps the bucket's colour.
+        */}
+        <span
+          title={
+            stage
+              ? `${stage.boardName}: ${stage.name}, which counts as ${badge.label.toLowerCase()}`
+              : undefined
+          }
+        >
           <ReferencePill tone={statusTone(project.status, project.archived)}>
-            {statusLabel(project.status, project.archived)}
+            {stage ? stage.name : badge.label}
           </ReferencePill>
         </span>
         <span className="truncate text-[12.5px] text-muted-foreground">
-          {blueprintName || <span className="text-faint">—</span>}
+          {blueprintName || <span className="text-faint">-</span>}
         </span>
         <CrewCell crew={crew} extra={extra} canAssign={canAssign} onAssign={onAssign} />
         <span className="flex items-center justify-end gap-1 text-[12px] text-muted-foreground">
           {timeAgo(project.updated_at)}
           <RowActions
             project={project}
+            crewCount={assigned.length}
             canAssign={canAssign}
             onAssign={onAssign}
             onStar={onStar}
@@ -2338,6 +2403,7 @@ function ProjectsList({
   coverPaths,
   coverThumbPaths,
   blueprintNames,
+  stageLookup,
   onStar,
   onArchive,
 }: {
@@ -2349,6 +2415,7 @@ function ProjectsList({
   coverPaths: Record<string, string>;
   coverThumbPaths: Record<string, string>;
   blueprintNames: Record<string, string>;
+  stageLookup: Record<string, { name: string; boardName: string }>;
   onStar: (id: string, next: boolean) => void;
   onArchive: (id: string, next: boolean) => void;
 }) {
@@ -2396,32 +2463,45 @@ function ProjectsList({
   return (
     <>
       <div className={cn(REFERENCE_CARD, "overflow-hidden")}>
-          {/* Column heads - uppercase eyebrow labels on a surface-2 wash. */}
-          <div className="hidden grid-cols-[2.6fr_1fr_1.4fr_1fr_0.9fr] items-center gap-3 border-b border-border bg-secondary/60 px-[18px] py-3 md:grid">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">Project</span>
-            <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">Status</span>
-            <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">Blueprint</span>
-            <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">Crew</span>
-            <span className="text-right text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">Last activity</span>
-          </div>
-          <div className="divide-y divide-border">
-            {projects.map((p) => (
-              <ProjectTableRow
-                key={p.id}
-                project={p}
-                blueprintName={blueprintNames[p.id]}
-                coverUrl={coverUrls[p.id]}
-                coverPath={coverPaths[p.id]}
-                coverThumbPath={coverThumbPaths[p.id]}
-                assigned={byProject[p.id] ?? []}
-                canAssign={canAssign}
-                onAssign={() => setAssignFor(p)}
-                onStar={onStar}
-                onArchive={onArchive}
-              />
-            ))}
-          </div>
+        {/* Column heads - uppercase eyebrow labels on a surface-2 wash. */}
+        <div className="hidden grid-cols-[2.6fr_1fr_1.4fr_1fr_0.9fr] items-center gap-3 border-b border-border bg-secondary/60 px-[18px] py-3 md:grid">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">
+            Project
+          </span>
+          <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">
+            Status
+          </span>
+          <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">
+            Blueprint
+          </span>
+          <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">
+            Crew
+          </span>
+          <span className="text-right text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">
+            Last activity
+          </span>
         </div>
+        <div className="divide-y divide-border">
+          {projects.map((p) => (
+            <ProjectTableRow
+              key={p.id}
+              project={p}
+              blueprintName={blueprintNames[p.id]}
+              stage={
+                !p.archived && p.pipeline_stage_id ? stageLookup[p.pipeline_stage_id] : undefined
+              }
+              coverUrl={coverUrls[p.id]}
+              coverPath={coverPaths[p.id]}
+              coverThumbPath={coverThumbPaths[p.id]}
+              assigned={byProject[p.id] ?? []}
+              canAssign={canAssign}
+              onAssign={() => setAssignFor(p)}
+              onStar={onStar}
+              onArchive={onArchive}
+            />
+          ))}
+        </div>
+      </div>
 
       {/*
       One dialog for the whole grid, opened with whichever card was clicked.

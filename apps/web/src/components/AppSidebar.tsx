@@ -14,6 +14,7 @@ import {
   Layers,
   Lock,
   ShieldCheck,
+  FileBarChart,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
@@ -55,6 +56,9 @@ const workspaceItems: NavItem[] = [
   { title: "Overview", url: "/dashboard", icon: LayoutDashboard },
   { title: "Projects", url: "/projects", icon: FolderKanban },
   { title: "Photo Library", url: "/gallery", icon: Images },
+  // Every report across every job - before this the /reports page existed but
+  // no menu reached it, so the only way to find a report was project by project.
+  { title: "Reports", url: "/reports", icon: FileBarChart },
   { title: "Maps", url: "/map", icon: Map },
 ];
 
@@ -150,7 +154,7 @@ export function AppSidebar() {
    * treats them.
    */
   const hasTeamAccess = !!teamData?.isInternal || (!!teamData?.isActive && plan === "team");
-/*
+  /*
    * Portfolio is a Team-tier feature, but it is *badged*, never removed.
    *
    * Dropping the row from the array is what produced "the Portfolio is still
@@ -204,7 +208,7 @@ export function AppSidebar() {
     "relative flex items-center rounded-lg px-3 text-[13.5px] font-semibold transition-colors" +
     (isMobile ? " h-[52px] gap-3 text-[15px]" : " h-(--rail-row) gap-[11px]");
   const iconBase = isMobile ? "h-5 w-5" : "h-[18px] w-[18px]";
-const navButtonClass = (active: boolean) =>
+  const navButtonClass = (active: boolean) =>
     `${buttonBase} ${
       active
         ? "bg-sidebar-accent text-sidebar-ring"
@@ -277,10 +281,8 @@ const navButtonClass = (active: boolean) =>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
-<SidebarGroup className="mt-5">
-          {!collapsed && (
-            <SidebarGroupLabel className={groupLabelClass}>Set up</SidebarGroupLabel>
-          )}
+        <SidebarGroup className="mt-5">
+          {!collapsed && <SidebarGroupLabel className={groupLabelClass}>Set up</SidebarGroupLabel>}
           <SidebarGroupContent>
             <SidebarMenu className={isMobile ? "gap-1.5" : "gap-(--rail-gap)"}>
               {setupItems.map(renderNavRow)}
