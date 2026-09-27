@@ -99,7 +99,9 @@ function AppLayout() {
 
   return (
     <SubscriptionGateProvider>
-      <SidebarProvider>
+      {/* Tablets (768-1279px) open on the icon rail so the page gets the
+          width; the header button expands it. Desktop opens expanded. */}
+      <SidebarProvider defaultOpen={typeof window === "undefined" || window.innerWidth >= 1280}>
         <OfflineIndicator />
         <div className="min-h-screen flex w-full bg-background">
           <AppSidebar />
