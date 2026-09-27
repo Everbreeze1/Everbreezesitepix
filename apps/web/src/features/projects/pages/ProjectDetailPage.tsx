@@ -2893,11 +2893,13 @@ export function ProjectDetailPage() {
         </div>
       </div>
 
-      {/* Where the job stands in its workflow. Renders nothing without one. */}
+      {/* Where the job stands in its workflow. Without one it still shows a quiet
+          "none started" row, so a project never looks like it is missing the
+          feature; off the Team plan, clicking it opens the upgrade prompt. */}
       <ProjectWorkflowStrip
         className="mb-7"
         projectId={projectId}
-        showEmpty={isTeam}
+        showEmpty
         refreshKey={`${counts.workflows}-${panel ?? "photos"}`}
         onOpen={() => {
           if (!isTeam) {
