@@ -540,6 +540,8 @@ export function TemplatesPage() {
   const [selectedId, setSelectedId] = useState<string | null>(search.blueprint ?? null);
   const [createOpen, setCreateOpen] = useState(false);
   const [startersOpen, setStartersOpen] = useState(false);
+  /** The checklist library's own starter picker, opened from the hub's hero. */
+  const [checklistStartersOpen, setChecklistStartersOpen] = useState(false);
   const [installing, setInstalling] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
@@ -1492,6 +1494,28 @@ export function TemplatesPage() {
           </div>
           {canManage && (tab === "blueprints" || tab === "checklists" || tab === "documents") && (
             <div className="flex shrink-0 flex-wrap items-center gap-2">
+              {/* The pre-built blueprint dialog below had no way in: nothing set
+                  `startersOpen`. It sits before "New blueprint" as the quieter of
+                  the two, since starting blank is still the primary path. The
+                  Checklists tab gets the same entry into its own starters. */}
+              {tab === "blueprints" && (
+                <Button
+                  variant="outline"
+                  onClick={() => setStartersOpen(true)}
+                  className="font-sans h-10 rounded-lg px-4 text-[13.5px] font-semibold"
+                >
+                  <Sparkles className="h-4 w-4" /> Start from a template
+                </Button>
+              )}
+              {tab === "checklists" && (
+                <Button
+                  variant="outline"
+                  onClick={() => setChecklistStartersOpen(true)}
+                  className="font-sans h-10 rounded-lg px-4 text-[13.5px] font-semibold"
+                >
+                  <Sparkles className="h-4 w-4" /> Start from a template
+                </Button>
+              )}
               {tab === "blueprints" && (
                 <Button
                   onClick={() => {
@@ -1587,6 +1611,8 @@ export function TemplatesPage() {
           {tab === "checklists" && (
             <ChecklistLibraryContent
               createTick={checklistCreateTick}
+              startersOpen={checklistStartersOpen}
+              onStartersOpenChange={setChecklistStartersOpen}
               onCreate={() => {
                 if (!canManage) {
                   navigate({ to: "/pricing" });

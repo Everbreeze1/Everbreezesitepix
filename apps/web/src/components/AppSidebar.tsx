@@ -118,13 +118,17 @@ export function AppSidebar() {
    * Templates-hub tab, read from the URL so the three template rows each light
    * up only when their own panel is showing. "blueprints" (or absent) is the
    * hub's default, so both normalize to undefined for active-row detection.
+   * `reports` is the old key the hub now opens as Documents' second sub-tab,
+   * so it lights Documents. Anything else the hub shows under Blueprints
+   * (workflows, reached from a blueprint's "Add phase", and the parked tabs it
+   * falls back from) keeps Blueprints lit.
    */
   const rawTab = searchParams.tab;
   const templateTab =
-    rawTab === undefined || rawTab === "blueprints"
-      ? undefined
-      : rawTab === "checklists" || rawTab === "documents"
-        ? rawTab
+    rawTab === "checklists" || rawTab === "documents"
+      ? rawTab
+      : rawTab === "reports"
+        ? "documents"
         : undefined;
   const { user } = useAuth();
   const { profile } = useProfile();
