@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
   ActivityIndicator,
+  Linking,
   Pressable,
   RefreshControl,
   SectionList,
@@ -17,14 +18,20 @@ import {
   CircleCheck,
   ClipboardCheck,
   FileText,
+  FolderPlus,
+  GitMerge,
+  History,
   ImageOff,
   ListTodo,
   MapPin,
+  Navigation,
   NotebookPen,
   PenLine,
   Send,
   Share2,
   SlidersHorizontal,
+  Sparkles,
+  SquareCheckBig,
   Star,
   Trash2,
   Video,
@@ -76,12 +83,19 @@ import { listProjectBoards } from "@/api/pipelines";
 import {
   activeFilterCount,
   filterPhotos,
+  PHASE_FILTER_LABELS,
+  phasePill,
+  photoGridColumns,
   photoTagCounts,
   toggleTag,
   type MediaFilter,
   type PhaseFilter,
+  type PhotoSize,
   type TagLogic,
 } from "@/api/photo-filter-view";
+import { projectMapsUrl } from "@/api/project-actions";
+import { GenerateReportSheet } from "@/components/GenerateReportSheet";
+import { ProjectGroupSheet, ProjectMergeSheet } from "@/components/ProjectOrganizeSheets";
 import { ProjectCrewAvatars } from "@/components/ProjectCrewAvatars";
 import { MoreGlyph } from "@/components/ProjectGlyphs";
 import { getBlueprintOrigin } from "@/api/blueprints";
@@ -101,7 +115,7 @@ import {
 import { useQueue } from "@/offline/use-queue";
 import { enqueue } from "@/offline/outbox";
 import { refreshQueue, requestSync } from "@/offline/sync";
-import { gridColumns, radius, spacing, useTheme } from "@/theme";
+import { HIT_TARGET, radius, spacing, useTheme } from "@/theme";
 import {
   DailyLogCard,
   ProjectBlueprint,
@@ -121,12 +135,8 @@ import {
   type ChipOption,
 } from "@/ui";
 
-const FILTERS: ChipOption<PhaseFilter>[] = [
-  { id: "all", label: "All" },
-  { id: "before", label: "Before" },
-  { id: "after", label: "After" },
-  { id: "untagged", label: "Untagged" },
-];
+/* The web's chips and words: All captures, Before work, After work, Needs review. */
+const FILTERS: ChipOption<PhaseFilter>[] = PHASE_FILTER_LABELS;
 
 const GRID_GAP = spacing.sm;
 
@@ -202,7 +212,9 @@ export default function ProjectDetailScreen() {
   // Photos still in the outbox: the Daily Log for them has not been written
   // yet, because on a phone a capture session finishes when the queue does.
   const { outstanding: queued } = useQueue();
-  const columns = gridColumns(screenWidth - spacing.lg * 2);
+  /* The web Filters popover's Photo size. Medium is the grid phones always drew. */
+  const [photoSize, setPhotoSize] = useState<PhotoSize>("md");
+  const columns = photoGridColumns(screenWidth - spacing.lg * 2, photoSize);
   /*
    * `photo` is a deep link, not something this screen ever sets.
    *
@@ -248,6 +260,16 @@ export default function ProjectDetailScreen() {
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
+  /*
+   * The web header's Create menu (AI Summary, the two reports, templates, a
+   * blank page) and the kebab's organise sheets. Each is mounted only while in
+   * use, so every open starts from the top.
+   */
+  const [createOpen, setCreateOpen] = useState(false);
+  const [groupOpen, setGroupOpen] = useState(false);
+  const [mergeOpen, setMergeOpen] = useState(false);
+  /* Select mode, as the web's Select button: taps pick rather than open. */
+  const [selectMode, setSelectMode] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
   /*
    * Kept apart from `shareError` rather than reusing it. They surface in
@@ -258,7 +280,11 @@ export default function ProjectDetailScreen() {
   const [bulkError, setBulkError] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
-  const selecting = selected.size > 0;
+  const selecting = selectMode || selected.size > 0;
+  const endSelection = useCallback(() => {
+    setSelectMode(false);
+    setSelected(new Set());
+  }, []);
 
   const projectQuery = useQuery({
     queryKey: ["project", id],
@@ -387,6 +413,7 @@ export default function ProjectDetailScreen() {
     [crewQuery.data, peopleQuery.data],
   );
   const address = project ? formatAddress(project) : null;
+  const mapsUrl = project ? projectMapsUrl(project) : null;
   const loading = projectQuery.isLoading || photosQuery.isLoading;
   const error = projectQuery.error ?? photosQuery.error;
 
@@ -562,7 +589,7 @@ export default function ProjectDetailScreen() {
             // legitimate, a retry after a dropped response is not.
             idempotencyKey: randomUUID(),
           });
-          setSelected(new Set());
+          endSelection();
           setBulkError(null);
           if (summaryId) {
             router.push({ pathname: "/summary/[summaryId]", params: { summaryId } });
@@ -634,10 +661,10 @@ export default function ProjectDetailScreen() {
 
       await refreshQueue();
       requestSync();
-      setSelected(new Set());
+      endSelection();
       setBusy(false);
     },
-    [selected, photos, queryClient, id],
+    [selected, photos, queryClient, id, endSelection],
   );
 
   /*
@@ -737,7 +764,7 @@ export default function ProjectDetailScreen() {
                     selecting ? (
                       <ProjectHeroButton
                         accessibilityLabel="Cancel selection"
-                        onPress={() => setSelected(new Set())}
+                        onPress={endSelection}
                       >
                         <Icon icon={X} size="md" color="#ffffff" />
                       </ProjectHeroButton>
@@ -757,6 +784,33 @@ export default function ProjectDetailScreen() {
                       </ProjectHeroButton>
                     ) : (
                       <>
+                        {/*
+                          The web header's orange Create button, labelled
+                          because a bare sparkle names nothing. It sits at the
+                          right end of the hero, where the thumb already is on
+                          a phone and where a tablet's right hand rests.
+                        */}
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel="Create"
+                          accessibilityHint="AI summary, reports, templates or a blank page for this job"
+                          onPress={() => setCreateOpen(true)}
+                          style={({ pressed }) => ({
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: spacing.xs,
+                            height: HIT_TARGET,
+                            paddingHorizontal: spacing.lg,
+                            borderRadius: radius.pill,
+                            backgroundColor: theme.colors.primary,
+                            opacity: pressed ? 0.8 : 1,
+                          })}
+                        >
+                          <Sparkles size={18} strokeWidth={2.25} color="#ffffff" />
+                          <UIText variant="bodyStrong" style={{ color: "#ffffff" }}>
+                            Create
+                          </UIText>
+                        </Pressable>
                         {/*
                           A filled amber star for starred, a white outline for
                           not. Colour alone would not carry it on a photograph,
@@ -884,12 +938,34 @@ export default function ProjectDetailScreen() {
                         {photoCount}
                       </UIText>
                       <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.lg }}>
+                        {showPhotos && photos.length > 0 ? (
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel={selecting ? "Done selecting" : "Select photos"}
+                            onPress={() => (selecting ? endSelection() : setSelectMode(true))}
+                            hitSlop={12}
+                            style={{ flexDirection: "row", alignItems: "center", gap: 4 }}
+                          >
+                            <SquareCheckBig
+                              size={16}
+                              strokeWidth={2.25}
+                              color={theme.colors.primary}
+                            />
+                            <UIText
+                              variant="bodyStrong"
+                              tone="primary"
+                              style={{ fontWeight: "700" }}
+                            >
+                              {selecting ? "Done" : "Select"}
+                            </UIText>
+                          </Pressable>
+                        ) : null}
                         <Pressable
                           accessibilityRole="button"
                           accessibilityLabel={
                             moreFilters > 0 ? `Filters, ${moreFilters} on` : "Filters"
                           }
-                          accessibilityHint="Tags, and photos or videos"
+                          accessibilityHint="Tags, photos or videos, photo size and order"
                           onPress={() => setFiltersOpen(true)}
                           hitSlop={12}
                           style={{ flexDirection: "row", alignItems: "center", gap: 4 }}
@@ -903,23 +979,7 @@ export default function ProjectDetailScreen() {
                             {moreFilters > 0 ? `Filters (${moreFilters})` : "Filters"}
                           </UIText>
                         </Pressable>
-                        {showPhotos ? (
-                          <Pressable
-                            accessibilityRole="button"
-                            accessibilityLabel={`Sort: ${sort === "newest" ? "newest" : "oldest"} first`}
-                            accessibilityHint="Switches between newest and oldest first"
-                            onPress={() => setSort((s) => (s === "newest" ? "oldest" : "newest"))}
-                            hitSlop={12}
-                          >
-                            <UIText
-                              variant="bodyStrong"
-                              tone="primary"
-                              style={{ fontWeight: "700" }}
-                            >
-                              {`Sort: ${sort === "newest" ? "Newest" : "Oldest"}`}
-                            </UIText>
-                          </Pressable>
-                        ) : null}
+                        {/* Newest or oldest first is set in Filters, as on the web. */}
                       </View>
                     </View>
 
@@ -1210,6 +1270,12 @@ export default function ProjectDetailScreen() {
                         height="100%"
                         rounded={radius.lg}
                       />
+                      {/*
+                        The web grid's corner pill: Before, After, Walkthrough
+                        or Needs review. Left off the smallest tiles, where it
+                        would cover most of the photo.
+                      */}
+                      {tileSize >= 90 ? <PhasePill phase={photo.phase} /> : null}
                       {selecting ? (
                         <View
                           style={[
@@ -1265,15 +1331,15 @@ export default function ProjectDetailScreen() {
           </View>
         ) : null}
 
-        {selecting ? (
+        {selected.size > 0 ? (
           <PhotoBulkBar
             count={selected.size}
             busy={busy}
             currentProjectId={id}
-            onCancel={() => setSelected(new Set())}
+            onCancel={endSelection}
             onAction={(action) => void applyBulk(action)}
           />
-        ) : filtered.length === 0 ? null : (
+        ) : selecting ? null : filtered.length === 0 ? null : (
           <ActionRail
             actions={[
               {
@@ -1315,7 +1381,40 @@ export default function ProjectDetailScreen() {
         media={media}
         onMedia={setMedia}
         hasVideos={videos.length > 0}
+        size={photoSize}
+        onSize={setPhotoSize}
+        order={sort}
+        onOrder={setSort}
       />
+
+      {createOpen ? (
+        <GenerateReportSheet
+          projectId={String(id)}
+          projectName={project?.name ?? ""}
+          scope="all"
+          title="Create"
+          onClose={() => setCreateOpen(false)}
+        />
+      ) : null}
+
+      <ProjectGroupSheet
+        visible={groupOpen}
+        projectId={String(id)}
+        onClose={() => setGroupOpen(false)}
+      />
+
+      {mergeOpen ? (
+        <ProjectMergeSheet
+          visible
+          projectId={String(id)}
+          projectName={project?.name ?? "this project"}
+          onClose={() => setMergeOpen(false)}
+          onMerged={(targetId) => {
+            setMergeOpen(false);
+            router.replace({ pathname: "/project/[id]", params: { id: targetId } });
+          }}
+        />
+      ) : null}
 
       <ActionSheet
         visible={actionsOpen}
@@ -1323,7 +1422,32 @@ export default function ProjectDetailScreen() {
         title="Project"
         actions={[
           { label: "Edit details", icon: PenLine, onPress: () => setEditing(true) },
-          { label: "Share project", icon: Share2, onPress: () => void shareProject() },
+          {
+            label: project?.archived ? "Move out of archive" : "Move to archive",
+            icon: Archive,
+            onPress: () => void patchProject("archived", archivePatch(!project?.archived)),
+          },
+          { label: "File under a group", icon: FolderPlus, onPress: () => setGroupOpen(true) },
+          {
+            label: "Merge into another project",
+            icon: GitMerge,
+            onPress: () => setMergeOpen(true),
+          },
+          ...(mapsUrl
+            ? [
+                {
+                  label: "Open location in Maps",
+                  icon: Navigation,
+                  onPress: () => void Linking.openURL(mapsUrl),
+                },
+              ]
+            : []),
+          /*
+            The web's QR code dialog hands out this same public link: the job's
+            name, address and photos, no sign-in. The phone shares the link
+            itself, which is what a customer standing next to the tech needs.
+          */
+          { label: "Share public link", icon: Share2, onPress: () => void shareProject() },
           /*
             Only when there is something to switch off. Offering "Stop sharing"
             on a job that was never shared invites somebody to press it and
@@ -1357,9 +1481,9 @@ export default function ProjectDetailScreen() {
             onPress: () => void patchProject("starred", starPatch(!project?.starred)),
           },
           {
-            label: project?.archived ? "Unarchive" : "Archive",
-            icon: Archive,
-            onPress: () => void patchProject("archived", archivePatch(!project?.archived)),
+            label: "Recently deleted",
+            icon: History,
+            onPress: () => router.push(`/project/${id}/trash`),
           },
           {
             /*
@@ -1367,13 +1491,25 @@ export default function ProjectDetailScreen() {
              * a project that is no longer in the list reads as the delete
              * having failed.
              */
-            label: "Move project to trash",
+            label: "Delete this project",
             icon: Trash2,
             destructive: true,
-            onPress: () => {
-              void patchProject("deleted", trashProjectPatch());
-              router.back();
-            },
+            onPress: () =>
+              Alert.alert(
+                "Delete this project?",
+                "It goes to Trash and can be recovered for 60 days.",
+                [
+                  { text: "Cancel", style: "cancel" as const },
+                  {
+                    text: "Delete",
+                    style: "destructive" as const,
+                    onPress: () => {
+                      void patchProject("deleted", trashProjectPatch());
+                      router.back();
+                    },
+                  },
+                ],
+              ),
           },
         ]}
       />
@@ -1397,6 +1533,38 @@ export default function ProjectDetailScreen() {
         inProject
       />
     </>
+  );
+}
+
+/** The corner pill on a grid tile, in the web grid's colours. */
+function PhasePill({ phase }: { phase: string | null }) {
+  const theme = useTheme();
+  const pill = phasePill(phase);
+  const [background, color] =
+    pill.tone === "after"
+      ? [theme.colors.primary, theme.colors.primaryForeground]
+      : pill.tone === "before"
+        ? ["rgba(16, 150, 96, 0.92)", "#ffffff"]
+        : pill.tone === "walkthrough"
+          ? ["rgba(40, 36, 32, 0.8)", "#ffffff"]
+          : ["rgba(204, 240, 236, 0.95)", "#0b4f47"];
+  return (
+    <View
+      pointerEvents="none"
+      style={{
+        position: "absolute",
+        top: 6,
+        left: 6,
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: radius.pill,
+        backgroundColor: background,
+      }}
+    >
+      <UIText variant="caption" style={{ color, fontSize: 10, fontWeight: "700" }}>
+        {pill.label}
+      </UIText>
+    </View>
   );
 }
 

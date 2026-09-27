@@ -23,9 +23,12 @@ export function ReportCard({
   status,
   onPress,
   accessory,
+  excerpt,
 }: {
   title: string;
   subtitle: string;
+  /** The first line or two of the write-up, already stripped of markup. */
+  excerpt?: string | null;
   status: ReportIndexStatus;
   onPress: () => void;
   /** Row-scoped controls under the pill, such as delete. */
@@ -72,6 +75,11 @@ export function ReportCard({
         {subtitle ? (
           <Text variant="caption" tone="muted" numberOfLines={2}>
             {subtitle}
+          </Text>
+        ) : null}
+        {excerpt ? (
+          <Text variant="caption" numberOfLines={2} style={{ marginTop: 2 }}>
+            {excerpt}
           </Text>
         ) : null}
       </View>

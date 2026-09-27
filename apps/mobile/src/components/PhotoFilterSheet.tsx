@@ -1,12 +1,13 @@
 import { Switch, View } from "react-native";
-import type { MediaFilter, TagLogic } from "@/api/photo-filter-view";
+import type { MediaFilter, PhotoOrder, PhotoSize, TagLogic } from "@/api/photo-filter-view";
 import { spacing, useTheme } from "@/theme";
 import { Button, Chip, Sheet, Text } from "@/ui";
 
 /**
  * The project grid's extra filters, the phone version of the web "Filters"
  * popover: whether to show the photo tags row, whether several tags must all
- * match or any one of them, and photos against videos.
+ * match or any one of them, photos against videos, how big the tiles are and
+ * which end of the job comes first.
  */
 export function PhotoFilterSheet({
   visible,
@@ -18,6 +19,10 @@ export function PhotoFilterSheet({
   media,
   onMedia,
   hasVideos,
+  size,
+  onSize,
+  order,
+  onOrder,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -28,6 +33,10 @@ export function PhotoFilterSheet({
   media: MediaFilter;
   onMedia: (next: MediaFilter) => void;
   hasVideos: boolean;
+  size: PhotoSize;
+  onSize: (next: PhotoSize) => void;
+  order: PhotoOrder;
+  onOrder: (next: PhotoOrder) => void;
 }) {
   const theme = useTheme();
   return (
@@ -91,6 +100,35 @@ export function PhotoFilterSheet({
             No site videos on this project yet.
           </Text>
         ) : null}
+      </View>
+
+      <View style={{ gap: spacing.sm }}>
+        <Text variant="overline" tone="muted">
+          PHOTO SIZE
+        </Text>
+        <View style={{ flexDirection: "row", gap: spacing.sm }}>
+          <Chip label="Small" selected={size === "sm"} onPress={() => onSize("sm")} />
+          <Chip label="Medium" selected={size === "md"} onPress={() => onSize("md")} />
+          <Chip label="Large" selected={size === "lg"} onPress={() => onSize("lg")} />
+        </View>
+      </View>
+
+      <View style={{ gap: spacing.sm }}>
+        <Text variant="overline" tone="muted">
+          ORDER
+        </Text>
+        <View style={{ flexDirection: "row", gap: spacing.sm }}>
+          <Chip
+            label="Newest first"
+            selected={order === "newest"}
+            onPress={() => onOrder("newest")}
+          />
+          <Chip
+            label="Oldest first"
+            selected={order === "oldest"}
+            onPress={() => onOrder("oldest")}
+          />
+        </View>
       </View>
     </Sheet>
   );

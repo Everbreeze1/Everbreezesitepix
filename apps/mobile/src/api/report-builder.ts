@@ -1,9 +1,18 @@
 import { AI_TIMEOUT_MS } from "@everlumen/api-client";
 import {
+  buildTaskReportSections,
   getReportStarter,
+  indexTaskPhotoItems,
+  isMissingTaskPhotoItems,
   parseReportTemplateStructure,
   REPORT_STARTERS,
+  TASK_PHOTO_ITEM_COLUMNS,
+  TASK_PHOTO_ITEMS_TABLE,
+  taskPhotoProgress,
   type ReportStarter,
+  type TaskForReport,
+  type TaskPhotoItem,
+  type TaskPhotoStateForReport,
 } from "@everlumen/shared";
 import { api } from "@/lib/api";
 import { signPhotoUrls, type PhotoListItem } from "./photos";
@@ -145,6 +154,98 @@ export async function patchReportSection(
 export async function deleteReportSection(id: string): Promise<void> {
   const { error } = await supabase.from("project_report_sections").delete().eq("id", id);
   if (error) throw new Error(error.message);
+}
+
+/* ------------------------------------------------------ work from tasks ---- */
+
+/** A task that can go into a report: it carries photos, and how far along they are. */
+export type ReportableTask = TaskForReport & { progressLabel: string };
+
+export type ReportableTasks = {
+  tasks: ReportableTask[];
+  /**
+   * Each task's per-photo state (done or open, and the note), for the
+   * captions. A plain object rather than a Map: query results are persisted
+   * as JSON, and a Map comes back from that as an empty object.
+   */
+  states: Record<string, TaskPhotoStateForReport[]>;
+};
+
+/**
+ * The job's tasks that carry photos, for the web's "Add work from tasks".
+ *
+ * Only tasks with photos: a section with a heading and no evidence under it
+ * is a line the reader has to take on faith. The per-photo items are allowed
+ * to be missing on an older database, as on the web, which leaves every
+ * photo captioned with the task's standing instead of its note.
+ */
+export async function listReportableTasks(projectId: string): Promise<ReportableTasks> {
+  const { data, error } = await supabase
+    .from("tasks")
+    .select("id, title, description, status, photo_ids, due_date, created_at")
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  const rows = ((data as unknown as TaskForReport[] | null) ?? []).filter(
+    (task) => (task.photo_ids?.length ?? 0) > 0,
+  );
+
+  let items = new Map<string, Map<string, TaskPhotoItem>>();
+  if (rows.length > 0) {
+    const { data: itemRows, error: itemError } = await supabase
+      .from(TASK_PHOTO_ITEMS_TABLE as never)
+      .select(TASK_PHOTO_ITEM_COLUMNS)
+      .in(
+        "task_id",
+        rows.map((task) => task.id),
+      );
+    if (itemError && !isMissingTaskPhotoItems(itemError)) throw new Error(itemError.message);
+    if (!itemError) items = indexTaskPhotoItems((itemRows as unknown as TaskPhotoItem[]) ?? []);
+  }
+
+  const states: Record<string, TaskPhotoStateForReport[]> = {};
+  items.forEach((byPhoto, taskId) => {
+    states[taskId] = [...byPhoto.values()].map((item) => ({
+      photo_id: item.photo_id,
+      status: item.status,
+      note: item.note,
+    }));
+  });
+
+  return {
+    tasks: rows.map((task) => ({
+      ...task,
+      progressLabel: taskPhotoProgress(task.photo_ids, items.get(task.id) ?? null).shortLabel,
+    })),
+    states,
+  };
+}
+
+/**
+ * Add one section per chosen task, after the report's existing sections.
+ * Each photo is captioned with what was done to it.
+ */
+export async function addTaskSections(args: {
+  reportId: string;
+  afterPosition: number;
+  tasks: TaskForReport[];
+  states: Record<string, TaskPhotoStateForReport[]>;
+  includeOutstanding: boolean;
+}): Promise<number> {
+  const built = buildTaskReportSections(args.tasks, new Map(Object.entries(args.states)), {
+    doneOnly: !args.includeOutstanding,
+  });
+  if (built.length === 0) return 0;
+  const rows = built.map((section, index) => ({
+    report_id: args.reportId,
+    position: args.afterPosition + 1 + index,
+    title: section.title,
+    body: section.body,
+    photos: section.photos,
+  }));
+  const { error } = await supabase.from("project_report_sections").insert(rows as never);
+  if (error) throw new Error(error.message);
+  return built.length;
 }
 
 /** Write every position; throws if any write failed so the screen can roll back. */

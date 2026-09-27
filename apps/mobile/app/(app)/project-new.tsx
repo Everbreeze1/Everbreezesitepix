@@ -1,25 +1,50 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
   useWindowDimensions,
   View,
 } from "react-native";
-import { router, Stack } from "expo-router";
+import { router, Stack, useLocalSearchParams } from "expo-router";
 import * as Location from "expo-location";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { applyBlueprint, listBlueprints } from "@/api/blueprints";
+import {
+  failureLines,
+  filterBlueprints,
+  provenanceWarning,
+  sortedBlueprints,
+} from "@/api/blueprints-view";
 import { createProject, geocodeAddress } from "@/api/projects";
 import type { Coord } from "@/api/map-view";
 import { SiteLocationMap } from "@/components/SiteLocationMap";
-import { spacing, useTheme } from "@/theme";
-import { LocateFixed, MapPin, Search, TriangleAlert, User } from "@/ui/icons";
+import { radius, spacing, useTheme } from "@/theme";
+import {
+  Check,
+  ChevronDown,
+  ChevronUp,
+  FileText,
+  LayoutTemplate,
+  LocateFixed,
+  MapPin,
+  Search,
+  Star,
+  TriangleAlert,
+  User,
+} from "@/ui/icons";
 import {
   Button,
   Card,
+  EmptyState,
   Field,
   Icon,
+  SearchField,
   SectionHeader,
+  Sheet,
+  SkeletonList,
   Text,
   type IconTone,
   type LucideIcon,
@@ -80,11 +105,34 @@ export default function NewProjectScreen() {
   const [state, setState] = useState("");
   const [zip, setZip] = useState("");
   const [clientName, setClientName] = useState("");
+  /*
+   * The web form's collapsed Job details, and its blueprint: step one there,
+   * a row here, because a phone form reads top to bottom and a technician on
+   * a driveway should not have to page through a chooser to start a job.
+   * `?blueprint=` preselects one, as the web's "New project from this" does.
+   */
+  const params = useLocalSearchParams<{ blueprint?: string }>();
+  const [clientContact, setClientContact] = useState("");
+  const [projectNumber, setProjectNumber] = useState("");
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [blueprintId, setBlueprintId] = useState<string | null>(params.blueprint ?? null);
+  const [blueprintOpen, setBlueprintOpen] = useState(false);
+  const [blueprintSearch, setBlueprintSearch] = useState("");
   const [coords, setCoords] = useState<Coord | null>(null);
   const [phase, setPhase] = useState<LocationPhase>("locating");
   const [permitted, setPermitted] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const blueprints = useQuery({
+    queryKey: ["blueprints"],
+    queryFn: listBlueprints,
+    staleTime: 5 * 60 * 1000,
+  });
+  const chosenBlueprint = (blueprints.data ?? []).find((option) => option.id === blueprintId);
+  const blueprintOptions = sortedBlueprints(
+    filterBlueprints(blueprints.data ?? [], blueprintSearch),
+  );
 
   /*
    * The address fields the crew has typed into. A moved pin refills every other
@@ -257,16 +305,50 @@ export default function NewProjectScreen() {
       // The pin, wherever it was dragged to, is the answer when there is one.
       if (!pin && addressQuery) pin = await geocodeAddress(addressQuery);
 
+      const finalName = name.trim() || suggestedName;
       const project = await createProject({
-        name: name.trim() || suggestedName,
+        name: finalName,
         street,
         city,
         state,
         zip,
         clientName,
+        clientContact,
+        projectNumber,
         latitude: pin?.latitude ?? null,
         longitude: pin?.longitude ?? null,
       });
+
+      /*
+       * The blueprint lands after the project exists, as on the web, and a
+       * failure here does not undo the job: the crew has somewhere to put
+       * photos either way. A partial apply comes back as a list rather than a
+       * throw, so it is read and said rather than swallowed.
+       */
+      if (blueprintId) {
+        try {
+          const applied = await applyBlueprint({
+            blueprintId,
+            projectId: project.id,
+            projectName: finalName || "New project",
+            projectAddress: addressLine,
+          });
+          const problems = [...failureLines(applied), provenanceWarning(applied)].filter(
+            (line): line is string => Boolean(line),
+          );
+          if (problems.length > 0) {
+            Alert.alert(
+              "Project created, but not all of the blueprint applied",
+              problems.join("\n"),
+            );
+          }
+        } catch (e) {
+          Alert.alert(
+            "Project created, but the blueprint could not be applied",
+            e instanceof Error ? e.message : "Apply it from the project's Details tab.",
+          );
+        }
+      }
 
       await queryClient.invalidateQueries({ queryKey: ["projects"] });
       router.replace(`/project/${project.id}`);
@@ -444,14 +526,102 @@ export default function NewProjectScreen() {
         accessibilityHint="Moves the pin to the address you typed"
       />
 
-      <SectionHeader title="Optional" />
-      <Field
-        label="Project name"
-        value={name}
-        onChangeText={setName}
-        autoCapitalize="words"
-        placeholder={suggestedName || "Named from the date if you leave this blank"}
-      />
+      {/*
+        Collapsed, as on the web: a form that asks for six things when it needs
+        one is why nobody fills any of them in.
+      */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded: detailsOpen }}
+        accessibilityLabel="Job details"
+        accessibilityHint="Project name, contact and job number. All optional."
+        onPress={() => setDetailsOpen((open) => !open)}
+        style={({ pressed }) => ({
+          flexDirection: "row",
+          alignItems: "center",
+          gap: spacing.md,
+          padding: spacing.md,
+          marginTop: spacing.sm,
+          borderRadius: radius.lg,
+          borderWidth: 1,
+          borderColor: theme.colors.border,
+          backgroundColor: pressed ? theme.colors.secondary : theme.colors.card,
+        })}
+      >
+        <View style={{ flex: 1 }}>
+          <Text variant="bodyStrong">Job details</Text>
+          <Text variant="caption" tone="muted">
+            Project name, contact, job number. All optional.
+          </Text>
+        </View>
+        <Icon icon={detailsOpen ? ChevronUp : ChevronDown} size="md" tone="muted" />
+      </Pressable>
+      {detailsOpen ? (
+        <>
+          <Field
+            label="Project name"
+            value={name}
+            onChangeText={setName}
+            autoCapitalize="words"
+            placeholder={suggestedName || "Named from the date if you leave this blank"}
+          />
+          <Field
+            label="Client contact"
+            value={clientContact}
+            onChangeText={setClientContact}
+            autoCapitalize="none"
+            placeholder="Email or phone"
+          />
+          <Field
+            label="Project number"
+            value={projectNumber}
+            onChangeText={setProjectNumber}
+            autoCapitalize="characters"
+            placeholder="e.g. PRJ-00421"
+          />
+        </>
+      ) : null}
+
+      {/*
+        The blueprint as a decision and a way to change it: what this kind of
+        job needs (checklists, documents, reports, labels) created with it.
+      */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={
+          chosenBlueprint ? `Blueprint: ${chosenBlueprint.name}. Change` : "Choose a blueprint"
+        }
+        onPress={() => setBlueprintOpen(true)}
+        style={({ pressed }) => ({
+          flexDirection: "row",
+          alignItems: "center",
+          gap: spacing.md,
+          padding: spacing.md,
+          borderRadius: radius.lg,
+          borderWidth: 1,
+          borderColor: theme.colors.border,
+          backgroundColor: pressed ? theme.colors.secondary : theme.colors.card,
+        })}
+      >
+        <Icon
+          icon={chosenBlueprint ? LayoutTemplate : FileText}
+          size="md"
+          tone={chosenBlueprint ? "primary" : "muted"}
+        />
+        <View style={{ flex: 1 }}>
+          <Text variant="bodyStrong" numberOfLines={1}>
+            {chosenBlueprint ? chosenBlueprint.name : "Starting blank"}
+          </Text>
+          <Text variant="caption" tone="muted" numberOfLines={2}>
+            {chosenBlueprint
+              ? "Its checklists, documents, reports and labels are created with the job"
+              : "No checklists, documents or workflows will be added"}
+          </Text>
+        </View>
+        <Text variant="bodyStrong" tone="primary">
+          {chosenBlueprint ? "Change" : "Choose"}
+        </Text>
+      </Pressable>
 
       {error ? (
         <Text variant="caption" tone="destructive">
@@ -491,6 +661,65 @@ export default function NewProjectScreen() {
       style={{ flex: 1, backgroundColor: theme.colors.background }}
     >
       <Stack.Screen options={{ title: "New project" }} />
+      <Sheet
+        visible={blueprintOpen}
+        onClose={() => setBlueprintOpen(false)}
+        title="Start from a blueprint"
+        subtitle="Creates the checklists, documents, reports and labels for this kind of job."
+      >
+        {(blueprints.data ?? []).length > 5 ? (
+          <View style={{ marginHorizontal: -spacing.lg }}>
+            <SearchField
+              value={blueprintSearch}
+              onChangeText={setBlueprintSearch}
+              placeholder="Search blueprints"
+              accessibilityLabel="Search blueprints"
+            />
+          </View>
+        ) : null}
+        <BlueprintChoice
+          title="Start blank"
+          detail="No checklists, documents or workflows will be added"
+          chosen={!blueprintId}
+          onPress={() => {
+            setBlueprintId(null);
+            setBlueprintOpen(false);
+          }}
+        />
+        {blueprints.isLoading ? (
+          <SkeletonList rows={3} />
+        ) : blueprints.error ? (
+          <Text variant="caption" tone="muted">
+            {blueprints.error instanceof Error
+              ? blueprints.error.message
+              : "Could not load your blueprints."}
+          </Text>
+        ) : blueprintOptions.length === 0 ? (
+          <EmptyState
+            icon={LayoutTemplate}
+            title={blueprintSearch ? "Nothing matches" : "No blueprints yet"}
+            body={
+              blueprintSearch
+                ? "Try a different word."
+                : "Blueprints are set up on the web, under Blueprints."
+            }
+          />
+        ) : (
+          blueprintOptions.map((option) => (
+            <BlueprintChoice
+              key={option.id}
+              title={option.name}
+              detail={[option.category, ...option.labels].filter(Boolean).join(" · ") || null}
+              starred={option.isDefault}
+              chosen={option.id === blueprintId}
+              onPress={() => {
+                setBlueprintId(option.id);
+                setBlueprintOpen(false);
+              }}
+            />
+          ))
+        )}
+      </Sheet>
       {sideBySide ? (
         /*
          * On a tablet the map gets the left half at full height and the form
@@ -514,5 +743,53 @@ export default function NewProjectScreen() {
         </ScrollView>
       )}
     </KeyboardAvoidingView>
+  );
+}
+
+/** One row of the blueprint chooser, ticked when it is the current choice. */
+function BlueprintChoice({
+  title,
+  detail,
+  chosen,
+  starred = false,
+  onPress,
+}: {
+  title: string;
+  detail: string | null;
+  chosen: boolean;
+  starred?: boolean;
+  onPress: () => void;
+}) {
+  const theme = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected: chosen }}
+      accessibilityLabel={title}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        flexDirection: "row",
+        alignItems: "center",
+        gap: spacing.md,
+        padding: spacing.md,
+        borderRadius: radius.md,
+        borderWidth: chosen ? 2 : 1,
+        borderColor: chosen ? theme.colors.primary : theme.colors.border,
+        backgroundColor: pressed ? theme.colors.secondary : theme.colors.card,
+      })}
+    >
+      {starred ? <Icon icon={Star} size="sm" tone="safety" /> : null}
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text variant="bodyStrong" numberOfLines={1}>
+          {title}
+        </Text>
+        {detail ? (
+          <Text variant="caption" tone="muted" numberOfLines={2}>
+            {detail}
+          </Text>
+        ) : null}
+      </View>
+      {chosen ? <Icon icon={Check} size="md" tone="primary" /> : null}
+    </Pressable>
   );
 }

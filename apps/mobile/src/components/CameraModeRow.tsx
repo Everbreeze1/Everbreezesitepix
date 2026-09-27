@@ -37,7 +37,7 @@ export const CAMERA_MODES: CameraModeOption[] = [
   { id: "measure", label: "Measure", hint: "Take a photo and mark measurements on it" },
   { id: "untagged", label: "Untagged", hint: "Photos with no phase and no tags" },
   { id: "scan", label: "Scan", hint: "High-contrast document capture" },
-  { id: "video", label: "Video", hint: "Record video with the walkthrough recorder" },
+  { id: "video", label: "Video", hint: "Record a site video for this project" },
   { id: "walkthrough", label: "Walkthrough", hint: "Open the walkthrough recorder" },
 ];
 

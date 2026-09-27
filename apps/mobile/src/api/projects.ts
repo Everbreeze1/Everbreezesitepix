@@ -87,6 +87,9 @@ export type NewProjectInput = {
   clientName: string;
   latitude: number | null;
   longitude: number | null;
+  /** The web form's collapsed Job details: email or phone, and a job number. */
+  clientContact?: string;
+  projectNumber?: string;
 };
 
 /**
@@ -138,22 +141,42 @@ export async function createProject(input: NewProjectInput): Promise<{ id: strin
     new Date(),
   );
 
-  const { data, error } = await supabase
-    .from("projects")
-    .insert({
-      created_by: userId,
-      name,
-      street: input.street.trim() || null,
-      city: input.city.trim() || null,
-      state: input.state.trim() || null,
-      zip: input.zip.trim() || null,
-      latitude: input.latitude,
-      longitude: input.longitude,
-      status: "active",
-      client_name: input.clientName.trim() || null,
-    } as never)
-    .select("id")
-    .single();
+  const row: Record<string, unknown> = {
+    created_by: userId,
+    name,
+    street: input.street.trim() || null,
+    city: input.city.trim() || null,
+    state: input.state.trim() || null,
+    zip: input.zip.trim() || null,
+    latitude: input.latitude,
+    longitude: input.longitude,
+    status: "active",
+    client_name: input.clientName.trim() || null,
+  };
+  const contact = input.clientContact?.trim();
+  const number = input.projectNumber?.trim();
+  if (contact) row.client_contact = contact;
+  if (number) row.project_number = number;
+
+  const insert = (values: Record<string, unknown>) =>
+    supabase
+      .from("projects")
+      .insert(values as never)
+      .select("id")
+      .single();
+
+  let { data, error } = await insert(row);
+  /*
+   * Retried without the two job-detail columns when this database predates
+   * them, as the web's `writeWithNewColumns` does: creating a job must never
+   * fail over optional fields somebody may not even have filled in.
+   */
+  if (error && (contact || number) && /client_contact|project_number/.test(error.message)) {
+    const rest = { ...row };
+    delete rest.client_contact;
+    delete rest.project_number;
+    ({ data, error } = await insert(rest));
+  }
 
   if (error || !data) throw new Error(error?.message ?? "Could not create the project");
   return { id: (data as { id: string }).id };

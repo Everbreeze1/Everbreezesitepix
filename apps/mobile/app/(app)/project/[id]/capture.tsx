@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -29,6 +29,7 @@ import { LevelIndicator } from "@/components/LevelIndicator";
 import { ShotAnnotator } from "@/components/ShotAnnotator";
 import { ShotEditor, type ShotPatch } from "@/components/ShotEditor";
 import { TagPickerSheet } from "@/components/TagPickerSheet";
+import { useTagLibrary } from "@/components/photo-viewer/TagPill";
 import { formatAddress, getProject, projectCoords } from "@/api/projects";
 import { projectDisplayName } from "@everlumen/shared";
 import { useAuth } from "@/lib/auth";
@@ -158,7 +159,7 @@ export default function CaptureScreen() {
    * The tags this project's photos already use, for the tag picker. The same
    * list web's camera offers (every tag on the project's photos).
    */
-  const { data: existingTags = [] } = useQuery({
+  const { data: projectTags = [] } = useQuery({
     queryKey: ["capture-tags", projectId],
     queryFn: async () => {
       const photos = await listProjectPhotos(projectId!, 200);
@@ -167,6 +168,19 @@ export default function CaptureScreen() {
     enabled: Boolean(projectId),
     staleTime: 5 * 60_000,
   });
+  /*
+   * Plus the workspace's tag library, which is what web's "Tag this photo"
+   * sheet lists: a crew's standard tags (Condenser, Furnace Nameplate, Gas
+   * Line) have to be pickable on a job that has not used them yet.
+   */
+  const tagLibrary = useTagLibrary();
+  const existingTags = useMemo(
+    () =>
+      Array.from(new Set([...projectTags, ...(tagLibrary.data ?? []).map((tag) => tag.name)])).sort(
+        (a, b) => a.localeCompare(b),
+      ),
+    [projectTags, tagLibrary.data],
+  );
 
   /*
    * Measure is Pro/Team on web (`isPro`: an active pro or team plan). Same rule
@@ -227,9 +241,10 @@ export default function CaptureScreen() {
   /**
    * Switch camera mode from the row under the shutter.
    *
-   * Mirrors web: Video and Walkthrough hand off to the walkthrough recorder
-   * rather than becoming a mode here (the photo queue has no video path, and
-   * the recorder already uploads video with photos pinned to it). Leaving
+   * Mirrors web: Video and Walkthrough hand off to a recorder rather than
+   * becoming a mode here, since the photo queue has no video path. Video is a
+   * plain site video saved to the project's videos, as web's "Record a site
+   * video"; Walkthrough is the narrated walk with photos pinned to it. Leaving
    * Before/After clears the phase, as web clears its tag, so a Photo or Scan
    * run never inherits a pill picked for a different job.
    */
@@ -240,7 +255,10 @@ export default function CaptureScreen() {
         setError("Save or review this batch first, then switch to video.");
         return;
       }
-      router.push(`/project/${projectId}/walkthrough-record`);
+      router.push({
+        pathname: "/project/[id]/walkthrough-record",
+        params: next === "video" ? { id: projectId, kind: "video" } : { id: projectId },
+      });
       return;
     }
     if (next === "measure" && !canMeasure) return;
@@ -1123,6 +1141,29 @@ export default function CaptureScreen() {
           >
             <Text style={styles.toolChipText}>QUICK</Text>
           </Pressable>
+          {/*
+            Web's Tags button, reachable before the shutter. Tags picked here
+            go on every shot of the batch (and on each quick capture), so a
+            run of "Condenser" shots is tagged once rather than per photo.
+          */}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={
+              splitTags(tagText).length > 0
+                ? `Tags, ${splitTags(tagText).length} picked`
+                : "Tag these photos"
+            }
+            onPress={() => setBatchTagsOpen(true)}
+            hitSlop={4}
+            style={[
+              styles.toolChip,
+              splitTags(tagText).length > 0 && { backgroundColor: theme.colors.primary },
+            ]}
+          >
+            <Text style={styles.toolChipText}>
+              {splitTags(tagText).length > 0 ? `TAGS ${splitTags(tagText).length}` : "TAGS"}
+            </Text>
+          </Pressable>
           <View style={{ flex: 1 }} />
           <LevelIndicator size={44} />
         </View>
@@ -1279,6 +1320,16 @@ export default function CaptureScreen() {
           />
         </View>
       )}
+
+      <TagPickerSheet
+        visible={batchTagsOpen}
+        title="Tag this batch"
+        existing={existingTags}
+        selected={splitTags(tagText)}
+        userId={user?.id ?? null}
+        onChange={(next) => setTagText(next.join(", "))}
+        onClose={() => setBatchTagsOpen(false)}
+      />
 
       {measuringShot ? (
         <ShotAnnotator

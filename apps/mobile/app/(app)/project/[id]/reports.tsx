@@ -6,7 +6,7 @@ import { projectDisplayName, relativeTime, titleWithinProject } from "@everlumen
 import { getProject } from "@/api/projects";
 import { deleteReport, listProjectReports } from "@/api/reports";
 import { listProjectReportPages } from "@/api/report-index";
-import { builtReportStatus, reportIndexSubtitle } from "@/api/report-index-view";
+import { builtReportStatus, reportExcerpt, reportIndexSubtitle } from "@/api/report-index-view";
 import {
   ambiguousReportIds,
   isReportShared,
@@ -168,6 +168,7 @@ export default function ProjectReportsScreen() {
                   : relativeTime(report.updated_at)
               }`}
               status={builtReportStatus(report)}
+              excerpt={reportExcerpt(report.summary)}
               accessory={
                 <IconButton
                   icon={Trash2}

@@ -216,6 +216,7 @@ export default function ReportsScreen() {
                           title={item.title}
                           subtitle={reportIndexSubtitle(item)}
                           status={item.status}
+                          excerpt={item.excerpt}
                           onPress={() =>
                             item.kind === "page"
                               ? router.push({

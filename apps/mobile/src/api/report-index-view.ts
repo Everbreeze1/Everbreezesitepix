@@ -24,7 +24,35 @@ export type ReportIndexItem = {
   title: string;
   updatedAt: string;
   status: ReportIndexStatus;
+  /** The write-up as one plain line for the card, or null. Built reports only. */
+  excerpt?: string | null;
 };
+
+/**
+ * A write-up as plain text for a list row.
+ *
+ * Summaries can carry markup the model or the editor left in: HTML comments
+ * such as `<!-- wid:90cce78e-... -->` that mark which walkthrough wrote them,
+ * and tags. The web Reports list printed those raw; this strips them, and
+ * decodes the few entities an editor writes, so the row reads as a sentence.
+ */
+export function reportExcerpt(summary: string | null | undefined, max = 180): string | null {
+  if (!summary) return null;
+  const text = summary
+    .replace(/<!--[\s\S]*?(-->|$)/g, " ")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/[#*_`>]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!text) return null;
+  return text.length > max ? `${text.slice(0, max - 1).trimEnd()}\u2026` : text;
+}
 
 /** A `project_reports` row, as much of it as the index needs. */
 export type BuiltReportInput = {
@@ -78,6 +106,7 @@ export function mergeReportIndex(
       title: report.title,
       updatedAt: report.updated_at,
       status: builtReportStatus(report),
+      excerpt: reportExcerpt(report.summary),
     })),
     ...pages.map((page) => ({
       kind: "page" as const,

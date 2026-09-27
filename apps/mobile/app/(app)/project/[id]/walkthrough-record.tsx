@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import {
   CameraView,
@@ -10,6 +11,8 @@ import {
 import * as Location from "expo-location";
 import { useQuery } from "@tanstack/react-query";
 import { getProject, projectCoords } from "@/api/projects";
+import { saveSiteVideo, videoMaxSeconds } from "@/api/project-videos";
+import { getMyTeam } from "@/api/team";
 import type { CapturedAsset } from "@/api/photos";
 import {
   createWalkthroughSession,
@@ -21,7 +24,7 @@ import {
   walkthroughVideoPath,
 } from "@/api/walkthroughs";
 import { useAuth } from "@/lib/auth";
-import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
+import { HIT_TARGET, radius, spacing, typography, useRightRail, useTheme } from "@/theme";
 
 /**
  * Cap on one recording.
@@ -38,8 +41,16 @@ type Stage = "idle" | "recording" | "saving";
 type PendingShot = CapturedAsset & { offsetSeconds: number };
 
 export default function WalkthroughRecordScreen() {
-  const { id: projectId } = useLocalSearchParams<{ id: string }>();
+  /*
+   * `kind=video` is the camera's Video mode: a plain site video saved to the
+   * project's videos, as web's "Record a site video". It records the same
+   * way; it just has no photo snapping and no walkthrough session behind it.
+   */
+  const { id: projectId, kind } = useLocalSearchParams<{ id: string; kind?: string }>();
+  const siteVideo = kind === "video";
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
+  const rail = useRightRail();
   const { user } = useAuth();
 
   const [cameraPermission, requestCamera] = useCameraPermissions();
@@ -55,6 +66,20 @@ export default function WalkthroughRecordScreen() {
   const [deviceCoords, setDeviceCoords] = useState<Coordinates | null>(null);
 
   const startedAt = useRef<number | null>(null);
+  /*
+   * The snaps as they are taken. `start` awaits the whole recording, so the
+   * `shots` it closed over is the empty list from before the first snap, and
+   * saving from that dropped every photo taken during the walk.
+   */
+  const shotsRef = useRef<PendingShot[]>([]);
+
+  /* The web recorder's per-plan ceiling on one take. */
+  const { data: team } = useQuery({
+    queryKey: ["my-team"],
+    queryFn: getMyTeam,
+    staleTime: 10 * 60_000,
+  });
+  const maxSeconds = siteVideo ? videoMaxSeconds(team?.plan) : MAX_DURATION_SECONDS;
 
   const { data: project } = useQuery({
     queryKey: ["project", projectId],
@@ -99,8 +124,8 @@ export default function WalkthroughRecordScreen() {
     try {
       const picture = await cameraRef.current.takePictureAsync({ exif: true, quality: 1 });
       if (picture) {
-        setShots((prev) => [
-          ...prev,
+        const next = [
+          ...shotsRef.current,
           {
             uri: picture.uri,
             width: picture.width,
@@ -108,7 +133,9 @@ export default function WalkthroughRecordScreen() {
             exif: picture.exif ?? null,
             offsetSeconds,
           },
-        ]);
+        ];
+        shotsRef.current = next;
+        setShots(next);
       }
     } catch {
       // A failed snap must not end the recording. The walk continues.
@@ -130,6 +157,7 @@ export default function WalkthroughRecordScreen() {
 
     startedAt.current = Date.now();
     setElapsed(0);
+    shotsRef.current = [];
     setShots([]);
     setStage("recording");
 
@@ -140,7 +168,7 @@ export default function WalkthroughRecordScreen() {
        * button resolves it.
        */
       const recording = await cameraRef.current?.recordAsync({
-        maxDuration: MAX_DURATION_SECONDS,
+        maxDuration: maxSeconds,
       });
       const durationSeconds = startedAt.current ? (Date.now() - startedAt.current) / 1000 : elapsed;
 
@@ -176,6 +204,27 @@ export default function WalkthroughRecordScreen() {
     if (!projectId || !user) return;
     setStage("saving");
 
+    if (siteVideo) {
+      try {
+        setStatus("Uploading video 0%");
+        await saveSiteVideo({
+          userId: user.id,
+          projectId,
+          localUri: videoUri,
+          durationSeconds,
+          onProgress: (percent) => setStatus(`Uploading video ${percent}%`),
+        });
+        router.back();
+        Alert.alert("Video saved", "It is on the project's Photos tab, under site videos.");
+      } catch (e) {
+        setStage("idle");
+        setStatus(null);
+        setError(e instanceof Error ? e.message : "Could not save the video");
+      }
+      return;
+    }
+
+    const shots = shotsRef.current;
     try {
       setStatus("Creating session");
       const title = `Walkthrough ${new Date().toLocaleString()}`;
@@ -267,7 +316,7 @@ export default function WalkthroughRecordScreen() {
       <View
         style={[styles.centered, { backgroundColor: theme.colors.background, gap: spacing.md }]}
       >
-        <Stack.Screen options={{ title: "Saving walkthrough" }} />
+        <Stack.Screen options={{ title: siteVideo ? "Saving video" : "Saving walkthrough" }} />
         <ActivityIndicator size="large" color={theme.colors.primary} />
         <Text style={[typography.body, { color: theme.colors.foreground }]}>
           {status ?? "Saving"}
@@ -295,7 +344,7 @@ export default function WalkthroughRecordScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing={facing} mode="video" />
 
-      <View style={styles.topBar}>
+      <View style={[styles.topBar, { top: insets.top + spacing.sm, right: rail ? 120 : 0 }]}>
         <Pressable
           accessibilityRole="button"
           style={styles.chip}
@@ -311,6 +360,13 @@ export default function WalkthroughRecordScreen() {
             </Text>
           </View>
         ) : null}
+        {siteVideo && stage === "idle" ? (
+          <View style={styles.chip}>
+            <Text style={styles.chipText}>
+              Site video, up to {Math.round(maxSeconds / 60)} minutes
+            </Text>
+          </View>
+        ) : null}
         {shots.length > 0 ? (
           <View style={styles.chip}>
             <Text style={styles.chipText}>{shots.length} photos</Text>
@@ -320,27 +376,42 @@ export default function WalkthroughRecordScreen() {
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <View style={styles.bottomBar}>
-        <Pressable
-          accessibilityRole="button"
-          /*
-            On the same dark pill the other controls sit on.
+      {/*
+        On a tablet or in landscape the controls stand down the right edge,
+        where the right thumb rests while both hands hold the device.
+      */}
+      <View
+        style={
+          rail
+            ? [styles.sideBar, { right: insets.right + spacing.lg }]
+            : [styles.bottomBar, { bottom: insets.bottom + 40 }]
+        }
+      >
+        {/* A site video has no stills, so the snap control gives way to a spacer. */}
+        {siteVideo ? (
+          <View style={styles.sideAction} />
+        ) : (
+          <Pressable
+            accessibilityRole="button"
+            /*
+              On the same dark pill the other controls sit on.
     
-            This was white text straight onto the camera preview while Close,
-            the timer and the photo count all had `chip` behind them. Against a
-            bright subject - a sunlit wall, a white ceiling, a snow-covered
-            roof, all of them ordinary on a jobsite - white on the scene is
-            invisible, and this is the control that captures the still somebody
-            walked over to take.
-          */
-          style={[styles.chip, styles.sideAction]}
-          disabled={stage !== "recording"}
-          onPress={() => void snap()}
-        >
-          <Text style={[styles.chipText, stage !== "recording" && { opacity: 0.4 }]}>
-            Snap photo
-          </Text>
-        </Pressable>
+              This was white text straight onto the camera preview while Close,
+              the timer and the photo count all had `chip` behind them. Against a
+              bright subject - a sunlit wall, a white ceiling, a snow-covered
+              roof, all of them ordinary on a jobsite - white on the scene is
+              invisible, and this is the control that captures the still somebody
+              walked over to take.
+            */
+            style={[styles.chip, styles.sideAction]}
+            disabled={stage !== "recording"}
+            onPress={() => void snap()}
+          >
+            <Text style={[styles.chipText, stage !== "recording" && { opacity: 0.4 }]}>
+              Snap photo
+            </Text>
+          </Pressable>
+        )}
 
         {stage === "recording" ? (
           <Pressable
@@ -403,9 +474,17 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     overflow: "hidden",
   },
+  sideBar: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    flexDirection: "column-reverse",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.xl,
+  },
   bottomBar: {
     position: "absolute",
-    bottom: 40,
     left: 0,
     right: 0,
     flexDirection: "row",

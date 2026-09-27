@@ -54,12 +54,15 @@ export function GenerateReportSheet({
   projectId,
   projectName,
   scope = "reports",
+  title = "New report",
   onClose,
   onOpenBuiltReport,
 }: {
   projectId: string;
   projectName: string;
   scope?: "reports" | "all";
+  /** "Create" when it is the project header's menu, which also makes documents. */
+  title?: string;
   onClose: () => void;
   /** Where a hand-built report opens. Defaults to its own screen. */
   onOpenBuiltReport?: (report: BuiltReport) => void;
@@ -206,7 +209,7 @@ export function GenerateReportSheet({
       <Sheet
         visible={step === "menu"}
         onClose={onClose}
-        title="New report"
+        title={title}
         subtitle={projectName || undefined}
       >
         <View style={{ gap: spacing.xs }}>

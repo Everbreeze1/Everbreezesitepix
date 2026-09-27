@@ -10,6 +10,51 @@
 export type PhaseFilter = "all" | "before" | "after" | "untagged";
 export type TagLogic = "or" | "and";
 export type MediaFilter = "all" | "photos" | "videos";
+/** The web popover's Photo size: Small, Medium, Large. */
+export type PhotoSize = "sm" | "md" | "lg";
+export type PhotoOrder = "newest" | "oldest";
+
+/**
+ * The phase chips, in the web's words and order.
+ *
+ * "Needs review" is the untagged bucket: a photo nobody has marked before or
+ * after yet. It was "Untagged" here, which read as "has no tags" and sent
+ * people to the tag filter for something the phase chip already did.
+ */
+export const PHASE_FILTER_LABELS: { id: PhaseFilter; label: string }[] = [
+  { id: "all", label: "All captures" },
+  { id: "before", label: "Before work" },
+  { id: "after", label: "After work" },
+  { id: "untagged", label: "Needs review" },
+];
+
+/**
+ * The pill in a tile's corner, as the web grid draws it: Before, After,
+ * Walkthrough for a frame a walk captured, and Needs review for the rest.
+ */
+export function phasePill(phase: string | null): {
+  label: string;
+  tone: "before" | "after" | "walkthrough" | "review";
+} {
+  if (phase === "before") return { label: "Before", tone: "before" };
+  if (phase === "after") return { label: "After", tone: "after" };
+  if (phase === "walkthrough") return { label: "Walkthrough", tone: "walkthrough" };
+  return { label: "Needs review", tone: "review" };
+}
+
+/**
+ * Tiles across for a photo size.
+ *
+ * Medium is the grid every phone has always drawn (three across, more on a
+ * tablet). Small packs a contact sheet for scanning a long job; Large drops to
+ * two across on a phone so a detail can be read without opening the photo.
+ */
+export function photoGridColumns(width: number, size: PhotoSize): number {
+  const w = Math.max(0, width);
+  if (size === "sm") return Math.min(10, Math.max(4, Math.floor(w / 80)));
+  if (size === "lg") return Math.min(6, Math.max(2, Math.floor(w / 170)));
+  return Math.min(8, Math.max(3, Math.floor(w / 105)));
+}
 
 type Filterable = { phase: string | null; tags: string[] | null };
 

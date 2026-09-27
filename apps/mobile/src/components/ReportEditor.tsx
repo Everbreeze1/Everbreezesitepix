@@ -4,6 +4,7 @@ import * as WebBrowser from "expo-web-browser";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   addReportSection,
+  addTaskSections,
   builtReportPdfUrl,
   deleteReportSection,
   getBuiltReport,
@@ -42,9 +43,11 @@ import { radius, spacing, useTheme } from "@/theme";
 import {
   ChevronDown,
   ChevronUp,
+  Copy,
   ExternalLink,
   FileText,
   Images,
+  ListTodo,
   Plus,
   Send,
   Share2,
@@ -72,6 +75,7 @@ import {
 } from "@/ui";
 import { PhotosPerPagePicker, ToggleRow } from "./ReportControls";
 import { ReportPhotoPickerSheet, useReportPhotos } from "./ReportPhotoPickerSheet";
+import { ReportTaskPickerSheet } from "./ReportTaskPickerSheet";
 
 type PickerTarget =
   | { kind: "cover" }
@@ -126,6 +130,7 @@ export function ReportEditor({
   const [seeded, setSeeded] = useState(false);
   const [sectionsSeeded, setSectionsSeeded] = useState(false);
   const [picker, setPicker] = useState<PickerTarget>(null);
+  const [taskPickerOpen, setTaskPickerOpen] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
 
   /*
@@ -216,6 +221,26 @@ export function ReportEditor({
       setSections((rows) => [...rows, section]);
     },
     onError: onError("Could not add a section."),
+  });
+
+  /*
+   * The web's "Add work from tasks": one section per task, after the ones
+   * already here, then the list is read back so the new sections carry ids.
+   */
+  const addTasks = useMutation({
+    mutationFn: async (
+      args: Omit<Parameters<typeof addTaskSections>[0], "reportId" | "afterPosition">,
+    ) => {
+      const afterPosition = sections.reduce((max, s) => Math.max(max, s.position), -1);
+      const added = await addTaskSections({ ...args, reportId, afterPosition });
+      return { added, fresh: await listReportSections(reportId) };
+    },
+    onSuccess: ({ fresh }) => {
+      setFailure(null);
+      setSections(fresh);
+      setTaskPickerOpen(false);
+    },
+    onError: onError("Could not add the task sections."),
   });
 
   const removeSection = useMutation({
@@ -340,6 +365,49 @@ export function ReportEditor({
           </Text>
         ) : null}
 
+        {/*
+          The web editor's top bar: Preview, PDF and Copy link, for the report
+          somebody is about to send. The same actions sit in Share and PDF
+          below, with the switch that turns the link on.
+        */}
+        {shared ? (
+          <ButtonRow>
+            <Button
+              label="Preview"
+              icon={ExternalLink}
+              variant="outline"
+              size="sm"
+              onPress={() => {
+                const url = publicUrl("reports", report.share_token);
+                if (url) void WebBrowser.openBrowserAsync(url);
+                else setFailure("Sharing is not set up for this workspace, so there is no link.");
+              }}
+            />
+            <Button
+              label="PDF"
+              icon={FileText}
+              variant="outline"
+              size="sm"
+              onPress={() => {
+                if (pdfUrl) void WebBrowser.openBrowserAsync(pdfUrl);
+              }}
+            />
+            <Button
+              label="Copy link"
+              icon={Copy}
+              size="sm"
+              onPress={() => {
+                const url = publicUrl("reports", report.share_token);
+                if (!url) {
+                  setFailure("Sharing is not set up for this workspace, so there is no link.");
+                  return;
+                }
+                void openShareSheet(url, report.title);
+              }}
+            />
+          </ButtonRow>
+        ) : null}
+
         <Field
           label="Report title"
           value={title}
@@ -387,8 +455,8 @@ export function ReportEditor({
               <RowDivider />
               <ListRow
                 icon={Send}
-                title="Send the link"
-                subtitle="Opens the share sheet, including Copy"
+                title="Copy or send the link"
+                subtitle="Your customer sees a review button at the bottom of this report"
                 onPress={() => {
                   const url = publicUrl("reports", report.share_token);
                   if (!url) {
@@ -592,6 +660,13 @@ export function ReportEditor({
           disabled={addSection.isPending}
           onPress={() => addSection.mutate()}
         />
+        <Button
+          label="Add work from tasks"
+          icon={ListTodo}
+          variant="outline"
+          fullWidth
+          onPress={() => setTaskPickerOpen(true)}
+        />
 
         <View style={{ height: spacing.lg }} />
         <Button
@@ -603,6 +678,14 @@ export function ReportEditor({
           onPress={confirmDelete}
         />
       </ScrollView>
+
+      <ReportTaskPickerSheet
+        visible={taskPickerOpen}
+        projectId={report.project_id}
+        busy={addTasks.isPending}
+        onClose={() => setTaskPickerOpen(false)}
+        onAdd={(args) => addTasks.mutate(args)}
+      />
 
       <ReportPhotoPickerSheet
         visible={picker !== null}
