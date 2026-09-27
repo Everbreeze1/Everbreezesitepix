@@ -1,16 +1,18 @@
 import { useMemo, useState } from "react";
 import { Pressable, View } from "react-native";
 import { router, Stack } from "expo-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { projectDisplayName } from "@everlumen/shared";
 import { listDocumentTemplates, type DocumentTemplate } from "@/api/pages";
 import type { ProjectListItem } from "@/api/projects";
 import { listAllReports } from "@/api/report-index";
-import { groupReportIndex, reportIndexSubtitle } from "@/api/report-index-view";
-import { createReport } from "@/api/reports";
-import { defaultReportTitle } from "@/api/report-view";
+import { groupReportIndex, reportIndexSubtitle, searchReportIndex } from "@/api/report-index-view";
 import { groupTemplates } from "@/api/template-picker-view";
+import { GenerateReportSheet } from "@/components/GenerateReportSheet";
 import { ReportCard } from "@/components/ReportCard";
+import { ReportEditor } from "@/components/ReportEditor";
 import { ReportProjectPickerSheet } from "@/components/ReportProjectPickerSheet";
+import { ReportsSplitView, useReportsTwoPane } from "@/components/ReportsSplitView";
 import { HIT_TARGET, radius, spacing, useTheme } from "@/theme";
 import { FileText, LayoutTemplate, Plus } from "@/ui/icons";
 import {
@@ -20,7 +22,7 @@ import {
   ListGroup,
   ListRow,
   RowDivider,
-  Screen,
+  SearchField,
   SkeletonList,
   Text,
 } from "@/ui";
@@ -47,10 +49,15 @@ export default function ReportsScreen() {
   const theme = useTheme();
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<Tab>("reports");
-  const [failure, setFailure] = useState<string | null>(null);
+  const twoPane = useReportsTwoPane();
+  const [search, setSearch] = useState("");
   /** What the project picker is choosing a job for. */
   const [picking, setPicking] = useState<"report" | "template" | null>(null);
   const [templateProject, setTemplateProject] = useState<string | null>(null);
+  /** The job the New report menu is open for. */
+  const [generateFor, setGenerateFor] = useState<ProjectListItem | null>(null);
+  /** On a tablet, the built report open beside the list. */
+  const [openReport, setOpenReport] = useState<{ id: string; projectId: string } | null>(null);
 
   const reportsQuery = useQuery({ queryKey: ["all-reports"], queryFn: listAllReports });
   const templatesQuery = useQuery({
@@ -60,37 +67,19 @@ export default function ReportsScreen() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const sections = useMemo(() => groupReportIndex(reportsQuery.data ?? []), [reportsQuery.data]);
+  const sections = useMemo(
+    () => groupReportIndex(searchReportIndex(reportsQuery.data ?? [], search)),
+    [reportsQuery.data, search],
+  );
   const templateGroups = useMemo(
     () => groupTemplates(templatesQuery.data ?? []),
     [templatesQuery.data],
   );
 
-  /*
-   * Created empty and opened straight into the editor, as a project's own
-   * Reports screen does: a crew interrupted halfway through choosing photos
-   * still has the row to come back to.
-   */
-  const create = useMutation({
-    mutationFn: (project: ProjectListItem) =>
-      createReport({
-        projectId: project.id,
-        title: defaultReportTitle(project.name ?? ""),
-        summary: null,
-        photoIds: [],
-      }),
-    onSuccess: (report) => {
-      setFailure(null);
-      void queryClient.invalidateQueries({ queryKey: ["all-reports"] });
-      void queryClient.invalidateQueries({ queryKey: ["project-reports", report.project_id] });
-      router.push({
-        pathname: "/report/[reportId]",
-        params: { reportId: report.id, projectId: report.project_id },
-      });
-    },
-    onError: (error: unknown) =>
-      setFailure(error instanceof Error ? error.message : "Could not start a report."),
-  });
+  const openBuilt = (reportId: string, projectId: string) => {
+    if (twoPane) setOpenReport({ id: reportId, projectId });
+    else router.push({ pathname: "/report/[reportId]", params: { reportId, projectId } });
+  };
 
   const activeQuery = tab === "reports" ? reportsQuery : templatesQuery;
 
@@ -102,8 +91,7 @@ export default function ReportsScreen() {
           headerRight: () => (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Start a report"
-              disabled={create.isPending}
+              accessibilityLabel="New report"
               onPress={() => setPicking("report")}
               style={({ pressed }) => ({
                 width: 40,
@@ -112,7 +100,7 @@ export default function ReportsScreen() {
                 alignItems: "center",
                 justifyContent: "center",
                 backgroundColor: theme.colors.accent,
-                opacity: pressed || create.isPending ? 0.6 : 1,
+                opacity: pressed ? 0.6 : 1,
               })}
             >
               <Icon icon={Plus} size="md" tone="primary" />
@@ -162,113 +150,134 @@ export default function ReportsScreen() {
         })}
       </View>
 
-      <Screen
-        scroll
-        padded={false}
+      <ReportsSplitView
         refreshing={activeQuery.isRefetching}
         onRefresh={() => void activeQuery.refetch()}
-        bottomInset={spacing.xxl}
-      >
-        {activeQuery.isLoading ? (
-          <SkeletonList rows={4} />
-        ) : activeQuery.error ? (
-          <ErrorState
-            title={tab === "reports" ? "Could not load reports" : "Could not load templates"}
-            message={activeQuery.error instanceof Error ? activeQuery.error.message : undefined}
-            onRetry={() => void activeQuery.refetch()}
-          />
-        ) : (
-          <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.lg, gap: spacing.md }}>
-            {failure ? (
-              <Text variant="caption" tone="destructive">
-                {failure}
-              </Text>
-            ) : null}
+        detail={
+          openReport ? (
+            <ReportEditor
+              key={openReport.id}
+              reportId={openReport.id}
+              projectId={openReport.projectId}
+              onDeleted={() => setOpenReport(null)}
+            />
+          ) : null
+        }
+        list={
+          activeQuery.isLoading ? (
+            <SkeletonList rows={4} />
+          ) : activeQuery.error ? (
+            <ErrorState
+              title={tab === "reports" ? "Could not load reports" : "Could not load templates"}
+              message={activeQuery.error instanceof Error ? activeQuery.error.message : undefined}
+              onRetry={() => void activeQuery.refetch()}
+            />
+          ) : (
+            <View
+              style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.lg, gap: spacing.md }}
+            >
+              {tab === "reports" && (reportsQuery.data ?? []).length > 0 ? (
+                <View style={{ marginHorizontal: -spacing.lg }}>
+                  <SearchField
+                    value={search}
+                    onChangeText={setSearch}
+                    placeholder="Search reports or jobs"
+                    accessibilityLabel="Search reports"
+                  />
+                </View>
+              ) : null}
 
-            {tab === "reports" ? (
-              sections.length === 0 ? (
+              {tab === "reports" ? (
+                sections.length === 0 && search.trim() ? (
+                  <EmptyState
+                    icon={FileText}
+                    title="No matches"
+                    body="Try a different word from the report title or the job name."
+                  />
+                ) : sections.length === 0 ? (
+                  <EmptyState
+                    icon={FileText}
+                    title="No reports yet"
+                    body="Write a whole-job report, draft one from photos, start from a template or build one by hand. Tap + and pick the job."
+                  />
+                ) : (
+                  sections.map((section) => (
+                    <View key={section.key} style={{ gap: spacing.md, marginBottom: spacing.sm }}>
+                      <Text
+                        variant="overline"
+                        tone="muted"
+                        style={{ fontSize: 13, letterSpacing: 1, marginTop: spacing.sm }}
+                      >
+                        {section.title.toUpperCase()}
+                      </Text>
+                      {section.items.map((item) => (
+                        <ReportCard
+                          key={`${item.kind}:${item.id}`}
+                          title={item.title}
+                          subtitle={reportIndexSubtitle(item)}
+                          status={item.status}
+                          onPress={() =>
+                            item.kind === "page"
+                              ? router.push({
+                                  pathname: "/page/[pageId]",
+                                  params: { pageId: item.id },
+                                })
+                              : openBuilt(item.id, item.projectId)
+                          }
+                        />
+                      ))}
+                    </View>
+                  ))
+                )
+              ) : templateGroups.length === 0 ? (
                 <EmptyState
-                  icon={FileText}
-                  title="No reports yet"
-                  body="A report is the photos worth showing and a write-up the client actually receives. Tap + to start one on any job."
+                  icon={LayoutTemplate}
+                  title="No templates yet"
+                  body="Report templates are written on the web. Once your team has one, it shows up here to start from."
                 />
               ) : (
-                sections.map((section) => (
-                  <View key={section.key} style={{ gap: spacing.md, marginBottom: spacing.sm }}>
-                    <Text
-                      variant="overline"
-                      tone="muted"
-                      style={{ fontSize: 13, letterSpacing: 1, marginTop: spacing.sm }}
+                <>
+                  <Text variant="caption" tone="muted">
+                    Pick a template, then the job it is for. Fields the job already knows are filled
+                    in for you.
+                  </Text>
+                  {templateGroups.map((group) => (
+                    <View
+                      key={group.category}
+                      style={{ gap: spacing.sm, marginBottom: spacing.sm }}
                     >
-                      {section.title.toUpperCase()}
-                    </Text>
-                    {section.items.map((item) => (
-                      <ReportCard
-                        key={`${item.kind}:${item.id}`}
-                        title={item.title}
-                        subtitle={reportIndexSubtitle(item)}
-                        status={item.status}
-                        onPress={() =>
-                          item.kind === "page"
-                            ? router.push({
-                                pathname: "/page/[pageId]",
-                                params: { pageId: item.id },
-                              })
-                            : router.push({
-                                pathname: "/report/[reportId]",
-                                params: { reportId: item.id, projectId: item.projectId },
-                              })
-                        }
-                      />
-                    ))}
-                  </View>
-                ))
-              )
-            ) : templateGroups.length === 0 ? (
-              <EmptyState
-                icon={LayoutTemplate}
-                title="No templates yet"
-                body="Report templates are written on the web. Once your team has one, it shows up here to start from."
-              />
-            ) : (
-              <>
-                <Text variant="caption" tone="muted">
-                  Pick a template, then the job it is for. Fields the job already knows are filled
-                  in for you.
-                </Text>
-                {templateGroups.map((group) => (
-                  <View key={group.category} style={{ gap: spacing.sm, marginBottom: spacing.sm }}>
-                    <Text
-                      variant="overline"
-                      tone="muted"
-                      style={{ fontSize: 13, letterSpacing: 1, marginTop: spacing.sm }}
-                    >
-                      {group.category.toUpperCase()}
-                    </Text>
-                    <ListGroup>
-                      {group.templates.map((template: DocumentTemplate, index: number) => (
-                        <View key={template.id}>
-                          {index > 0 ? <RowDivider /> : null}
-                          <ListRow
-                            icon={LayoutTemplate}
-                            title={template.name}
-                            subtitle={template.description ?? undefined}
-                            onPress={() => setPicking("template")}
-                          />
-                        </View>
-                      ))}
-                    </ListGroup>
-                  </View>
-                ))}
-              </>
-            )}
-          </View>
-        )}
-      </Screen>
+                      <Text
+                        variant="overline"
+                        tone="muted"
+                        style={{ fontSize: 13, letterSpacing: 1, marginTop: spacing.sm }}
+                      >
+                        {group.category.toUpperCase()}
+                      </Text>
+                      <ListGroup>
+                        {group.templates.map((template: DocumentTemplate, index: number) => (
+                          <View key={template.id}>
+                            {index > 0 ? <RowDivider /> : null}
+                            <ListRow
+                              icon={LayoutTemplate}
+                              title={template.name}
+                              subtitle={template.description ?? undefined}
+                              onPress={() => setPicking("template")}
+                            />
+                          </View>
+                        ))}
+                      </ListGroup>
+                    </View>
+                  ))}
+                </>
+              )}
+            </View>
+          )
+        }
+      />
 
       <ReportProjectPickerSheet
         visible={picking !== null}
-        title={picking === "template" ? "Which job is it for?" : "Start a report on"}
+        title={picking === "template" ? "Which job is it for?" : "New report for which job?"}
         onClose={() => setPicking(null)}
         onPick={(project) => {
           const mode = picking;
@@ -279,9 +288,19 @@ export default function ReportsScreen() {
            * drops it without a word.
            */
           if (mode === "template") setTimeout(() => setTemplateProject(project.id), 350);
-          else create.mutate(project);
+          else setTimeout(() => setGenerateFor(project), 350);
         }}
       />
+
+      {generateFor ? (
+        <GenerateReportSheet
+          projectId={generateFor.id}
+          projectName={projectDisplayName(generateFor)}
+          scope="all"
+          onClose={() => setGenerateFor(null)}
+          onOpenBuiltReport={(report) => openBuilt(report.id, report.project_id)}
+        />
+      ) : null}
 
       {templateProject ? (
         <TemplatePickerSheet

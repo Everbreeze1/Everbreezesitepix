@@ -82,7 +82,7 @@ describe("photo grids use it", () => {
     "apps/mobile/app/(app)/(tabs)/gallery.tsx",
     "apps/mobile/app/(app)/project/[id]/index.tsx",
     "apps/mobile/app/(app)/project/[id]/trash.tsx",
-    "apps/mobile/app/(app)/report/[reportId].tsx",
+    "apps/mobile/src/components/ReportEditor.tsx",
     "apps/mobile/app/(app)/site-log/[logId].tsx",
   ];
 

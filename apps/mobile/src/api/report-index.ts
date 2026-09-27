@@ -2,6 +2,7 @@ import { api } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 import {
   mergeReportIndex,
+  pagesForProject,
   type BuiltReportInput,
   type ReportIndexItem,
   type ReportPageInput,
@@ -64,4 +65,14 @@ export async function listAllReports(): Promise<ReportIndexItem[]> {
   const built = rows.filter((row) => !deleted.has(row.project_id));
 
   return mergeReportIndex(built, pages, names);
+}
+
+/**
+ * One job's report pages: the whole-job report, reports from selected photos,
+ * and documents from report templates. The web's project Reports tab lists
+ * exactly these; the built reports are read separately.
+ */
+export async function listProjectReportPages(projectId: string): Promise<ReportIndexItem[]> {
+  const result = await api.rpc<{ reports?: ReportPageInput[] }>("listReportPages", {});
+  return pagesForProject(result?.reports ?? [], projectId);
 }

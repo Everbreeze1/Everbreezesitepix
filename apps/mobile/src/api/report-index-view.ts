@@ -154,3 +154,25 @@ export function reportIndexSubtitle(
   }
   return parts.join(" · ");
 }
+
+/**
+ * Narrow the list to a search, as the web's Reports page does: by title or
+ * job name, case-insensitive, every word must match somewhere.
+ */
+export function searchReportIndex(items: ReportIndexItem[], query: string): ReportIndexItem[] {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return items;
+  return items.filter((item) => {
+    const haystack = `${item.title} ${item.projectName ?? ""}`.toLowerCase();
+    return words.every((word) => haystack.includes(word));
+  });
+}
+
+/** One job's report pages, from the workspace-wide `listReportPages` answer. */
+export function pagesForProject(pages: ReportPageInput[], projectId: string): ReportIndexItem[] {
+  return mergeReportIndex(
+    [],
+    pages.filter((page) => page.projectId === projectId),
+    new Map(),
+  );
+}

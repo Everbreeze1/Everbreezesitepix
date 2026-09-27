@@ -26,7 +26,7 @@ const read = (p: string) => readFileSync(p, "utf8");
 
 /** Screens whose main create action now lives in the navigation header. */
 const FIXED: [string, string][] = [
-  ["project/[id]/reports.tsx", "Start a report"],
+  ["project/[id]/reports.tsx", "New report"],
   ["project/[id]/site-logs.tsx", "Start a log"],
   ["project/[id]/documents.tsx", "New page"],
   ["project/[id]/checklists.tsx", "Start a checklist from a template"],
@@ -66,9 +66,8 @@ describe("the exemptions are deliberate", () => {
    * that belongs there.
    */
   const EXEMPT: [string, string][] = [
-    // Rare, expensive, once per job, and it needs room to say "Writing the
-    // report" while several LLM calls run. An icon cannot say that.
-    ["project/[id]/reports.tsx", "Write a whole-job report"],
+    // The whole-job report now lives in the New report menu (GenerateReportSheet),
+    // where its row says "Writing the report" while several LLM calls run.
     // Scoped to ONE phase. A single header button could not know which.
     ["workflow-template/[templateId].tsx", "Add a step"],
     // Opens an inline field that needs the width, and filing happens once a
