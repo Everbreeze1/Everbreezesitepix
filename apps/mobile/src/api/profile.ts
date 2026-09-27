@@ -28,7 +28,9 @@ export async function getMyProfile(userId: string): Promise<MyProfile> {
     .eq("id", userId)
     .maybeSingle();
   if (error) throw new Error(error.message);
-  const row = data as (Omit<MyProfile, "notification_prefs"> & { notification_prefs: unknown }) | null;
+  const row = data as
+    | (Omit<MyProfile, "notification_prefs"> & { notification_prefs: unknown })
+    | null;
   return {
     id: userId,
     email: row?.email ?? null,

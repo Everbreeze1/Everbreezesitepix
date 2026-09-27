@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { PROJECT_STATUS_LABELS, projectDisplayName, relativeTime } from "@everlumen/shared";
 import { formatAddress, listProjects, type ProjectListItem } from "@/api/projects";
 import { QueueBanner } from "@/components/QueueBanner";
+import { LabelChip, useLabelCatalog } from "@/components/ProjectLabels";
 import { FilterGlyph } from "@/components/ProjectGlyphs";
 import { ProjectCrewAvatars, useProjectCrews } from "@/components/ProjectCrewAvatars";
 import {
@@ -28,7 +29,12 @@ import {
   Text,
 } from "@/ui";
 
-type StatusFilter = "all" | "active" | "on_hold" | "completed";
+/*
+ * "archived" is not a status, it is the `archived` flag. It sits in the same
+ * row because that is where the web puts it, and so an archived job has one
+ * place to be found rather than being mixed in among the live ones under All.
+ */
+type StatusFilter = "all" | "active" | "on_hold" | "completed" | "archived";
 
 /** Diameter of the floating new-project button. */
 const FAB = 60;
@@ -67,15 +73,29 @@ export default function ProjectsScreen() {
    * none" rather than "you are not looking at them".
    */
   const counts = useMemo(() => {
-    const out: Record<string, number> = { all: all.length };
-    for (const project of all) out[project.status] = (out[project.status] ?? 0) + 1;
+    // Archived jobs are counted once, under Archived, and nowhere else: the
+    // other pills describe the live board, as they do on the web.
+    const out: Record<string, number> = { all: 0, archived: 0 };
+    for (const project of all) {
+      if (project.archived) {
+        out.archived += 1;
+        continue;
+      }
+      out.all += 1;
+      out[project.status] = (out[project.status] ?? 0) + 1;
+    }
     return out;
   }, [all]);
 
   const projects = useMemo(() => {
     const needle = search.trim().toLowerCase();
     const matched = all.filter((project) => {
-      if (status !== "all" && project.status !== status) return false;
+      if (status === "archived") {
+        if (!project.archived) return false;
+      } else {
+        if (project.archived) return false;
+        if (status !== "all" && project.status !== status) return false;
+      }
       if (!needle) return true;
       const address = formatAddress(project) ?? "";
       return (
@@ -98,6 +118,7 @@ export default function ProjectsScreen() {
     { id: "active", label: PROJECT_STATUS_LABELS.active, count: counts.active ?? 0 },
     { id: "on_hold", label: PROJECT_STATUS_LABELS.on_hold, count: counts.on_hold ?? 0 },
     { id: "completed", label: PROJECT_STATUS_LABELS.completed, count: counts.completed ?? 0 },
+    { id: "archived", label: "Archived", count: counts.archived ?? 0 },
   ];
 
   const showSearch = searchOpen || search.length > 0;
@@ -300,6 +321,9 @@ function ProjectCard({
   const address = formatAddress(project);
   const label = projectStatusLabel(project.status);
   const done = project.status === "completed";
+  // Same chips as the web project card, coloured from the workspace catalog.
+  const { colorOf } = useLabelCatalog();
+  const labels = project.labels ?? [];
 
   return (
     <Card
@@ -333,6 +357,21 @@ function ProjectCard({
         </View>
         <ProjectStatusPill status={project.status} />
       </View>
+
+      {labels.length > 0 ? (
+        <View
+          style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.xs, marginTop: spacing.sm }}
+        >
+          {labels.slice(0, 4).map((name) => (
+            <LabelChip key={name} name={name} color={colorOf(name)} size="sm" />
+          ))}
+          {labels.length > 4 ? (
+            <Text variant="caption" tone="muted" style={{ alignSelf: "center" }}>
+              {`+${labels.length - 4}`}
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
 
       <View
         style={{

@@ -23,10 +23,28 @@ export type ProjectListItem = {
   latitude: number | null;
   longitude: number | null;
   updated_at: string;
+  /*
+   * Workspace labels by name (`projects.labels`, a text array). The colours
+   * live in the `labels` catalog, looked up by name, which is how the web
+   * project list draws the same chips.
+   */
+  labels?: string[] | null;
+  /** Read by `getProject` only: the list has no use for either. */
+  description?: string | null;
+  pipeline_stage_id?: string | null;
 };
 
 const PROJECT_FIELDS =
-  "id, name, status, starred, archived, client_name, location, street, city, state, zip, latitude, longitude, updated_at";
+  "id, name, status, starred, archived, client_name, location, street, city, state, zip, latitude, longitude, updated_at, labels";
+
+/**
+ * The detail screen's extra columns.
+ *
+ * The description sits under the title and the stage drives the status chip,
+ * the two places the web project header shows them. Kept off the list select
+ * so the five screens sharing `PROJECT_FIELDS` do not pay for them.
+ */
+const PROJECT_DETAIL_FIELDS = `${PROJECT_FIELDS}, description, pipeline_stage_id`;
 
 export function formatAddress(
   project: Pick<ProjectListItem, "street" | "city" | "state" | "zip" | "location">,
@@ -144,7 +162,7 @@ export async function createProject(input: NewProjectInput): Promise<{ id: strin
 export async function getProject(id: string): Promise<ProjectListItem | null> {
   const { data, error } = await supabase
     .from("projects")
-    .select(PROJECT_FIELDS)
+    .select(PROJECT_DETAIL_FIELDS)
     .eq("id", id)
     .is("deleted_at", null)
     .maybeSingle();

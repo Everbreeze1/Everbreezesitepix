@@ -26,6 +26,7 @@ import {
   PenLine,
   Send,
   Share2,
+  SlidersHorizontal,
   Star,
   Trash2,
   Video,
@@ -47,6 +48,7 @@ import { formatAddress, getProject, type ProjectListItem } from "@/api/projects"
 import {
   archivePatch,
   draftToPatch,
+  labelsPatch,
   starPatch,
   trashProjectPatch,
   type ProjectDraft,
@@ -63,7 +65,23 @@ import {
 import { QueueBanner } from "@/components/QueueBanner";
 import { ProjectHero, ProjectHeroButton } from "@/components/ProjectHero";
 import { ProjectTabs, type ProjectTab } from "@/components/ProjectTabs";
-import { ProjectStatusPill } from "@/components/ProjectStatusPill";
+import { ProjectStatusChip } from "@/components/ProjectStatusChip";
+import { ProjectWorkflowStrip } from "@/components/ProjectWorkflowStrip";
+import { ProjectLabels } from "@/components/ProjectLabels";
+import { ProjectPhotoCalendar } from "@/components/ProjectPhotoCalendar";
+import { ProjectVideos } from "@/components/ProjectVideos";
+import { PhotoFilterSheet } from "@/components/PhotoFilterSheet";
+import { listProjectVideos } from "@/api/project-videos";
+import { listProjectBoards } from "@/api/pipelines";
+import {
+  activeFilterCount,
+  filterPhotos,
+  photoTagCounts,
+  toggleTag,
+  type MediaFilter,
+  type PhaseFilter,
+  type TagLogic,
+} from "@/api/photo-filter-view";
 import { ProjectCrewAvatars } from "@/components/ProjectCrewAvatars";
 import { MoreGlyph } from "@/components/ProjectGlyphs";
 import { getBlueprintOrigin } from "@/api/blueprints";
@@ -90,6 +108,7 @@ import {
   ProjectBlueprint,
   ProjectCrew,
   ActionSheet,
+  Chip,
   ChipGroup,
   Icon,
   EmptyState,
@@ -103,8 +122,6 @@ import {
   type ChipOption,
 } from "@/ui";
 
-type PhaseFilter = "all" | "before" | "after" | "untagged";
-
 const FILTERS: ChipOption<PhaseFilter>[] = [
   { id: "all", label: "All" },
   { id: "before", label: "Before" },
@@ -115,7 +132,7 @@ const FILTERS: ChipOption<PhaseFilter>[] = [
 const GRID_GAP = spacing.sm;
 
 /** Tabs drawn on this screen. */
-type InPlaceTab = "photos" | "details";
+type InPlaceTab = "photos" | "calendar" | "details";
 /** Tabs that open the section's own screen, which already exists as a route. */
 type LinkedTab =
   | "documents"
@@ -141,6 +158,8 @@ const TABS: ProjectTab<DetailTab>[] = [
   { id: "tasks", label: "Tasks" },
   { id: "site-logs", label: "Site logs" },
   { id: "walkthroughs", label: "Walkthroughs" },
+  // This job's photos by day, as the web project page's Calendar tab.
+  { id: "calendar", label: "Calendar" },
   { id: "details", label: "Details" },
 ];
 
@@ -197,6 +216,21 @@ export default function ProjectDetailScreen() {
   const { id, photo: deepLinkPhoto } = useLocalSearchParams<{ id: string; photo?: string }>();
   const theme = useTheme();
   const [filter, setFilter] = useState<PhaseFilter>("all");
+  /*
+   * The web grid's other filters: tags (any-of or all-of), photos against
+   * videos, and whether the tag row is showing at all. Hiding the row clears
+   * the tag filter, so a filter nobody can see never narrows the grid.
+   */
+  const [tagFilter, setTagFilter] = useState<string[]>([]);
+  const [tagLogic, setTagLogic] = useState<TagLogic>("or");
+  const [showTags, setShowTags] = useState(false);
+  const [media, setMedia] = useState<MediaFilter>("all");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  /** A photo opened from the Calendar tab, which may not be in the loaded grid. */
+  const [calendarPick, setCalendarPick] = useState<{
+    photo: PhotoListItem;
+    url: string | null;
+  } | null>(null);
   const [tab, setTab] = useState<InPlaceTab>("photos");
   const [sort, setSort] = useState<"newest" | "oldest">("newest");
   // Seeded from the param rather than set in an effect, so the lightbox is
@@ -262,10 +296,31 @@ export default function ProjectDetailScreen() {
    * happened to be fetched.
    */
   const filtered = useMemo(() => {
-    const phased =
-      filter === "all" ? photos : photos.filter((photo) => (photo.phase ?? "untagged") === filter);
+    const phased = filterPhotos(photos, { phase: filter, tags: tagFilter, logic: tagLogic });
     return sort === "newest" ? phased : [...phased].reverse();
-  }, [photos, filter, sort]);
+  }, [photos, filter, tagFilter, tagLogic, sort]);
+
+  const tagCounts = useMemo(() => photoTagCounts(photos), [photos]);
+
+  const videosQuery = useQuery({
+    queryKey: ["project-videos", id],
+    queryFn: () => listProjectVideos(String(id)),
+    enabled: Boolean(id),
+  });
+  const videos = videosQuery.data ?? [];
+  const showPhotos = media !== "videos";
+  const moreFilters = activeFilterCount({ tags: tagFilter, media });
+
+  /*
+   * The stage name, for the edit sheet: where a stage owns the status, the
+   * sheet says so rather than offering a status that would contradict it.
+   * Same key as the status chip, so this is not a second fetch.
+   */
+  const boardsQuery = useQuery({
+    queryKey: ["project-boards"],
+    queryFn: listProjectBoards,
+    staleTime: 60_000,
+  });
 
   useEffect(() => {
     if (sort !== "oldest") return;
@@ -335,7 +390,14 @@ export default function ProjectDetailScreen() {
 
   const tileSize = (screenWidth - spacing.lg * 2 - GRID_GAP * (columns - 1)) / columns;
 
-  const lightboxPhoto = filtered.find((photo) => photo.id === lightboxId) ?? null;
+  const lightboxPhoto =
+    filtered.find((photo) => photo.id === lightboxId) ??
+    (calendarPick?.photo.id === lightboxId ? calendarPick.photo : null);
+  const lightboxUrl = lightboxPhoto
+    ? (urls[lightboxPhoto.id] ??
+      (calendarPick?.photo.id === lightboxPhoto.id ? calendarPick.url : null) ??
+      undefined)
+    : undefined;
 
   const loadMore = useCallback(() => {
     /*
@@ -611,7 +673,34 @@ export default function ProjectDetailScreen() {
   // as a job's cover. No photo falls back to the gradient.
   const coverUri = photos.length > 0 ? (urls[photos[0].id] ?? null) : null;
   const blueprintName = blueprintOrigin.data?.applications[0]?.blueprintName ?? null;
-  const photoCount = `${photos.length}${photosQuery.hasNextPage ? "+" : ""} photo${photos.length === 1 ? "" : "s"}`;
+  const photoCount = showPhotos
+    ? `${photos.length}${photosQuery.hasNextPage ? "+" : ""} photo${photos.length === 1 ? "" : "s"}`
+    : `${videos.length} video${videos.length === 1 ? "" : "s"}`;
+  const stageName = useMemo(() => {
+    const stageId = project?.pipeline_stage_id;
+    if (!stageId) return null;
+    for (const board of boardsQuery.data ?? []) {
+      const stage = (board.stages ?? []).find((s) => s.id === stageId);
+      if (stage) return stage.name;
+    }
+    return null;
+  }, [boardsQuery.data, project?.pipeline_stage_id]);
+
+  /*
+   * A stage move is written by the status chip itself (the server derives the
+   * status from the stage); this only keeps both caches showing it meanwhile.
+   */
+  const onStageChanged = useCallback(
+    (next: { status: string; stageId: string | null }) => {
+      queryClient.setQueryData<ProjectListItem | null>(["project", id], (current) =>
+        current ? { ...current, status: next.status, pipeline_stage_id: next.stageId } : current,
+      );
+      queryClient.setQueryData<ProjectListItem[]>(["projects"], (current) =>
+        (current ?? []).map((row) => (row.id === id ? { ...row, status: next.status } : row)),
+      );
+    },
+    [id, queryClient],
+  );
 
   const onTab = (next: DetailTab) => {
     const go = LINKED_TABS[next as LinkedTab];
@@ -639,11 +728,11 @@ export default function ProjectDetailScreen() {
           />
         ) : (
           <SectionList
-            sections={tab === "photos" ? sections : []}
+            sections={tab === "photos" && showPhotos ? sections : []}
             keyExtractor={(row) => row.key}
             stickySectionHeadersEnabled={false}
             contentContainerStyle={{ paddingBottom: 140 }}
-            onEndReached={tab === "photos" ? loadMore : undefined}
+            onEndReached={tab === "photos" && showPhotos ? loadMore : undefined}
             onEndReachedThreshold={0.6}
             // The grid is fixed-height rows, so windowing can be tighter than
             // the default without blank space appearing during a fast scroll.
@@ -734,7 +823,15 @@ export default function ProjectDetailScreen() {
                     borderBottomColor: theme.colors.border,
                   }}
                 >
-                  {project?.status ? <ProjectStatusPill status={project.status} /> : null}
+                  {project?.status ? (
+                    <ProjectStatusChip
+                      projectId={String(id)}
+                      status={project.status}
+                      stageId={project.pipeline_stage_id}
+                      onSetStatus={(status) => void patchProject("status", { status })}
+                      onStageChanged={onStageChanged}
+                    />
+                  ) : null}
                   <UIText variant="body" tone="muted" numberOfLines={1} style={{ flex: 1 }}>
                     {blueprintName ?? ""}
                   </UIText>
@@ -747,6 +844,37 @@ export default function ProjectDetailScreen() {
                     <ProjectCrewAvatars people={crewPeople} size="md" />
                   </Pressable>
                 </View>
+
+                {/*
+                  What the job is and how the team files it: the description
+                  the web shows under the title, then the labels, which are
+                  applied and removed right here as on the web header.
+                */}
+                <View
+                  style={{
+                    gap: spacing.sm,
+                    paddingHorizontal: spacing.xl,
+                    paddingVertical: spacing.md,
+                    backgroundColor: theme.colors.card,
+                    borderBottomWidth: StyleSheet.hairlineWidth,
+                    borderBottomColor: theme.colors.border,
+                  }}
+                >
+                  {project?.description?.trim() ? (
+                    <UIText variant="body" tone="muted" numberOfLines={6}>
+                      {project.description.trim()}
+                    </UIText>
+                  ) : null}
+                  <ProjectLabels
+                    labels={project?.labels ?? []}
+                    onChange={(next) => void patchProject("labels", labelsPatch(next))}
+                  />
+                </View>
+
+                <ProjectWorkflowStrip
+                  projectId={String(id)}
+                  onOpen={() => router.push(`/project/${id}/workflows`)}
+                />
 
                 <ProjectTabs tabs={TABS} value={tab} onChange={onTab} />
 
@@ -774,17 +902,44 @@ export default function ProjectDetailScreen() {
                       <UIText variant="heading" style={{ fontWeight: "700" }}>
                         {photoCount}
                       </UIText>
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={`Sort: ${sort === "newest" ? "newest" : "oldest"} first`}
-                        accessibilityHint="Switches between newest and oldest first"
-                        onPress={() => setSort((s) => (s === "newest" ? "oldest" : "newest"))}
-                        hitSlop={12}
-                      >
-                        <UIText variant="bodyStrong" tone="primary" style={{ fontWeight: "700" }}>
-                          {`Sort: ${sort === "newest" ? "Newest" : "Oldest"}`}
-                        </UIText>
-                      </Pressable>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.lg }}>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={
+                            moreFilters > 0 ? `Filters, ${moreFilters} on` : "Filters"
+                          }
+                          accessibilityHint="Tags, and photos or videos"
+                          onPress={() => setFiltersOpen(true)}
+                          hitSlop={12}
+                          style={{ flexDirection: "row", alignItems: "center", gap: 4 }}
+                        >
+                          <SlidersHorizontal
+                            size={16}
+                            strokeWidth={2.25}
+                            color={theme.colors.primary}
+                          />
+                          <UIText variant="bodyStrong" tone="primary" style={{ fontWeight: "700" }}>
+                            {moreFilters > 0 ? `Filters (${moreFilters})` : "Filters"}
+                          </UIText>
+                        </Pressable>
+                        {showPhotos ? (
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel={`Sort: ${sort === "newest" ? "newest" : "oldest"} first`}
+                            accessibilityHint="Switches between newest and oldest first"
+                            onPress={() => setSort((s) => (s === "newest" ? "oldest" : "newest"))}
+                            hitSlop={12}
+                          >
+                            <UIText
+                              variant="bodyStrong"
+                              tone="primary"
+                              style={{ fontWeight: "700" }}
+                            >
+                              {`Sort: ${sort === "newest" ? "Newest" : "Oldest"}`}
+                            </UIText>
+                          </Pressable>
+                        ) : null}
+                      </View>
                     </View>
 
                     {/*
@@ -793,14 +948,74 @@ export default function ProjectDetailScreen() {
                       task list, so it lives in the kit now and all three agree
                       on height.
                     */}
-                    <View style={{ marginHorizontal: -spacing.lg, marginBottom: spacing.md }}>
-                      <ChipGroup
-                        options={FILTERS}
-                        value={filter}
-                        onChange={setFilter}
-                        label="Filter photos by phase"
-                      />
-                    </View>
+                    {showPhotos ? (
+                      <View style={{ marginHorizontal: -spacing.lg, marginBottom: spacing.md }}>
+                        <ChipGroup
+                          options={FILTERS}
+                          value={filter}
+                          onChange={setFilter}
+                          label="Filter photos by phase"
+                        />
+                      </View>
+                    ) : null}
+
+                    {/*
+                      The photo tags, as the web's tag panel: tap to filter,
+                      tap again to drop it. Any or all is set in Filters.
+                    */}
+                    {showPhotos && showTags ? (
+                      <View style={{ gap: spacing.sm, marginBottom: spacing.md }}>
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                          }}
+                        >
+                          <UIText variant="overline" tone="muted">
+                            {`PHOTO TAGS · MATCH ${tagLogic === "and" ? "ALL" : "ANY"}`}
+                          </UIText>
+                          {tagFilter.length > 0 ? (
+                            <Pressable
+                              accessibilityRole="button"
+                              onPress={() => setTagFilter([])}
+                              hitSlop={12}
+                            >
+                              <UIText
+                                variant="caption"
+                                tone="primary"
+                                style={{ fontWeight: "700" }}
+                              >
+                                Clear
+                              </UIText>
+                            </Pressable>
+                          ) : null}
+                        </View>
+                        {tagCounts.length === 0 ? (
+                          <UIText variant="caption" tone="muted">
+                            None of the loaded photos are tagged yet.
+                          </UIText>
+                        ) : (
+                          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }}>
+                            {tagCounts.map(({ tag, count }) => (
+                              <Chip
+                                key={tag}
+                                label={tag}
+                                count={count}
+                                selected={tagFilter.includes(tag)}
+                                onPress={() => setTagFilter((current) => toggleTag(current, tag))}
+                              />
+                            ))}
+                          </View>
+                        )}
+                      </View>
+                    ) : null}
+
+                    {media !== "photos" && videos.length > 0 ? (
+                      <View style={{ marginBottom: spacing.md }}>
+                        <ProjectVideos videos={videos} />
+                      </View>
+                    ) : null}
 
                     {/*
                       Directly above the grid it was written from. The log is
@@ -808,7 +1023,20 @@ export default function ProjectDetailScreen() {
                       anywhere else makes it a report somebody has to go and
                       find, which is the exact thing it exists not to be.
                     */}
-                    <DailyLogCard projectId={String(id)} pending={queued > 0} />
+                    {showPhotos ? (
+                      <DailyLogCard projectId={String(id)} pending={queued > 0} />
+                    ) : null}
+                  </View>
+                ) : tab === "calendar" ? (
+                  <View style={{ padding: spacing.lg }}>
+                    <ProjectPhotoCalendar
+                      projectId={String(id)}
+                      width={screenWidth - spacing.lg * 2}
+                      onOpenPhoto={(photo, url) => {
+                        setCalendarPick({ photo, url });
+                        setLightboxId(photo.id);
+                      }}
+                    />
                   </View>
                 ) : (
                   <View style={{ gap: spacing.md, padding: spacing.lg }}>
@@ -912,7 +1140,16 @@ export default function ProjectDetailScreen() {
               </View>
             }
             ListEmptyComponent={
-              tab !== "photos" ? null : photos.length === 0 ? (
+              tab !== "photos" ? null : !showPhotos ? (
+                videos.length > 0 ? null : (
+                  <EmptyState
+                    icon={Video}
+                    title="No site videos"
+                    body="Videos recorded on this job show here. Switch the filter back to see its photos."
+                    action={{ label: "Show photos", onPress: () => setMedia("all") }}
+                  />
+                )
+              ) : photos.length === 0 ? (
                 <EmptyState
                   icon={Camera}
                   title="No photos yet"
@@ -926,14 +1163,22 @@ export default function ProjectDetailScreen() {
               ) : (
                 <EmptyState
                   icon={ImageOff}
-                  title="Nothing in this phase"
+                  title={
+                    tagFilter.length > 0 ? "Nothing matches these filters" : "Nothing in this phase"
+                  }
                   body="Switch the filter above, or tag some photos as you shoot them."
-                  action={{ label: "Show all", onPress: () => setFilter("all") }}
+                  action={{
+                    label: "Show all",
+                    onPress: () => {
+                      setFilter("all");
+                      setTagFilter([]);
+                    },
+                  }}
                 />
               )
             }
             ListFooterComponent={
-              tab === "photos" && photosQuery.isFetchingNextPage ? (
+              tab === "photos" && showPhotos && photosQuery.isFetchingNextPage ? (
                 <ActivityIndicator
                   style={{ marginVertical: spacing.lg }}
                   color={theme.colors.primary}
@@ -1071,10 +1316,29 @@ export default function ProjectDetailScreen() {
         visible={editing}
         onClose={() => setEditing(false)}
         project={project ?? null}
+        stageName={stageName}
         onSave={(draft: ProjectDraft) => {
           setEditing(false);
-          void patchProject("details", draftToPatch(draft));
+          void patchProject(
+            "details",
+            draftToPatch(draft, { statusFromStage: Boolean(project?.pipeline_stage_id) }),
+          );
         }}
+      />
+
+      <PhotoFilterSheet
+        visible={filtersOpen}
+        onClose={() => setFiltersOpen(false)}
+        showTags={showTags}
+        onShowTags={(next) => {
+          setShowTags(next);
+          if (!next) setTagFilter([]);
+        }}
+        logic={tagLogic}
+        onLogic={setTagLogic}
+        media={media}
+        onMedia={setMedia}
+        hasVideos={videos.length > 0}
       />
 
       <ActionSheet
@@ -1159,7 +1423,7 @@ export default function ProjectDetailScreen() {
           {lightboxPhoto ? (
             <>
               <PhotoThumb
-                uri={urls[lightboxPhoto.id]}
+                uri={lightboxUrl}
                 width="100%"
                 height="70%"
                 contentFit="contain"
@@ -1178,7 +1442,7 @@ export default function ProjectDetailScreen() {
                       pathname: "/photo/[id]/annotate",
                       params: {
                         id: photo.id,
-                        uri: urls[photo.id] ?? "",
+                        uri: lightboxUrl ?? "",
                         projectId: String(id),
                         caption: photo.caption ?? "",
                         phase: photo.phase ?? "untagged",
@@ -1206,7 +1470,7 @@ export default function ProjectDetailScreen() {
                       pathname: "/photo/[id]/analysis",
                       params: {
                         id: photo.id,
-                        uri: urls[photo.id] ?? "",
+                        uri: lightboxUrl ?? "",
                         caption: photo.caption ?? "",
                       },
                     });
@@ -1232,7 +1496,7 @@ export default function ProjectDetailScreen() {
                       pathname: "/photo/[id]/comments",
                       params: {
                         id: photo.id,
-                        uri: urls[photo.id] ?? "",
+                        uri: lightboxUrl ?? "",
                         projectId: String(id),
                         caption: photo.caption ?? "",
                       },

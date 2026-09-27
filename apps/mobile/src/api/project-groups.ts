@@ -90,3 +90,78 @@ export async function deleteProjectGroup(id: string): Promise<void> {
 export async function setGroupProjects(groupId: string, projectIds: string[]): Promise<void> {
   await api.rpc("setGroupProjects", { groupId, projectIds });
 }
+
+/** A checklist on a project in a group, with its items. */
+export type GroupChecklist = {
+  id: string;
+  name: string;
+  total: number;
+  done: number;
+  items: { id: string; label: string; completed_at: string | null; position: number }[];
+};
+
+export type GroupTask = {
+  id: string;
+  title: string;
+  status: string;
+  priority: string | null;
+  due_date: string | null;
+};
+
+/** A member project as `getProjectGroup` returns it: the row plus its rollups. */
+export type GroupProject = {
+  id: string;
+  name: string;
+  status: string;
+  client_name: string | null;
+  location: string | null;
+  street: string | null;
+  city: string | null;
+  state: string | null;
+  updated_at: string;
+  cover_url: string | null;
+  photo_count: number;
+  report_count: number;
+  checklists: GroupChecklist[];
+  checklist_items_total: number;
+  checklist_items_done: number;
+  tasks: GroupTask[];
+  tasks_open: number;
+};
+
+export type GroupDetail = {
+  group: { id: string; name: string; description: string | null };
+  projects: GroupProject[];
+  totals: { projects: number; photos: number; reports: number; checklists: number; tasks: number };
+};
+
+/**
+ * One group, with every project's checklists and tasks.
+ *
+ * The same op the web group page reads. Defaulted field by field, so a shape
+ * change on the service is a missing number here rather than a crash.
+ */
+export async function getProjectGroupDetail(groupId: string): Promise<GroupDetail> {
+  const result = await api.rpc<Partial<GroupDetail>>("getProjectGroup", { groupId });
+  const projects = (result?.projects ?? []).map((project) => ({
+    ...project,
+    checklists: project.checklists ?? [],
+    tasks: project.tasks ?? [],
+    photo_count: project.photo_count ?? 0,
+    report_count: project.report_count ?? 0,
+    checklist_items_total: project.checklist_items_total ?? 0,
+    checklist_items_done: project.checklist_items_done ?? 0,
+    tasks_open: project.tasks_open ?? 0,
+  }));
+  return {
+    group: result?.group ?? { id: groupId, name: "Group", description: null },
+    projects,
+    totals: result?.totals ?? {
+      projects: projects.length,
+      photos: 0,
+      reports: 0,
+      checklists: 0,
+      tasks: 0,
+    },
+  };
+}

@@ -1,11 +1,7 @@
 import { useEffect, useState } from "react";
 import { View } from "react-native";
 import { spacing, useTheme } from "@/theme";
-import {
-  loadAppearance,
-  saveAppearance,
-  type AppearancePreference,
-} from "@/theme/appearance";
+import { loadAppearance, saveAppearance, type AppearancePreference } from "@/theme/appearance";
 import { Check, Smartphone, Sun, Moon } from "@/ui/icons";
 import { Icon, ListGroup, ListRow, RowDivider, Screen, Text } from "@/ui";
 

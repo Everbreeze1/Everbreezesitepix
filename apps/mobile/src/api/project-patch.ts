@@ -21,6 +21,9 @@ export type ProjectPatch = {
   status?: string;
   starred?: boolean;
   archived?: boolean;
+  /** Label names, the whole set. See `labelsPatch`. */
+  labels?: string[];
+  description?: string | null;
   /** An ISO timestamp trashes; `null` restores. */
   deleted_at?: string | null;
 };
@@ -34,6 +37,8 @@ export type ProjectDraft = {
   zip: string | null;
   client_name: string | null;
   status: ProjectStatusValue;
+  /** Optional so a draft built without it leaves the column alone. */
+  description?: string | null;
 };
 
 /**
@@ -44,16 +49,46 @@ export type ProjectDraft = {
  * truthy parts, so a stored empty string is invisible there but still counts as
  * "has an address" anywhere that checks the column directly.
  */
-export function draftToPatch(draft: ProjectDraft): ProjectPatch {
-  return {
+export function draftToPatch(
+  draft: ProjectDraft,
+  options: { statusFromStage?: boolean } = {},
+): ProjectPatch {
+  const patch: ProjectPatch = {
     name: draft.name.trim(),
     street: blankToNull(draft.street),
     city: blankToNull(draft.city),
     state: blankToNull(draft.state),
     zip: blankToNull(draft.zip),
     client_name: blankToNull(draft.client_name),
-    status: draft.status,
   };
+  /*
+   * A project standing in a pipeline stage takes its status from the stage,
+   * the same rule the web edit dialog follows. Writing the bucket as well
+   * would let the two disagree again, so the patch leaves it out.
+   */
+  if (!options.statusFromStage) patch.status = draft.status;
+  if (draft.description !== undefined) patch.description = blankToNull(draft.description);
+  return patch;
+}
+
+/**
+ * The whole label set for a project.
+ *
+ * Trimmed and de-duplicated, case-insensitively, keeping the first spelling:
+ * "Roofing" and "roofing" are one label to everybody but the database, and the
+ * web writes the same cleaned array.
+ */
+export function labelsPatch(names: string[]): ProjectPatch {
+  const seen = new Set<string>();
+  const labels: string[] = [];
+  for (const raw of names) {
+    const name = raw.trim();
+    const key = name.toLowerCase();
+    if (!name || seen.has(key)) continue;
+    seen.add(key);
+    labels.push(name);
+  }
+  return { labels };
 }
 
 function blankToNull(value: string | null): string | null {

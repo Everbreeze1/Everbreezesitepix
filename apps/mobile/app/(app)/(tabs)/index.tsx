@@ -532,7 +532,10 @@ export default function HomeScreen() {
                 needsReview === null ? undefined : `Needs review: ${needsReview} untagged photos`
               }
               onPress={() =>
-                router.push({ pathname: "/gallery", params: { review: "1", nonce: String(Date.now()) } })
+                router.push({
+                  pathname: "/gallery",
+                  params: { review: "1", nonce: String(Date.now()) },
+                })
               }
             />
           </View>

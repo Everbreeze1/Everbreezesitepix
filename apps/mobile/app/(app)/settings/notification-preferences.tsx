@@ -1,11 +1,7 @@
 import { useEffect, useState } from "react";
 import { Switch, View } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  prefEnabled,
-  type NotificationPrefKey,
-  type NotificationPrefs,
-} from "@everlumen/shared";
+import { prefEnabled, type NotificationPrefKey, type NotificationPrefs } from "@everlumen/shared";
 import { getMyProfile, saveNotificationPrefs } from "@/api/profile";
 import { useAuth } from "@/lib/auth";
 import { spacing, useTheme } from "@/theme";

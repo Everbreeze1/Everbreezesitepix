@@ -98,7 +98,11 @@ export default function MapScreen() {
     const count = (test: (p: ProjectListItem) => boolean) => drawable.filter(test).length;
     return [
       { id: "active", label: "Active", count: count((p) => !p.archived && p.status === "active") },
-      { id: "on_hold", label: "On hold", count: count((p) => !p.archived && p.status === "on_hold") },
+      {
+        id: "on_hold",
+        label: "On hold",
+        count: count((p) => !p.archived && p.status === "on_hold"),
+      },
       {
         id: "completed",
         label: "Completed",
