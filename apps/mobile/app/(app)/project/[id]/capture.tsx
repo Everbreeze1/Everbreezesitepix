@@ -10,7 +10,8 @@ import {
   TextInput,
   View,
 } from "react-native";
-import type Svg from "react-native-svg";
+import Svg, { Path } from "react-native-svg";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { CameraView, useCameraPermissions, type CameraType, type FlashMode } from "expo-camera";
 import { Image } from "expo-image";
@@ -21,7 +22,8 @@ import { type CapturedAsset, type PhotoPhase } from "@/api/photos";
 import { tagForPhase, type WatermarkTag } from "@/api/watermark";
 import { renderWatermarked } from "@/api/watermark-render";
 import { WatermarkCanvas } from "@/components/WatermarkCanvas";
-import { getProject, projectCoords } from "@/api/projects";
+import { formatAddress, getProject, projectCoords } from "@/api/projects";
+import { projectDisplayName } from "@everlumen/shared";
 import { useAuth } from "@/lib/auth";
 import { persistCapture } from "@/offline/media";
 import { enqueue, newOutboxId } from "@/offline/outbox";
@@ -29,6 +31,8 @@ import { recordSessionPhoto } from "@/offline/capture-session";
 import { refreshQueue, requestSync } from "@/offline/sync";
 import type { PhotoUploadPayload } from "@/offline/handlers";
 import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
+import { Icon } from "@/ui";
+import { Images, MapPin, RefreshCw, X } from "@/ui/icons";
 
 type Shot = CapturedAsset & { key: string };
 
@@ -55,6 +59,7 @@ export default function CaptureScreen() {
     workflowItemId?: string;
   }>();
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const { user } = useAuth();
 
   const [permission, requestPermission] = useCameraPermissions();
@@ -437,6 +442,11 @@ export default function CaptureScreen() {
             ))}
           </View>
 
+          {/*
+            The same `phase` the pills on the viewfinder set, repeated here as a
+            last look before Save burns it in, and so it can still be corrected
+            if the batch was shot under the wrong pill.
+          */}
           <View style={{ gap: spacing.sm }}>
             <Text style={[typography.overline, { color: theme.colors.mutedForeground }]}>
               PHASE
@@ -555,6 +565,18 @@ export default function CaptureScreen() {
     );
   }
 
+  /*
+   * The recent-shots strip shows at most four tiles. With more than that in the
+   * batch the fourth becomes a "+N" tile for the rest, which opens review, so
+   * the strip never scrolls under a thumb that is trying to reach the shutter.
+   */
+  const lastShot = shots.length > 0 ? shots[shots.length - 1] : null;
+  const stripShots = shots.length > STRIP_MAX ? shots.slice(-(STRIP_MAX - 1)) : shots;
+  const hiddenCount = shots.length - stripShots.length;
+  const projectLabel = project
+    ? (formatAddress(project) ?? projectDisplayName(project))
+    : "Loading job";
+
   return (
     <View style={styles.cameraRoot}>
       <Stack.Screen options={{ headerShown: false }} />
@@ -566,106 +588,269 @@ export default function CaptureScreen() {
         animateShutter
       />
 
-      <View style={styles.topBar}>
-        <Pressable
-          accessibilityRole="button"
-          style={styles.chip}
-          onPress={() => router.back()}
-          hitSlop={8}
-        >
-          <Text style={styles.chipText}>Close</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          style={styles.chip}
-          hitSlop={8}
-          accessibilityLabel={`Flash ${flash}. Tap to change`}
-          onPress={() => setFlash(flash === "off" ? "auto" : flash === "auto" ? "on" : "off")}
-        >
-          <Text style={styles.chipText}>Flash {flash}</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          style={styles.chip}
-          hitSlop={8}
-          accessibilityLabel="Switch camera"
-          onPress={() => setFacing(facing === "back" ? "front" : "back")}
-        >
-          <Text style={styles.chipText}>Flip</Text>
-        </Pressable>
+      {/*
+        Rule-of-thirds grid. Hairlines only, and not touchable: it is there to
+        square a wall up in the frame, not to be noticed.
+      */}
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        <View style={[styles.gridLine, styles.gridV, { left: "33.333%" }]} />
+        <View style={[styles.gridLine, styles.gridV, { left: "66.666%" }]} />
+        <View style={[styles.gridLine, styles.gridH, { top: "33.333%" }]} />
+        <View style={[styles.gridLine, styles.gridH, { top: "66.666%" }]} />
       </View>
 
-      {shots.length > 0 ? (
-        <ScrollView horizontal style={styles.strip} contentContainerStyle={styles.stripContent}>
-          {shots.map((shot) => (
-            <Image key={shot.key} source={{ uri: shot.uri }} style={styles.stripThumb} />
-          ))}
-        </ScrollView>
+      <View style={[styles.topArea, { top: insets.top + spacing.sm }]}>
+        <View style={styles.topBar}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close camera"
+            style={styles.roundButton}
+            onPress={() => router.back()}
+            hitSlop={8}
+          >
+            <Icon icon={X} size="lg" color={CHROME_FG} />
+          </Pressable>
+
+          {/*
+            Which job these photos land on, so nobody shoots a whole run into
+            the wrong project. The street address when there is one, because
+            that is what a crew calls a job; the project name otherwise.
+          */}
+          <View style={styles.locationPill} accessibilityRole="text">
+            <Icon icon={MapPin} size="sm" color={CHROME_FG} />
+            <Text style={styles.locationText} numberOfLines={1}>
+              {projectLabel}
+            </Text>
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            style={styles.roundButton}
+            hitSlop={8}
+            accessibilityLabel={`Flash ${flash}. Tap to change`}
+            onPress={() => setFlash(flash === "off" ? "auto" : flash === "auto" ? "on" : "off")}
+          >
+            <FlashGlyph mode={flash} />
+          </Pressable>
+        </View>
+
+        {/*
+          Before / Untagged / After, on the viewfinder.
+
+          This used to live only on the review step, after the shutter, and on
+          the live camera it looked as though before/after had gone from the
+          app. The phase is a decision made before the shot ("I am about to
+          document the before"), so it is picked here, and the same `phase`
+          state is what the review step shows and what `stamp` burns in on
+          Save. It still applies to the whole batch, not per photo: a run of
+          befores is shot as one batch and saved, then the pill is flipped.
+        */}
+        <View style={styles.phaseRow} accessibilityRole="radiogroup">
+          {PHASES.map((option) => {
+            const active = phase === option.id;
+            return (
+              <Pressable
+                key={option.id}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={`${option.label} photos`}
+                onPress={() => setPhase(option.id)}
+                hitSlop={4}
+                style={[styles.phasePill, active && styles.phasePillActive]}
+              >
+                <Text style={[styles.phaseText, active && styles.phaseTextActive]}>
+                  {option.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+
+      {error ? (
+        <Text style={[styles.cameraError, { bottom: insets.bottom + 212 }]}>{error}</Text>
       ) : null}
 
-      {error ? <Text style={styles.cameraError}>{error}</Text> : null}
+      <View style={[styles.bottomArea, { bottom: insets.bottom + spacing.lg }]}>
+        {/*
+          Recent shots in this batch, newest last. The library tile rides at
+          the end of the strip once there is a batch, because the bottom-left
+          slot it had on an empty camera is now the last shot.
+        */}
+        {shots.length > 0 ? (
+          <View style={styles.strip}>
+            {stripShots.map((shot) => (
+              <Image key={shot.key} source={{ uri: shot.uri }} style={styles.stripThumb} />
+            ))}
+            {hiddenCount > 0 ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`${hiddenCount} more. Review all ${shots.length}`}
+                style={[styles.stripThumb, styles.stripMore]}
+                onPress={() => setReviewing(true)}
+              >
+                <Text style={styles.stripMoreText}>+{hiddenCount}</Text>
+              </Pressable>
+            ) : null}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Add from photo library"
+              style={[styles.stripThumb, styles.stripMore]}
+              onPress={() => void pickFromLibrary()}
+            >
+              <Icon icon={Images} size="md" color={CHROME_FG} />
+            </Pressable>
+          </View>
+        ) : null}
 
-      <View style={styles.bottomBar}>
-        <Pressable
-          accessibilityRole="button"
-          style={styles.sideAction}
-          onPress={() => void pickFromLibrary()}
-        >
-          <Text style={styles.chipText}>Library</Text>
-        </Pressable>
+        <View style={styles.bottomBar}>
+          {lastShot ? (
+            /*
+             * The last shot opens review, where the batch gets its caption,
+             * tags and a last look at the phase before Save. The count on it is
+             * the old "Review N" label, kept so nobody loses track of a burst.
+             */
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Review ${shots.length} photo${shots.length === 1 ? "" : "s"}`}
+              style={styles.lastShot}
+              onPress={() => setReviewing(true)}
+            >
+              <Image source={{ uri: lastShot.uri }} style={styles.lastShotImage} />
+              <View style={[styles.countBadge, { backgroundColor: theme.colors.primary }]}>
+                <Text style={[styles.countText, { color: theme.colors.primaryForeground }]}>
+                  {shots.length}
+                </Text>
+              </View>
+            </Pressable>
+          ) : (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Add from photo library"
+              style={[styles.lastShot, styles.libraryButton]}
+              onPress={() => void pickFromLibrary()}
+            >
+              <Icon icon={Images} size="lg" color={CHROME_FG} />
+            </Pressable>
+          )}
 
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Take photo"
-          accessibilityHint="Adds a photo to this batch without leaving the camera"
-          style={styles.shutter}
-          onPress={() => void takeShot()}
-        >
-          <View style={styles.shutterInner} />
-        </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Take photo"
+            accessibilityHint="Adds a photo to this batch without leaving the camera"
+            style={styles.shutter}
+            onPress={() => void takeShot()}
+          >
+            <View style={styles.shutterInner} />
+          </Pressable>
 
-        <Pressable
-          accessibilityRole="button"
-          style={styles.sideAction}
-          disabled={shots.length === 0}
-          onPress={() => setReviewing(true)}
-        >
-          <Text style={[styles.chipText, shots.length === 0 && { opacity: 0.4 }]}>
-            {shots.length > 0 ? `Review ${shots.length}` : "Review"}
-          </Text>
-        </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            style={styles.flipButton}
+            hitSlop={8}
+            accessibilityLabel="Switch camera"
+            onPress={() => setFacing(facing === "back" ? "front" : "back")}
+          >
+            <Icon icon={RefreshCw} size="lg" color={CHROME_FG} />
+          </Pressable>
+        </View>
       </View>
     </View>
   );
 }
 
+/**
+ * The flash button's glyph: a bolt, struck through when off, with a small "A"
+ * beside it on auto.
+ *
+ * Drawn here rather than taken from `@/ui/icons` because the registry has no
+ * bolt. The path is lucide's `zap`, so it sits beside the lucide glyphs on the
+ * other buttons without looking borrowed.
+ */
+function FlashGlyph({ mode }: { mode: FlashMode }) {
+  return (
+    <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
+      <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+        <Path
+          d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"
+          stroke={CHROME_FG}
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          fill={mode === "on" ? CHROME_FG : "none"}
+        />
+        {mode === "off" ? (
+          <Path d="M3 3l18 18" stroke={CHROME_FG} strokeWidth={2} strokeLinecap="round" />
+        ) : null}
+      </Svg>
+      {mode === "auto" ? <Text style={styles.flashAuto}>A</Text> : null}
+    </View>
+  );
+}
+
+/** Tiles in the recent-shots strip before the rest collapse into "+N". */
+const STRIP_MAX = 4;
+
+/*
+ * Camera chrome is always dark, whatever the app's scheme: it sits on a live
+ * picture, and a light pill over a bright sky would vanish. So these are fixed
+ * rather than read from the palette, and the orange primary is kept for the
+ * one thing that is ours (the batch count).
+ */
+const CHROME_FG = "#ffffff";
+const CHROME_FILL = "rgba(40, 36, 32, 0.72)";
+const CHROME_DEEP = "rgba(10, 8, 6, 0.82)";
+const SELECTED_FILL = "#ece8e3";
+const SELECTED_FG = "#18130d";
+
 const styles = StyleSheet.create({
   centered: { flex: 1, alignItems: "center", justifyContent: "center" },
   cameraRoot: { flex: 1, backgroundColor: "#000" },
+  gridLine: { position: "absolute", backgroundColor: "rgba(255,255,255,0.22)" },
+  gridV: { top: 0, bottom: 0, width: StyleSheet.hairlineWidth },
+  gridH: { left: 0, right: 0, height: StyleSheet.hairlineWidth },
+  topArea: { position: "absolute", left: 0, right: 0, gap: spacing.md },
   topBar: {
-    position: "absolute",
-    top: 48,
-    left: 0,
-    right: 0,
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
+    gap: spacing.md,
     paddingHorizontal: spacing.lg,
   },
-  chip: {
-    backgroundColor: "rgba(0,0,0,0.55)",
+  roundButton: {
+    width: HIT_TARGET,
+    height: HIT_TARGET,
+    borderRadius: HIT_TARGET / 2,
+    backgroundColor: CHROME_FILL,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  locationPill: {
+    flexShrink: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: CHROME_DEEP,
     borderRadius: radius.pill,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     minHeight: 36,
+  },
+  locationText: { color: CHROME_FG, fontSize: 15, fontWeight: "700", flexShrink: 1 },
+  phaseRow: { flexDirection: "row", gap: spacing.sm, paddingHorizontal: spacing.lg },
+  phasePill: {
+    backgroundColor: CHROME_FILL,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.lg,
+    minHeight: 36,
     justifyContent: "center",
   },
-  chipText: { color: "#fff", fontSize: 14, fontWeight: "600" },
-  strip: { position: "absolute", bottom: 148, left: 0, right: 0, maxHeight: 72 },
-  stripContent: { paddingHorizontal: spacing.lg, gap: spacing.sm },
-  stripThumb: { width: 56, height: 56, borderRadius: radius.sm, backgroundColor: "#222" },
+  phasePillActive: { backgroundColor: SELECTED_FILL },
+  phaseText: { color: CHROME_FG, fontSize: 15, fontWeight: "700" },
+  phaseTextActive: { color: SELECTED_FG },
+  flashAuto: { color: CHROME_FG, fontSize: 10, fontWeight: "800", marginLeft: -2 },
   cameraError: {
     position: "absolute",
-    bottom: 232,
     alignSelf: "center",
     color: "#fff",
     backgroundColor: "rgba(180,35,24,0.9)",
@@ -674,27 +859,75 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     overflow: "hidden",
   },
+  bottomArea: { position: "absolute", left: 0, right: 0, gap: spacing.lg },
+  strip: { flexDirection: "row", gap: spacing.sm, paddingHorizontal: spacing.xl },
+  stripThumb: {
+    width: 56,
+    height: 56,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.7)",
+    backgroundColor: "#222",
+  },
+  stripMore: {
+    borderStyle: "dashed",
+    borderColor: "rgba(255,255,255,0.45)",
+    backgroundColor: CHROME_FILL,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  stripMoreText: { color: "rgba(255,255,255,0.8)", fontSize: 15, fontWeight: "700" },
   bottomBar: {
-    position: "absolute",
-    bottom: 40,
-    left: 0,
-    right: 0,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: spacing.xl,
   },
-  sideAction: { minWidth: 88, minHeight: HIT_TARGET, justifyContent: "center" },
+  lastShot: { width: 56, height: 56 },
+  lastShotImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: radius.md,
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.85)",
+    backgroundColor: "#222",
+  },
+  libraryButton: {
+    borderRadius: radius.md,
+    backgroundColor: CHROME_FILL,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  countBadge: {
+    position: "absolute",
+    top: -6,
+    right: -6,
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    paddingHorizontal: 5,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  countText: { fontSize: 12, fontWeight: "800" },
+  flipButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: CHROME_FILL,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   shutter: {
-    width: 78,
-    height: 78,
-    borderRadius: 39,
-    borderWidth: 4,
+    width: 82,
+    height: 82,
+    borderRadius: 41,
+    borderWidth: 5,
     borderColor: "#fff",
     alignItems: "center",
     justifyContent: "center",
   },
-  shutterInner: { width: 60, height: 60, borderRadius: 30, backgroundColor: "#fff" },
+  shutterInner: { width: 62, height: 62, borderRadius: 31, backgroundColor: "#fff" },
   /*
    * Off-screen, not invisible. `opacity: 0` would still lay out, but a future
    * reader reaching for `display: none` would silently break the rasteriser,

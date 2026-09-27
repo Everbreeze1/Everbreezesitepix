@@ -20,25 +20,26 @@ import { describe, expect, it } from "vitest";
 const ROOT = process.cwd();
 const read = (p: string) => readFileSync(join(ROOT, p), "utf8");
 
-describe("the home notifications row", () => {
+describe("the home notifications bell", () => {
   const home = () => read("apps/mobile/app/(app)/(tabs)/index.tsx");
 
-  it("states the count once, in the subtitle", () => {
+  it("states the count once, in the label", () => {
     /*
      * It used to carry "9 unread" in the subtitle, a "9" count badge, and the
      * unread dot. The badge was the third copy of a number the subtitle
-     * already gives in words.
+     * already gave in words. The redesign moved notifications from a row to a
+     * bell in the header; the count now lives only in its spoken label.
      */
     const s = home().replace(/\s+/g, " ");
-    expect(s).toContain('subtitle={unread === 0 ? "Nothing unread" : `${unread} unread`}');
+    expect(s).toContain(
+      'unread === 0 ? "Notifications, nothing unread" : `Notifications, ${unread} unread`',
+    );
     expect(s).not.toContain("<CountBadge count={unread}");
   });
 
-  it("keeps the dot and tint, which are a documented pair", () => {
-    // Removing these instead would have been the wrong half to cut.
-    expect(home()).toContain("unread={unread > 0}");
-    const row = read("apps/mobile/src/ui/ListRow.tsx");
-    expect(row).toContain("Not yet read: a dot and a tinted ground.");
+  it("keeps a visible dot when something is unread", () => {
+    // The label is for a screen reader; somebody looking needs the dot.
+    expect(home()).toContain("{unread > 0 ? (");
   });
 });
 

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
   ActivityIndicator,
@@ -15,6 +15,7 @@ import {
   Archive,
   Camera,
   CheckCheck,
+  ChevronLeft,
   CircleCheck,
   ClipboardCheck,
   FileText,
@@ -30,10 +31,11 @@ import {
   Video,
   Workflow,
   Link2,
+  X,
 } from "@/ui/icons";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useInfiniteQuery, useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { displayCaption, formatPhotoDateGroup } from "@everlumen/shared";
+import { displayCaption, formatPhotoDateGroup, projectDisplayName } from "@everlumen/shared";
 import {
   listProjectPhotoPage,
   PHOTO_PAGE_SIZE,
@@ -59,6 +61,14 @@ import {
   isShareLive,
 } from "@/api/sharing";
 import { QueueBanner } from "@/components/QueueBanner";
+import { ProjectHero, ProjectHeroButton } from "@/components/ProjectHero";
+import { ProjectTabs, type ProjectTab } from "@/components/ProjectTabs";
+import { ProjectStatusPill } from "@/components/ProjectStatusPill";
+import { ProjectCrewAvatars } from "@/components/ProjectCrewAvatars";
+import { MoreGlyph } from "@/components/ProjectGlyphs";
+import { getBlueprintOrigin } from "@/api/blueprints";
+import { getProjectCrew, listCrewCandidates } from "@/api/project-assignees";
+import { crewName } from "@/api/project-assignees-view";
 import { PhotoBulkBar, type PhotoBulkAction } from "@/components/PhotoBulkBar";
 import { generateSummaryFromPhotos } from "@/api/summaries";
 import { photoSelectionError } from "@/api/summary-view";
@@ -80,11 +90,8 @@ import {
   ProjectBlueprint,
   ProjectCrew,
   ActionSheet,
-  Badge,
-  Button,
   ChipGroup,
   Icon,
-  IconButton,
   EmptyState,
   ErrorState,
   ListGroup,
@@ -105,7 +112,47 @@ const FILTERS: ChipOption<PhaseFilter>[] = [
   { id: "untagged", label: "Untagged" },
 ];
 
-const GRID_GAP = spacing.xs;
+const GRID_GAP = spacing.sm;
+
+/** Tabs drawn on this screen. */
+type InPlaceTab = "photos" | "details";
+/** Tabs that open the section's own screen, which already exists as a route. */
+type LinkedTab =
+  | "documents"
+  | "reports"
+  | "checklists"
+  | "workflows"
+  | "tasks"
+  | "site-logs"
+  | "walkthroughs";
+type DetailTab = InPlaceTab | LinkedTab;
+
+/*
+ * The tab row. Photos and Details render here; the others push the screen
+ * that section has always had, so each keeps its own header, create action
+ * and list rather than being squeezed into a second copy under this one.
+ */
+const TABS: ProjectTab<DetailTab>[] = [
+  { id: "photos", label: "Photos" },
+  { id: "documents", label: "Documents" },
+  { id: "reports", label: "Reports" },
+  { id: "checklists", label: "Checklists" },
+  { id: "workflows", label: "Workflows" },
+  { id: "tasks", label: "Tasks" },
+  { id: "site-logs", label: "Site logs" },
+  { id: "walkthroughs", label: "Walkthroughs" },
+  { id: "details", label: "Details" },
+];
+
+const LINKED_TABS: Record<LinkedTab, (id: string) => void> = {
+  documents: (id) => router.push(`/project/${id}/documents`),
+  reports: (id) => router.push(`/project/${id}/reports`),
+  checklists: (id) => router.push(`/project/${id}/checklists`),
+  workflows: (id) => router.push(`/project/${id}/workflows`),
+  tasks: (id) => router.push(`/project/${id}/tasks`),
+  "site-logs": (id) => router.push(`/project/${id}/site-logs`),
+  walkthroughs: (id) => router.push(`/project/${id}/walkthroughs`),
+};
 
 /** One rendered row of the grid. Sections hold rows, not photos. */
 type PhotoRow = { key: string; photos: PhotoListItem[] };
@@ -150,6 +197,8 @@ export default function ProjectDetailScreen() {
   const { id, photo: deepLinkPhoto } = useLocalSearchParams<{ id: string; photo?: string }>();
   const theme = useTheme();
   const [filter, setFilter] = useState<PhaseFilter>("all");
+  const [tab, setTab] = useState<InPlaceTab>("photos");
+  const [sort, setSort] = useState<"newest" | "oldest">("newest");
   // Seeded from the param rather than set in an effect, so the lightbox is
   // already open on the first render instead of flashing the grid first.
   const [lightboxId, setLightboxId] = useState<string | null>(deepLinkPhoto ?? null);
@@ -206,10 +255,24 @@ export default function ProjectDetailScreen() {
     return merged;
   }, [photosQuery.data]);
 
+  /*
+   * Pages arrive newest first, so "oldest first" is the loaded list reversed.
+   * That is only honest once every page is here, which the effect below sees
+   * to: otherwise the "oldest" photo shown would just be the oldest one that
+   * happened to be fetched.
+   */
   const filtered = useMemo(() => {
-    if (filter === "all") return photos;
-    return photos.filter((photo) => (photo.phase ?? "untagged") === filter);
-  }, [photos, filter]);
+    const phased =
+      filter === "all" ? photos : photos.filter((photo) => (photo.phase ?? "untagged") === filter);
+    return sort === "newest" ? phased : [...phased].reverse();
+  }, [photos, filter, sort]);
+
+  useEffect(() => {
+    if (sort !== "oldest") return;
+    if (photosQuery.hasNextPage && !photosQuery.isFetchingNextPage) {
+      void photosQuery.fetchNextPage();
+    }
+  }, [sort, photosQuery]);
 
   /** Photos bucketed by capture day, newest day first, each day chunked into rows. */
   const sections = useMemo(() => {
@@ -231,6 +294,41 @@ export default function ProjectDetailScreen() {
   }, [filtered, columns]);
 
   const project = projectQuery.data;
+
+  /*
+   * What kind of job this is, read from the blueprint that set it up. The same
+   * query key `ProjectBlueprint` reads, so the Details tab does not fetch it
+   * twice.
+   */
+  const blueprintOrigin = useQuery({
+    queryKey: ["blueprint-origin", String(id)],
+    queryFn: () => getBlueprintOrigin(String(id)),
+    enabled: Boolean(id),
+  });
+
+  /*
+   * The crew as avatars for the row under the hero. Same keys as
+   * `ProjectCrew`, so changing the crew on the Details tab updates these too.
+   */
+  const crewQuery = useQuery({
+    queryKey: ["project-crew", String(id)],
+    queryFn: () => getProjectCrew(String(id)),
+    enabled: Boolean(id),
+  });
+  const peopleQuery = useQuery({
+    queryKey: ["crew-candidates"],
+    queryFn: listCrewCandidates,
+    enabled: (crewQuery.data?.assigned.length ?? 0) > 0,
+    staleTime: 5 * 60 * 1000,
+  });
+  const crewPeople = useMemo(
+    () =>
+      (crewQuery.data?.assigned ?? []).map((userId) => {
+        const person = peopleQuery.data?.find((p) => p.userId === userId);
+        return { name: person ? crewName(person) : null, uri: person?.avatarUrl ?? null };
+      }),
+    [crewQuery.data, peopleQuery.data],
+  );
   const address = project ? formatAddress(project) : null;
   const loading = projectQuery.isLoading || photosQuery.isLoading;
   const error = projectQuery.error ?? photosQuery.error;
@@ -499,57 +597,36 @@ export default function ProjectDetailScreen() {
     [selected, photos, queryClient, id],
   );
 
+  /*
+   * The hero's second line: the client, then where the job is. The street is
+   * usually the project's name already, so it is not repeated here.
+   */
+  const place = project
+    ? [project.city, project.state].filter(Boolean).join(", ") || project.location || null
+    : null;
+  const heroSubtitle = project
+    ? [project.client_name?.trim(), place].filter(Boolean).join(" · ") || null
+    : null;
+  // Newest loaded photo, which is what the project list and the web card use
+  // as a job's cover. No photo falls back to the gradient.
+  const coverUri = photos.length > 0 ? (urls[photos[0].id] ?? null) : null;
+  const blueprintName = blueprintOrigin.data?.applications[0]?.blueprintName ?? null;
+  const photoCount = `${photos.length}${photosQuery.hasNextPage ? "+" : ""} photo${photos.length === 1 ? "" : "s"}`;
+
+  const onTab = (next: DetailTab) => {
+    const go = LINKED_TABS[next as LinkedTab];
+    if (go) go(String(id));
+    else setTab(next as InPlaceTab);
+  };
+
   return (
     <>
-      <Stack.Screen
-        options={{
-          title: selecting ? `${selected.size} selected` : (project?.name ?? "Project"),
-          headerRight: () =>
-            selecting ? (
-              <IconButton
-                icon={CheckCheck}
-                accessibilityLabel="Select all loaded photos"
-                surface={false}
-                tone="primary"
-                onPress={() => setSelected(new Set(filtered.map((photo) => photo.id)))}
-              />
-            ) : (
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
-                {/*
-                  A filled star for starred, an outline for not. Colour alone
-                  would not carry it: the header is the one place the app draws
-                  on the chrome background, where a tinted glyph reads as
-                  "tappable" rather than as "on".
-                */}
-                <IconButton
-                  icon={Star}
-                  accessibilityLabel={project?.starred ? "Remove star" : "Star this project"}
-                  surface={false}
-                  tone={project?.starred ? "safety" : "muted"}
-                  onPress={() => void patchProject("starred", starPatch(!project?.starred))}
-                />
-                <IconButton
-                  icon={PenLine}
-                  accessibilityLabel="Project actions"
-                  surface={false}
-                  tone="primary"
-                  onPress={() => setActionsOpen(true)}
-                />
-              </View>
-            ),
-        }}
-      />
+      {/*
+        No navigator header: the hero runs under the status bar and carries
+        its own back and overflow buttons.
+      */}
+      <Stack.Screen options={{ headerShown: false, title: project?.name ?? "Project" }} />
       <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
-        <QueueBanner />
-        {shareError ? (
-          <UIText
-            variant="caption"
-            tone="destructive"
-            style={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.sm }}
-          >
-            {shareError}
-          </UIText>
-        ) : null}
         {loading ? (
           <SkeletonList rows={5} />
         ) : error ? (
@@ -562,11 +639,11 @@ export default function ProjectDetailScreen() {
           />
         ) : (
           <SectionList
-            sections={sections}
+            sections={tab === "photos" ? sections : []}
             keyExtractor={(row) => row.key}
             stickySectionHeadersEnabled={false}
-            contentContainerStyle={{ padding: spacing.lg, paddingBottom: 120 }}
-            onEndReached={loadMore}
+            contentContainerStyle={{ paddingBottom: 140 }}
+            onEndReached={tab === "photos" ? loadMore : undefined}
             onEndReachedThreshold={0.6}
             // The grid is fixed-height rows, so windowing can be tighter than
             // the default without blank space appearing during a fast scroll.
@@ -582,140 +659,260 @@ export default function ProjectDetailScreen() {
             }
             ListHeaderComponent={
               <View>
-                <View style={{ gap: spacing.md, marginBottom: spacing.lg }}>
-                  {address ? (
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.xs }}>
-                      <MapPin size={14} color={theme.colors.mutedForeground} strokeWidth={2.25} />
-                      <UIText variant="caption" tone="muted" style={{ flex: 1 }}>
-                        {address}
+                <ProjectHero
+                  title={selecting ? `${selected.size} selected` : projectDisplayName(project)}
+                  subtitle={selecting ? "Tap photos to add or remove them" : heroSubtitle}
+                  coverUri={coverUri}
+                  left={
+                    selecting ? (
+                      <ProjectHeroButton
+                        accessibilityLabel="Cancel selection"
+                        onPress={() => setSelected(new Set())}
+                      >
+                        <Icon icon={X} size="md" color="#ffffff" />
+                      </ProjectHeroButton>
+                    ) : (
+                      <ProjectHeroButton accessibilityLabel="Back" onPress={() => router.back()}>
+                        <Icon icon={ChevronLeft} size="md" color="#ffffff" />
+                      </ProjectHeroButton>
+                    )
+                  }
+                  right={
+                    selecting ? (
+                      <ProjectHeroButton
+                        accessibilityLabel="Select all loaded photos"
+                        onPress={() => setSelected(new Set(filtered.map((photo) => photo.id)))}
+                      >
+                        <Icon icon={CheckCheck} size="md" color="#ffffff" />
+                      </ProjectHeroButton>
+                    ) : (
+                      <>
+                        {/*
+                          A filled amber star for starred, a white outline for
+                          not. Colour alone would not carry it on a photograph,
+                          so the fill does the work.
+                        */}
+                        <ProjectHeroButton
+                          accessibilityLabel={
+                            project?.starred ? "Remove star" : "Star this project"
+                          }
+                          onPress={() => void patchProject("starred", starPatch(!project?.starred))}
+                        >
+                          <Star
+                            size={20}
+                            strokeWidth={2.25}
+                            color={project?.starred ? theme.colors.safety : "#ffffff"}
+                            fill={project?.starred ? theme.colors.safety : "transparent"}
+                          />
+                        </ProjectHeroButton>
+                        <ProjectHeroButton
+                          accessibilityLabel="Project actions"
+                          onPress={() => setActionsOpen(true)}
+                        >
+                          <MoreGlyph color="#ffffff" />
+                        </ProjectHeroButton>
+                      </>
+                    )
+                  }
+                />
+
+                {/*
+                  Status, what kind of job it is, and who is on it: the three
+                  facts somebody opening a job checks before anything else.
+                  The avatars open the Details tab, where the crew can be
+                  changed.
+                */}
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: spacing.md,
+                    paddingHorizontal: spacing.xl,
+                    paddingVertical: spacing.md,
+                    backgroundColor: theme.colors.card,
+                    borderBottomWidth: StyleSheet.hairlineWidth,
+                    borderBottomColor: theme.colors.border,
+                  }}
+                >
+                  {project?.status ? <ProjectStatusPill status={project.status} /> : null}
+                  <UIText variant="body" tone="muted" numberOfLines={1} style={{ flex: 1 }}>
+                    {blueprintName ?? ""}
+                  </UIText>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Who is on this job"
+                    onPress={() => setTab("details")}
+                    hitSlop={8}
+                  >
+                    <ProjectCrewAvatars people={crewPeople} size="md" />
+                  </Pressable>
+                </View>
+
+                <ProjectTabs tabs={TABS} value={tab} onChange={onTab} />
+
+                <QueueBanner />
+                {shareError ? (
+                  <UIText
+                    variant="caption"
+                    tone="destructive"
+                    style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.sm }}
+                  >
+                    {shareError}
+                  </UIText>
+                ) : null}
+
+                {tab === "photos" ? (
+                  <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.lg }}>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        marginBottom: spacing.md,
+                      }}
+                    >
+                      <UIText variant="heading" style={{ fontWeight: "700" }}>
+                        {photoCount}
                       </UIText>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Sort: ${sort === "newest" ? "newest" : "oldest"} first`}
+                        accessibilityHint="Switches between newest and oldest first"
+                        onPress={() => setSort((s) => (s === "newest" ? "oldest" : "newest"))}
+                        hitSlop={12}
+                      >
+                        <UIText variant="bodyStrong" tone="primary" style={{ fontWeight: "700" }}>
+                          {`Sort: ${sort === "newest" ? "Newest" : "Oldest"}`}
+                        </UIText>
+                      </Pressable>
                     </View>
-                  ) : null}
 
-                  {/*
-                    Who is on the job, directly under the address. It is the
-                    same kind of fact: where this is and who is there. The row
-                    shows for everybody and only offers "Change" to a role the
-                    server would actually accept a write from.
-                  */}
-                  <ProjectCrew projectId={String(id)} />
+                    {/*
+                      Was a hand-rolled row of Pressables with its own chip
+                      style. The same control exists on the gallery and the
+                      task list, so it lives in the kit now and all three agree
+                      on height.
+                    */}
+                    <View style={{ marginHorizontal: -spacing.lg, marginBottom: spacing.md }}>
+                      <ChipGroup
+                        options={FILTERS}
+                        value={filter}
+                        onChange={setFilter}
+                        label="Filter photos by phase"
+                      />
+                    </View>
 
-                  {/*
-                    Next to the crew, because they are the same act: setting a
-                    job up is deciding who is on it and what it needs. The row
-                    reads as provenance once a blueprint has been applied.
-                  */}
-                  <ProjectBlueprint
-                    projectId={String(id)}
-                    projectName={project?.name ?? ""}
-                    projectAddress={address}
-                  />
-
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
-                    <Badge
-                      label={`${photos.length}${photosQuery.hasNextPage ? "+" : ""} photo${photos.length === 1 ? "" : "s"}`}
-                      tone="primary"
-                    />
-                    {project?.status ? <Badge label={project.status} tone="neutral" /> : null}
+                    {/*
+                      Directly above the grid it was written from. The log is
+                      the prose version of these photographs, and putting it
+                      anywhere else makes it a report somebody has to go and
+                      find, which is the exact thing it exists not to be.
+                    */}
+                    <DailyLogCard projectId={String(id)} pending={queued > 0} />
                   </View>
+                ) : (
+                  <View style={{ gap: spacing.md, padding: spacing.lg }}>
+                    {address ? (
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.xs }}>
+                        <MapPin size={14} color={theme.colors.mutedForeground} strokeWidth={2.25} />
+                        <UIText variant="caption" tone="muted" style={{ flex: 1 }}>
+                          {address}
+                        </UIText>
+                      </View>
+                    ) : null}
 
-                  {/*
-                   * The four ways deeper into a job, as one grouped block.
-                   *
-                   * These were four separate bordered rows, each drawn inline
-                   * with a text chevron, and they carried no icons at all: on a
-                   * screen whose whole job is to be scanned quickly they were
-                   * four identical grey rectangles differing only by a word.
-                   */}
-                  <ListGroup>
-                    <ListRow
-                      icon={ClipboardCheck}
-                      title="Checklists"
-                      subtitle="Run the checks for this site"
-                      onPress={() => router.push(`/project/${id}/checklists`)}
-                    />
-                    <RowDivider />
-                    <ListRow
-                      icon={ListTodo}
-                      title="Tasks"
-                      subtitle="Punch list and assignments"
-                      onPress={() => router.push(`/project/${id}/tasks`)}
-                    />
-                    <RowDivider />
-                    <ListRow
-                      icon={Workflow}
-                      title="Workflows"
-                      subtitle="Phases and progress"
-                      onPress={() => router.push(`/project/${id}/workflows`)}
-                    />
-                    <RowDivider />
-                    <ListRow
-                      icon={FileText}
-                      title="Documents"
-                      subtitle="Pages and files on this job"
-                      onPress={() => router.push(`/project/${id}/documents`)}
-                    />
-                    <RowDivider />
-                    <ListRow
-                      icon={Send}
-                      title="Reports"
-                      subtitle="What the client receives"
-                      onPress={() => router.push(`/project/${id}/reports`)}
-                    />
-                    <RowDivider />
-                    <ListRow
-                      // Not `FileText`: that is the Documents row above, and two
-                      // rows in one list drawing the same glyph is the same as
-                      // neither having one. `NotebookPen` is what `DailyLogCard`
-                      // already uses for the same idea, a day written up.
-                      icon={NotebookPen}
-                      title="Site logs"
-                      subtitle="The day's photos, written up"
-                      onPress={() => router.push(`/project/${id}/site-logs`)}
-                    />
-                    <RowDivider />
-                    <ListRow
-                      icon={Video}
-                      title="Walkthroughs"
-                      subtitle="Recorded site walks"
-                      onPress={() => router.push(`/project/${id}/walkthroughs`)}
-                    />
-                    <RowDivider />
-                    <ListRow
-                      icon={Trash2}
-                      iconTone="muted"
-                      title="Trash"
-                      subtitle="Restore deleted photos"
-                      onPress={() => router.push(`/project/${id}/trash`)}
-                    />
-                  </ListGroup>
-                </View>
+                    {/*
+                      Who is on the job, directly under the address. It is the
+                      same kind of fact: where this is and who is there. The
+                      row shows for everybody and only offers "Change" to a
+                      role the server would actually accept a write from.
+                    */}
+                    <ProjectCrew projectId={String(id)} />
 
-                {/*
-                  Was a hand-rolled row of Pressables with its own chip style.
-                  The same control exists on the gallery and the task list, so
-                  it lives in the kit now and all three agree on height.
-                */}
-                <View style={{ marginHorizontal: -spacing.lg, marginBottom: spacing.lg }}>
-                  <ChipGroup
-                    options={FILTERS}
-                    value={filter}
-                    onChange={setFilter}
-                    label="Filter photos by phase"
-                  />
-                </View>
+                    {/*
+                      Next to the crew, because they are the same act: setting
+                      a job up is deciding who is on it and what it needs. The
+                      row reads as provenance once a blueprint has been applied.
+                    */}
+                    <ProjectBlueprint
+                      projectId={String(id)}
+                      projectName={project?.name ?? ""}
+                      projectAddress={address}
+                    />
 
-                {/*
-                  Directly above the grid it was written from. The log is the
-                  prose version of these photographs, and putting it anywhere
-                  else makes it a report somebody has to go and find, which is
-                  the exact thing it exists not to be.
-                */}
-                <DailyLogCard projectId={String(id)} pending={queued > 0} />
+                    {/*
+                     * Every way deeper into a job, as one grouped block. Most
+                     * are also tabs above; this is the full list, including
+                     * the ones the tab row leaves off (Trash).
+                     */}
+                    <ListGroup>
+                      <ListRow
+                        icon={ClipboardCheck}
+                        title="Checklists"
+                        subtitle="Run the checks for this site"
+                        onPress={() => router.push(`/project/${id}/checklists`)}
+                      />
+                      <RowDivider />
+                      <ListRow
+                        icon={ListTodo}
+                        title="Tasks"
+                        subtitle="Punch list and assignments"
+                        onPress={() => router.push(`/project/${id}/tasks`)}
+                      />
+                      <RowDivider />
+                      <ListRow
+                        icon={Workflow}
+                        title="Workflows"
+                        subtitle="Phases and progress"
+                        onPress={() => router.push(`/project/${id}/workflows`)}
+                      />
+                      <RowDivider />
+                      <ListRow
+                        icon={FileText}
+                        title="Documents"
+                        subtitle="Pages and files on this job"
+                        onPress={() => router.push(`/project/${id}/documents`)}
+                      />
+                      <RowDivider />
+                      <ListRow
+                        icon={Send}
+                        title="Reports"
+                        subtitle="What the client receives"
+                        onPress={() => router.push(`/project/${id}/reports`)}
+                      />
+                      <RowDivider />
+                      <ListRow
+                        // Not `FileText`: that is the Documents row above, and two
+                        // rows in one list drawing the same glyph is the same as
+                        // neither having one. `NotebookPen` is what `DailyLogCard`
+                        // already uses for the same idea, a day written up.
+                        icon={NotebookPen}
+                        title="Site logs"
+                        subtitle="The day's photos, written up"
+                        onPress={() => router.push(`/project/${id}/site-logs`)}
+                      />
+                      <RowDivider />
+                      <ListRow
+                        icon={Video}
+                        title="Walkthroughs"
+                        subtitle="Recorded site walks"
+                        onPress={() => router.push(`/project/${id}/walkthroughs`)}
+                      />
+                      <RowDivider />
+                      <ListRow
+                        icon={Trash2}
+                        iconTone="muted"
+                        title="Trash"
+                        subtitle="Restore deleted photos"
+                        onPress={() => router.push(`/project/${id}/trash`)}
+                      />
+                    </ListGroup>
+                  </View>
+                )}
               </View>
             }
             ListEmptyComponent={
-              photos.length === 0 ? (
+              tab !== "photos" ? null : photos.length === 0 ? (
                 <EmptyState
                   icon={Camera}
                   title="No photos yet"
@@ -736,7 +933,7 @@ export default function ProjectDetailScreen() {
               )
             }
             ListFooterComponent={
-              photosQuery.isFetchingNextPage ? (
+              tab === "photos" && photosQuery.isFetchingNextPage ? (
                 <ActivityIndicator
                   style={{ marginVertical: spacing.lg }}
                   color={theme.colors.primary}
@@ -747,7 +944,11 @@ export default function ProjectDetailScreen() {
               <UIText
                 variant="overline"
                 tone="muted"
-                style={{ marginBottom: spacing.sm, marginTop: spacing.md }}
+                style={{
+                  marginBottom: spacing.sm,
+                  marginTop: spacing.md,
+                  paddingHorizontal: spacing.lg,
+                }}
               >
                 {section.title.toUpperCase()}
               </UIText>
@@ -777,7 +978,12 @@ export default function ProjectDetailScreen() {
                       accessibilityState={{ selected: picked }}
                       style={{ width: tileSize, height: tileSize }}
                     >
-                      <PhotoThumb uri={urls[photo.id]} width="100%" height="100%" />
+                      <PhotoThumb
+                        uri={urls[photo.id]}
+                        width="100%"
+                        height="100%"
+                        rounded={radius.lg}
+                      />
                       {selecting ? (
                         <View
                           style={[
@@ -842,16 +1048,22 @@ export default function ProjectDetailScreen() {
             onAction={(action) => void applyBulk(action)}
           />
         ) : filtered.length === 0 ? null : (
-          <View style={styles.fab}>
-            <Button
-              label="Capture"
-              icon={Camera}
-              size="lg"
-              onPress={() => router.push(`/project/${id}/capture`)}
-              accessibilityHint="Opens the camera for this project"
-              style={{ borderRadius: radius.pill }}
-            />
-          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Capture"
+            accessibilityHint="Opens the camera for this project"
+            onPress={() => router.push(`/project/${id}/capture`)}
+            style={({ pressed }) => [
+              styles.fab,
+              {
+                backgroundColor: theme.colors.primary,
+                shadowColor: theme.colors.primary,
+                opacity: pressed ? 0.85 : 1,
+              },
+            ]}
+          >
+            <Icon icon={Camera} size="lg" color={theme.colors.primaryForeground} />
+          </Pressable>
         )}
       </View>
 
@@ -1072,7 +1284,7 @@ export default function ProjectDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  gridRow: { flexDirection: "row", gap: GRID_GAP },
+  gridRow: { flexDirection: "row", gap: GRID_GAP, paddingHorizontal: spacing.lg },
   tile: { width: "100%", height: "100%", borderRadius: radius.sm },
   /* Sits over the whole tile so the ring reads as the tile being selected. */
   tileOverlay: {
@@ -1081,7 +1293,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    borderRadius: radius.sm,
+    borderRadius: radius.lg,
     borderWidth: 3,
     alignItems: "flex-end",
     justifyContent: "flex-start",
@@ -1091,20 +1303,20 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.45)",
     borderRadius: radius.pill,
   },
-  /*
-   * Positioning and lift only. The button itself is the kit's, so its height,
-   * radius and pressed state match every other primary action in the app.
-   */
+  /* A round camera button; the fill and glow come from the theme at render. */
   fab: {
     position: "absolute",
     right: spacing.lg,
     bottom: spacing.xl,
+    width: 64,
+    height: 64,
     borderRadius: radius.pill,
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 6,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowOpacity: 0.35,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 8,
   },
   lightbox: { flex: 1, backgroundColor: "rgba(0,0,0,0.94)", justifyContent: "center" },
   lightboxImage: { width: "100%", height: "78%" },

@@ -1,23 +1,29 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState } from "react";
 import { FolderPlus, MapPin } from "@/ui/icons";
 import { FlatList, View } from "react-native";
 import { router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
-import { projectDisplayName, relativeTime } from "@everlumen/shared";
-import { formatAddress, listProjects } from "@/api/projects";
+import {
+  isProjectStatus,
+  PROJECT_STATUS_LABELS,
+  projectDisplayName,
+  relativeTime,
+} from "@everlumen/shared";
+import { formatAddress, listProjects, type ProjectListItem } from "@/api/projects";
 import { distanceLabel, nearestJobsFirst, ON_SITE_METRES } from "@/api/map-view";
 import { useDeviceLocation } from "@/lib/use-device-location";
 import { radius, spacing, useTheme } from "@/theme";
 import {
   Badge,
   Button,
+  Card,
   EmptyState,
   ErrorState,
-  ListRow,
-  RowDivider,
+  Icon,
   SearchField,
   SkeletonList,
   Text,
+  type BadgeTone,
 } from "@/ui";
 
 /**
@@ -121,24 +127,10 @@ export default function CaptureStartScreen() {
             )
           }
           renderItem={({ item, index }) => (
-            <ListGroupWrapper first={index === 0} last={index === projects.length - 1}>
-              <ListRow
-                icon={MapPin}
-                title={projectDisplayName(item)}
-                subtitle={formatAddress(item) ?? `Updated ${relativeTime(item.updated_at)}`}
-                right={
-                  item.metres === null ? undefined : index === 0 &&
-                    item.metres <= ON_SITE_METRES ? (
-                    <Badge label="You're here" tone="success" />
-                  ) : (
-                    <Badge label={distanceLabel(item.metres)} tone="neutral" />
-                  )
-                }
-                onPress={() => router.replace(`/project/${item.id}/capture`)}
-                accessibilityHint="Opens the camera for this project"
-              />
-              {index === projects.length - 1 ? null : <RowDivider />}
-            </ListGroupWrapper>
+            <PickerCard
+              project={item}
+              onSite={index === 0 && item.metres !== null && item.metres <= ON_SITE_METRES}
+            />
           )}
           ListFooterComponent={
             projects.length ? (
@@ -159,40 +151,84 @@ export default function CaptureStartScreen() {
 }
 
 /**
- * Rounds the first and last rows so a `FlatList` of rows still reads as one
- * grouped block.
- *
- * `ListGroup` cannot wrap the list itself here: `FlatList` needs to own its
- * children for virtualization, so the group's border is drawn per row and the
- * corners are rounded only at the ends.
+ * Project status to pill colour, the same three buckets the Projects tab uses,
+ * so a job reads the same colour here as it does on the list it came from.
  */
-function ListGroupWrapper({
-  first,
-  last,
-  children,
+const STATUS_TONE: Record<string, BadgeTone> = {
+  active: "success",
+  on_hold: "warning",
+  completed: "neutral",
+};
+
+/**
+ * One job, drawn as the warm card the Projects tab uses: name, a "City ·
+ * distance" line, and the status pill.
+ *
+ * The distance sits in the subtitle rather than as a second pill so the card
+ * keeps one badge. The job the phone is standing on says "You're here"
+ * instead, in the success tone, because that row is the one a crew member on
+ * site should be able to tap without reading.
+ *
+ * The full street address is deliberately not the subtitle any more: on a
+ * picker the city is enough to tell two jobs apart, and the long line was what
+ * pushed the status off the row on a narrow phone.
+ */
+function PickerCard({
+  project,
+  onSite,
 }: {
-  first: boolean;
-  last: boolean;
-  children: ReactNode;
+  project: ProjectListItem & { metres: number | null };
+  onSite: boolean;
 }) {
   const theme = useTheme();
+  const name = projectDisplayName(project);
+  const place = project.city ?? formatAddress(project);
+  const where = onSite
+    ? "You're here"
+    : project.metres === null
+      ? null
+      : distanceLabel(project.metres);
+  const subtitle =
+    [place, where].filter(Boolean).join(" · ") || `Updated ${relativeTime(project.updated_at)}`;
+  const tone = isProjectStatus(project.status) ? STATUS_TONE[project.status] : "neutral";
+  const label = isProjectStatus(project.status)
+    ? PROJECT_STATUS_LABELS[project.status]
+    : project.status;
+
   return (
-    <View
-      style={{
-        backgroundColor: theme.colors.card,
-        borderLeftWidth: 1,
-        borderRightWidth: 1,
-        borderTopWidth: first ? 1 : 0,
-        borderBottomWidth: last ? 1 : 0,
-        borderColor: theme.colors.border,
-        borderTopLeftRadius: first ? radius.lg : 0,
-        borderTopRightRadius: first ? radius.lg : 0,
-        borderBottomLeftRadius: last ? radius.lg : 0,
-        borderBottomRightRadius: last ? radius.lg : 0,
-        overflow: "hidden",
-      }}
+    <Card
+      onPress={() => router.replace(`/project/${project.id}/capture`)}
+      accessibilityLabel={`${name}, ${subtitle}, ${label}. Opens the camera for this project`}
+      style={{ marginBottom: spacing.sm }}
     >
-      {children}
-    </View>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.md }}>
+        <View
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: radius.md,
+            backgroundColor: onSite ? theme.colors.primary : theme.colors.accent,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Icon
+            icon={MapPin}
+            size="md"
+            color={onSite ? theme.colors.primaryForeground : theme.colors.accentForeground}
+          />
+        </View>
+        {/* `minWidth: 0` so a long name truncates against the width it has. */}
+        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+          <Text variant="bodyStrong" numberOfLines={1}>
+            {name}
+          </Text>
+          <Text variant="caption" tone={onSite ? "success" : "muted"} numberOfLines={1}>
+            {subtitle}
+          </Text>
+        </View>
+        <Badge label={label} tone={tone} />
+      </View>
+    </Card>
   );
 }

@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { Alert, View } from "react-native";
+import { Alert, Pressable, View } from "react-native";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { relativeTime, titleWithinProject } from "@everlumen/shared";
@@ -22,20 +22,11 @@ import {
   ambiguousReportIds,
   reportClockTime,
 } from "@/api/report-view";
-import { spacing } from "@/theme";
+import { builtReportStatus } from "@/api/report-index-view";
+import { ReportCard } from "@/components/ReportCard";
+import { radius, spacing, useTheme } from "@/theme";
 import { FileText, Plus, Sparkles, Trash2 } from "@/ui/icons";
-import {
-  Button,
-  EmptyState,
-  ErrorState,
-  IconButton,
-  ListGroup,
-  ListRow,
-  RowDivider,
-  Screen,
-  SkeletonList,
-  Text,
-} from "@/ui";
+import { Button, EmptyState, ErrorState, Icon, IconButton, Screen, SkeletonList, Text } from "@/ui";
 
 /**
  * A project's reports.
@@ -51,6 +42,7 @@ import {
  */
 export default function ProjectReportsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const theme = useTheme();
   const queryClient = useQueryClient();
   const [failure, setFailure] = useState<string | null>(null);
 
@@ -67,7 +59,7 @@ export default function ProjectReportsScreen() {
     enabled: Boolean(id),
   });
 
-  const reports = reportsQuery.data ?? [];
+  const reports = useMemo(() => reportsQuery.data ?? [], [reportsQuery.data]);
 
   /**
    * The whole-job report, written rather than built.
@@ -187,14 +179,27 @@ export default function ProjectReportsScreen() {
            * the report" while it runs, which an icon cannot.
            */
           headerRight: () => (
-            <IconButton
-              icon={Plus}
+            /*
+              The design's round peach button, the same one the workspace
+              Reports screen carries, so "make one" looks the same from both.
+            */
+            <Pressable
+              accessibilityRole="button"
               accessibilityLabel="Start a report"
-              surface={false}
-              tone="primary"
               disabled={create.isPending}
               onPress={() => create.mutate()}
-            />
+              style={({ pressed }) => ({
+                width: 40,
+                height: 40,
+                borderRadius: radius.pill,
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: theme.colors.accent,
+                opacity: pressed || create.isPending ? 0.6 : 1,
+              })}
+            >
+              <Icon icon={Plus} size="md" tone="primary" />
+            </Pressable>
           ),
         }}
       />
@@ -231,68 +236,62 @@ export default function ProjectReportsScreen() {
               />
             ) : (
               <>
-                <ListGroup>
-                  {reports.map((report, index) => (
-                    <View key={report.id}>
-                      {index > 0 ? <RowDivider /> : null}
-                      <ListRow
-                        icon={FileText}
-                        /*
-                          The job's own name is the screen heading already, and
-                          every report is auto-named after it, so repeating it
-                          per row pushed the only distinguishing part - the date
-                          - past the two-line truncation. Five reports rendered
-                          as five identical "20 Charlcote Crescent - Site visit
-                          ..." rows. The stored title is untouched; this is the
-                          in-project reading of it.
-                        */
-                        title={titleWithinProject(report.title, projectQuery.data?.name)}
-                        /*
-                          The clock time joins the line only when another
-                          report shares this one's title. Reports are named
-                          from their date, so two written on the same day are
-                          called the same thing - and with the same photo
-                          count and the same "2w ago" the two rows become
-                          identical, each with its own delete button.
-                        */
-                        subtitle={`${reportSummaryLine(report)} · ${
-                          ambiguous.has(report.id)
-                            ? reportClockTime(report.created_at)
-                            : relativeTime(report.updated_at)
-                        }`}
-                        /*
-                          Shared state reads on the subtitle line only.
-                          `reportSummaryLine` already appends "shared" from the
-                          same predicate, so the badge said it twice - and it
-                          cost about 150px of a 360dp row, on top of the leading
-                          glyph, the delete button and the chevron. Every title
-                          truncated to "20 Charlco...", which on a list of site
-                          reports named after the address left five rows that
-                          looked identical and no way to tell which was which.
-                        */
-                        right={
-                          <View
-                            style={{ flexDirection: "row", alignItems: "center", gap: spacing.xs }}
-                          >
-                            <IconButton
-                              icon={Trash2}
-                              tone="destructive"
-                              surface={false}
-                              accessibilityLabel={`Delete ${report.title}`}
-                              onPress={() => confirmDelete(report)}
-                            />
-                          </View>
-                        }
-                        onPress={() =>
-                          router.push({
-                            pathname: "/report/[reportId]",
-                            params: { reportId: report.id, projectId: id! },
-                          })
-                        }
+                {/*
+                  Cards rather than grouped rows, matching the workspace
+                  Reports screen: an icon tile, the title allowed two lines, and
+                  the state as a pill. Draft means no write-up yet; otherwise
+                  the pill says whether the public link is live.
+                */}
+                {reports.map((report) => (
+                  <ReportCard
+                    key={report.id}
+                    /*
+                      The job's own name is the screen heading already, and
+                      every report is auto-named after it, so repeating it per
+                      row pushed the only distinguishing part - the date - past
+                      the two-line truncation. Five reports rendered as five
+                      identical "20 Charlcote Crescent - Site visit ..." rows.
+                      The stored title is untouched; this is the in-project
+                      reading of it.
+                    */
+                    title={titleWithinProject(report.title, projectQuery.data?.name)}
+                    /*
+                      The clock time joins the line only when another report
+                      shares this one's title. Reports are named from their
+                      date, so two written on the same day are called the same
+                      thing - and with the same photo count and the same "2w
+                      ago" the two cards become identical, each with its own
+                      delete button.
+                    */
+                    subtitle={`${reportSummaryLine(report)} · ${
+                      ambiguous.has(report.id)
+                        ? reportClockTime(report.created_at)
+                        : relativeTime(report.updated_at)
+                    }`}
+                    status={builtReportStatus(report)}
+                    /*
+                      Under the pill rather than beside it, so the title keeps
+                      the width: on a 360dp phone a pill and a delete button in
+                      one row left the title "20 Charlco...".
+                    */
+                    accessory={
+                      <IconButton
+                        icon={Trash2}
+                        tone="destructive"
+                        surface={false}
+                        size="sm"
+                        accessibilityLabel={`Delete ${report.title}`}
+                        onPress={() => confirmDelete(report)}
                       />
-                    </View>
-                  ))}
-                </ListGroup>
+                    }
+                    onPress={() =>
+                      router.push({
+                        pathname: "/report/[reportId]",
+                        params: { reportId: report.id, projectId: id! },
+                      })
+                    }
+                  />
+                ))}
 
                 {/*
                   The other kind: written for you rather than by you. Second,

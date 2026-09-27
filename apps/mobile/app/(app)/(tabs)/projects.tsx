@@ -1,57 +1,50 @@
 import { useMemo, useState } from "react";
-import { FolderPlus, MapPin, Plus } from "@/ui/icons";
-import { FlatList, RefreshControl, View } from "react-native";
+import { FolderPlus, Plus, Search } from "@/ui/icons";
+import { FlatList, Pressable, RefreshControl, StyleSheet, View } from "react-native";
 import { router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
-import {
-  isProjectStatus,
-  PROJECT_STATUS_LABELS,
-  projectDisplayName,
-  relativeTime,
-} from "@everlumen/shared";
-import { listProjectCovers } from "@/api/photos";
+import { PROJECT_STATUS_LABELS, projectDisplayName, relativeTime } from "@everlumen/shared";
 import { formatAddress, listProjects, type ProjectListItem } from "@/api/projects";
 import { QueueBanner } from "@/components/QueueBanner";
-import { radius, spacing, useTheme } from "@/theme";
+import { FilterGlyph } from "@/components/ProjectGlyphs";
+import { ProjectCrewAvatars, useProjectCrews } from "@/components/ProjectCrewAvatars";
 import {
-  Badge,
+  ProjectFilterPills,
+  ProjectStatusPill,
+  projectStatusLabel,
+  type ProjectFilterOption,
+} from "@/components/ProjectStatusPill";
+import { HIT_TARGET, radius, spacing, useTheme } from "@/theme";
+import {
+  ActionSheet,
   Card,
-  ChipGroup,
   EmptyState,
   ErrorState,
   Icon,
   IconButton,
   PageHeader,
-  PhotoThumb,
   SearchField,
   SkeletonList,
   Text,
-  type BadgeTone,
-  type ChipOption,
 } from "@/ui";
-
-/** The cover thumb. Square, and big enough to recognise a job from. */
-const COVER = 88;
 
 type StatusFilter = "all" | "active" | "on_hold" | "completed";
 
-/**
- * Status to badge colour.
- *
- * Taken from the same three buckets `PROJECT_STATUSES` defines rather than a
- * mobile-only list, so a status added in one place cannot quietly render as
- * "unknown" here.
- */
-const STATUS_TONE: Record<string, BadgeTone> = {
-  active: "success",
-  on_hold: "warning",
-  completed: "neutral",
-};
+/** Diameter of the floating new-project button. */
+const FAB = 60;
 
 export default function ProjectsScreen() {
   const theme = useTheme();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
+  /*
+   * The search field is behind the magnifier rather than always open, so the
+   * first screen of jobs starts under the filter row instead of under a field
+   * most visits never type into. It stays open while it holds text: hiding a
+   * field that is still filtering the list is how a list looks broken.
+   */
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [filterSheet, setFilterSheet] = useState(false);
 
   const { data, isLoading, isRefetching, error, refetch } = useQuery({
     queryKey: ["projects"],
@@ -61,20 +54,11 @@ export default function ProjectsScreen() {
   const all = useMemo(() => data ?? [], [data]);
 
   /*
-   * Covers for the whole list in one round trip, not one request per card.
-   *
-   * Keyed on the ids rather than on the query object, so a rename or a status
-   * change does not re-sign every URL. Signed URLs last an hour and re-signing
-   * sooner only spends requests.
+   * Crews for the whole list in one round trip, keyed on the ids so a rename or
+   * a status change does not refetch every card's avatars.
    */
   const projectIds = useMemo(() => all.map((project) => project.id), [all]);
-  const coversQuery = useQuery({
-    queryKey: ["project-covers", projectIds.join(",")],
-    queryFn: () => listProjectCovers(projectIds),
-    enabled: projectIds.length > 0,
-    staleTime: 45 * 60 * 1000,
-  });
-  const covers = coversQuery.data ?? {};
+  const crews = useProjectCrews(projectIds);
 
   /*
    * Counts come off the unfiltered list, so a chip reading "On hold 3" keeps
@@ -109,34 +93,71 @@ export default function ProjectsScreen() {
     return [...matched].sort((a, b) => Number(Boolean(b.starred)) - Number(Boolean(a.starred)));
   }, [all, search, status]);
 
-  const filters: ChipOption<StatusFilter>[] = [
+  const filters: ProjectFilterOption<StatusFilter>[] = [
     { id: "all", label: "All", count: counts.all },
     { id: "active", label: PROJECT_STATUS_LABELS.active, count: counts.active ?? 0 },
     { id: "on_hold", label: PROJECT_STATUS_LABELS.on_hold, count: counts.on_hold ?? 0 },
     { id: "completed", label: PROJECT_STATUS_LABELS.completed, count: counts.completed ?? 0 },
   ];
 
+  const showSearch = searchOpen || search.length > 0;
+
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
-      <PageHeader
-        title="Projects"
-        subtitle={all.length ? `${all.length} ${all.length === 1 ? "job" : "jobs"}` : undefined}
-        actions={
-          <IconButton
-            icon={Plus}
-            accessibilityLabel="New project"
-            onPress={() => router.push("/project-new")}
-          />
-        }
+      <View
+        style={{
+          backgroundColor: theme.colors.card,
+          borderBottomWidth: StyleSheet.hairlineWidth,
+          borderBottomColor: theme.colors.border,
+        }}
       >
-        <SearchField
-          value={search}
-          onChangeText={setSearch}
-          placeholder="Search name or address"
-          accessibilityLabel="Search projects"
-        />
-        <ChipGroup options={filters} value={status} onChange={setStatus} label="Filter by status" />
-      </PageHeader>
+        <PageHeader
+          title="Projects"
+          actions={
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
+              <IconButton
+                icon={Search}
+                accessibilityLabel={showSearch ? "Hide search" : "Search projects"}
+                surface={false}
+                tone={showSearch ? "primary" : "default"}
+                onPress={() => {
+                  if (showSearch) {
+                    setSearch("");
+                    setSearchOpen(false);
+                  } else {
+                    setSearchOpen(true);
+                  }
+                }}
+              />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Filter projects"
+                onPress={() => setFilterSheet(true)}
+                style={({ pressed }) => [styles.glyphButton, { opacity: pressed ? 0.7 : 1 }]}
+              >
+                <FilterGlyph
+                  color={status === "all" ? theme.colors.foreground : theme.colors.primary}
+                />
+              </Pressable>
+            </View>
+          }
+        >
+          {showSearch ? (
+            <SearchField
+              value={search}
+              onChangeText={setSearch}
+              placeholder="Search name or address"
+              accessibilityLabel="Search projects"
+            />
+          ) : null}
+          <ProjectFilterPills
+            options={filters}
+            value={status}
+            onChange={setStatus}
+            label="Filter by status"
+          />
+        </PageHeader>
+      </View>
 
       <QueueBanner />
 
@@ -153,9 +174,11 @@ export default function ProjectsScreen() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={{
             padding: spacing.lg,
+            paddingTop: spacing.xl,
             gap: spacing.md,
-            // Clears the raised camera button, which overhangs the bar by 22.
-            paddingBottom: 120,
+            // Clears the raised camera button, which overhangs the bar by 22,
+            // and the new-project button floating above the last card.
+            paddingBottom: 140,
             flexGrow: 1,
           }}
           refreshControl={
@@ -192,71 +215,164 @@ export default function ProjectsScreen() {
               />
             )
           }
-          renderItem={({ item }) => <ProjectCard project={item} coverUrl={covers[item.id]} />}
+          renderItem={({ item }) => <ProjectCard project={item} crew={crews[item.id]} />}
         />
       )}
+
+      {/*
+        The new-project button floats, like the design's, and hides while the
+        list has no jobs at all: the empty state already offers "New project",
+        and two controls for one intent is one too many. A filter that matches
+        nothing still shows it, since "Nothing matches" offers only a reset.
+      */}
+      {isLoading || error || all.length === 0 ? null : (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="New project"
+          onPress={() => router.push("/project-new")}
+          style={({ pressed }) => [
+            styles.newProject,
+            {
+              backgroundColor: theme.colors.primary,
+              shadowColor: theme.colors.primary,
+              opacity: pressed ? 0.85 : 1,
+            },
+          ]}
+        >
+          <Icon icon={Plus} size="lg" color={theme.colors.primaryForeground} />
+        </Pressable>
+      )}
+
+      <ActionSheet
+        visible={filterSheet}
+        onClose={() => setFilterSheet(false)}
+        title="Show projects"
+        actions={[
+          ...filters.map((option) => ({
+            label: `${option.id === status ? "✓ " : ""}${option.label} (${option.count ?? 0})`,
+            onPress: () => setStatus(option.id),
+          })),
+          ...(search || status !== "all"
+            ? [
+                {
+                  label: "Clear search and filter",
+                  onPress: () => {
+                    setSearch("");
+                    setSearchOpen(false);
+                    setStatus("all");
+                  },
+                },
+              ]
+            : []),
+        ]}
+      />
     </View>
   );
 }
 
-function ProjectCard({ project, coverUrl }: { project: ProjectListItem; coverUrl?: string }) {
+/** "Client · Street", without repeating the client when the name already is it. */
+function cardTitle(project: ProjectListItem): string {
+  const name = projectDisplayName(project);
+  const client = project.client_name?.trim();
+  if (!client || name.toLowerCase().includes(client.toLowerCase())) return name;
+  return `${client} · ${name}`;
+}
+
+/** "Folsom, CA", falling back to the free-text location. */
+function cardPlace(project: ProjectListItem): string | null {
+  const cityState = [project.city, project.state].filter(Boolean).join(", ");
+  if (cityState) return cityState;
+  // The street is already the title for most jobs, so only the loose
+  // `location` text is worth a second line here.
+  return project.location?.trim() || null;
+}
+
+function ProjectCard({
+  project,
+  crew,
+}: {
+  project: ProjectListItem;
+  crew?: { name: string | null; uri: string | null }[];
+}) {
+  const theme = useTheme();
+  const title = cardTitle(project);
+  const place = cardPlace(project);
   const address = formatAddress(project);
-  const tone = isProjectStatus(project.status) ? STATUS_TONE[project.status] : "neutral";
-  const label = isProjectStatus(project.status)
-    ? PROJECT_STATUS_LABELS[project.status]
-    : project.status;
+  const label = projectStatusLabel(project.status);
+  const done = project.status === "completed";
 
   return (
     <Card
       onPress={() => router.push(`/project/${project.id}`)}
-      accessibilityLabel={`${projectDisplayName(project)}${address ? `, ${address}` : ""}, ${label}`}
+      accessibilityLabel={`${title}${address ? `, ${address}` : ""}, ${label}`}
+      style={{
+        borderRadius: radius.xl,
+        backgroundColor: done ? theme.colors.background : undefined,
+      }}
     >
       {/*
-        Photo first, and on the left rather than as a hero.
-       
-        This is a documentation app whose project list showed no photography at
-        all: a title, a pin and a date, in a card tall enough to hold three of
-        the job's own photos. A full-bleed hero was the other option and is
-        wrong for this list - most jobs have a cover, some do not, and a hero
-        turns "no cover yet" into half a screen of nothing. A square thumb shows
-        the work, degrades to a small honest placeholder, and fits three times
-        as many jobs on a screen.
+        `minWidth: 0` for the reason `ListRow` needed the same: a flex child
+        defaults to its content width as its minimum, so a long name is
+        measured against the width it wanted rather than the width it has, and
+        `numberOfLines` then cuts far too early.
       */}
-      <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.md }}>
-        <PhotoThumb uri={coverUrl} width={COVER} height={COVER} rounded={radius.md} />
-
-        {/*
-          `minWidth: 0` and two lines, for the reason `ListRow` needed the same:
-          a flex child defaults to its content width as its minimum, so a long
-          name is measured against the width it wanted rather than the width it
-          has, and `numberOfLines={1}` then cuts far too early. Seen on device
-          as "20 Charlcote Crescent - ..." with most of the card still empty.
-        */}
+      <View style={{ flexDirection: "row", alignItems: "flex-start", gap: spacing.md }}>
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-          <Text variant="bodyStrong" numberOfLines={2}>
-            {projectDisplayName(project)}
+          <Text
+            variant="bodyStrong"
+            numberOfLines={2}
+            style={{ fontSize: 17, fontWeight: "700", opacity: done ? 0.75 : 1 }}
+          >
+            {title}
           </Text>
-          {address ? (
-            <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.xs }}>
-              <Icon icon={MapPin} size="xs" tone="muted" />
-              <Text variant="caption" tone="muted" numberOfLines={1} style={{ flex: 1 }}>
-                {address}
-              </Text>
-            </View>
-          ) : null}
-          {/*
-            Status and date on one line, under the address. They were a badge in
-            the top-right and a line of their own at the bottom, which is two
-            rows of card spent on six words.
-          */}
-          <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.xs }}>
-            <Badge label={label} tone={tone} />
-            <Text variant="caption" tone="muted" numberOfLines={1}>
-              {relativeTime(project.updated_at)}
+          {place ? (
+            <Text variant="caption" tone="muted" numberOfLines={2} style={{ fontSize: 14 }}>
+              {place}
             </Text>
-          </View>
+          ) : null}
         </View>
+        <ProjectStatusPill status={project.status} />
+      </View>
+
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginTop: spacing.md,
+          minHeight: 28,
+          gap: spacing.sm,
+        }}
+      >
+        <ProjectCrewAvatars people={crew} />
+        <Text variant="caption" tone="muted" numberOfLines={1} style={{ marginLeft: "auto" }}>
+          {relativeTime(project.updated_at)}
+        </Text>
       </View>
     </Card>
   );
 }
+
+const styles = StyleSheet.create({
+  glyphButton: {
+    width: HIT_TARGET,
+    height: HIT_TARGET,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  /* Clear of the tab bar's raised camera, which overhangs the bar by 22. */
+  newProject: {
+    position: "absolute",
+    right: spacing.lg,
+    bottom: spacing.xl,
+    width: FAB,
+    height: FAB,
+    borderRadius: FAB / 2,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowOpacity: 0.35,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 8,
+  },
+});

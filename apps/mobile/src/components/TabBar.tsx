@@ -28,6 +28,14 @@ import { Icon, Text } from "@/ui";
 export function TabBar({ state, descriptors, navigation, insets }: BottomTabBarProps) {
   const theme = useTheme();
 
+  /*
+   * The bar is always-dark chrome, in both schemes, so the inactive tint is the
+   * chrome's own foreground dimmed rather than `mutedForeground`: that token is
+   * a mid-brown chosen for a cream canvas and all but disappears on near-black.
+   * Dimmed with alpha rather than a second token, so it moves with the chrome.
+   */
+  const inactive = withAlpha(theme.colors.chromeForeground, 0.6);
+
   // The camera sits between the second and third tab. With four tabs that is
   // the middle; the slice keeps it centred if a fifth is ever added.
   const middle = Math.ceil(state.routes.length / 2);
@@ -40,7 +48,7 @@ export function TabBar({ state, descriptors, navigation, insets }: BottomTabBarP
     const { options } = descriptors[route.key];
     const label =
       typeof options.tabBarLabel === "string" ? options.tabBarLabel : (options.title ?? route.name);
-    const tint = focused ? theme.colors.primary : theme.colors.mutedForeground;
+    const tint = focused ? theme.colors.primary : inactive;
 
     return (
       <Pressable
@@ -87,7 +95,12 @@ export function TabBar({ state, descriptors, navigation, insets }: BottomTabBarP
          
           `caption` keeps the size and drops the caps and the letter-spacing.
         */}
-        <Text variant="caption" style={{ color: tint }} numberOfLines={1}>
+        {/*
+          Semibold, which the caption variant is not: light text on a dark bar
+          loses weight to halation, and a regular-weight label at this size
+          reads thinner on the chrome than the same label did on a white bar.
+        */}
+        <Text variant="caption" style={{ color: tint, fontWeight: "600" }} numberOfLines={1}>
           {label}
         </Text>
       </Pressable>
@@ -99,8 +112,13 @@ export function TabBar({ state, descriptors, navigation, insets }: BottomTabBarP
       style={{
         flexDirection: "row",
         alignItems: "flex-start",
-        backgroundColor: theme.colors.card,
-        borderTopWidth: 1,
+        backgroundColor: theme.colors.chrome,
+        /*
+         * No keyline on the light palette, where the dark bar already separates
+         * itself from a cream screen. On the dark palette the chrome and the
+         * canvas are a few shades apart, so the hairline is what marks the edge.
+         */
+        borderTopWidth: theme.scheme === "dark" ? 1 : 0,
         borderTopColor: theme.colors.border,
         paddingTop: spacing.xs,
         /*
@@ -121,25 +139,27 @@ export function TabBar({ state, descriptors, navigation, insets }: BottomTabBarP
           onPress={() => router.push("/capture-start")}
           style={({ pressed }) => [
             {
-              width: 58,
-              height: 58,
+              width: 64,
+              height: 64,
               borderRadius: radius.pill,
               alignItems: "center",
               justifyContent: "center",
               backgroundColor: theme.colors.primary,
               // Lifted above the bar so it reads as the primary action rather
-              // than a fifth tab that happens to be blue.
-              marginTop: -22,
-              borderWidth: 4,
-              borderColor: theme.colors.card,
+              // than a fifth tab that happens to be orange.
+              marginTop: -26,
+              // The ring is the bar's own colour, so the button looks cut into
+              // the chrome rather than stuck on top of it.
+              borderWidth: 5,
+              borderColor: theme.colors.chrome,
               opacity: pressed ? 0.85 : 1,
               transform: [{ scale: pressed ? 0.96 : 1 }],
             },
             Platform.select({
               ios: {
                 shadowColor: theme.colors.primary,
-                shadowOpacity: 0.35,
-                shadowRadius: 12,
+                shadowOpacity: 0.45,
+                shadowRadius: 14,
                 shadowOffset: { width: 0, height: 4 },
               },
               android: { elevation: 8 },
@@ -154,4 +174,18 @@ export function TabBar({ state, descriptors, navigation, insets }: BottomTabBarP
       {right.map(renderTab)}
     </View>
   );
+}
+
+/**
+ * A `#rrggbb` token at the given opacity.
+ *
+ * Anything that is not a six-digit hex comes back unchanged: the dark palette
+ * already writes some tokens as `rgba()`, and guessing at those would be worse
+ * than leaving the colour at full strength.
+ */
+function withAlpha(hex: string, alpha: number): string {
+  const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
+  if (!match) return hex;
+  const [r, g, b] = match.slice(1).map((part) => parseInt(part, 16));
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }

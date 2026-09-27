@@ -67,9 +67,11 @@ describe("home shows photographs", () => {
      */
     const s = home();
     const queue = s.indexOf("<QueueBanner />");
-    const needsYou = s.indexOf("title={`Needs you (${urgent.length})`}");
+    // Headings renamed and restyled to the warm redesign: "Needs you (n)" is
+    // now "Needs attention", drawn with the screen's own sentence-case title.
+    const needsYou = s.indexOf('<SectionTitle title="Needs attention" />');
     const strip = s.indexOf('title="Latest photos"');
-    const browse = s.indexOf('<SectionHeader title="Browse" />');
+    const browse = s.indexOf('<SectionTitle title="Browse" />');
 
     for (const [name, i] of Object.entries({ queue, needsYou, strip, browse })) {
       expect(i, `${name} is no longer on the home screen`).toBeGreaterThan(-1);

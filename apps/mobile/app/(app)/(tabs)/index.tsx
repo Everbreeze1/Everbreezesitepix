@@ -1,7 +1,9 @@
 import { useMemo } from "react";
 import { Pressable, ScrollView, useWindowDimensions, View } from "react-native";
 import { router } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery } from "@tanstack/react-query";
+import { isProjectStatus, PROJECT_STATUS_LABELS, projectDisplayName } from "@everlumen/shared";
 import { listMyOpenTasks, listRecentCaptureTimes } from "@/api/dashboard";
 import {
   bucketOf,
@@ -13,8 +15,9 @@ import {
   needsYou,
 } from "@/api/dashboard-view";
 import { getUnreadNotificationCount } from "@/api/notifications";
-import { listGalleryPhotoPage, type GalleryPhotoItem } from "@/api/photos";
-import { listProjects } from "@/api/projects";
+import { listGalleryPhotoPage, listProjectCovers, type GalleryPhotoItem } from "@/api/photos";
+import { listProjects, type ProjectListItem } from "@/api/projects";
+import { BrandMark } from "@/components/BrandMark";
 import { QueueBanner } from "@/components/QueueBanner";
 import { useAuth } from "@/lib/auth";
 import { useQueue } from "@/offline/use-queue";
@@ -24,61 +27,44 @@ import {
   Bell,
   Calendar,
   Camera,
-  CircleCheck,
   CloudUpload,
+  FileText,
   FolderKanban,
   FolderPlus,
-  Images,
   MapPin,
-  Sparkles,
+  Plus,
+  TriangleAlert,
 } from "@/ui/icons";
 import {
   Badge,
-  Button,
-  ListGroup,
   Icon,
-  ListRow,
-  RowDivider,
   PhotoThumb,
   Screen,
-  SectionHeader,
+  type BadgeTone,
   type LucideIcon,
   SkeletonList,
   Text,
 } from "@/ui";
 
 /**
- * Home: what needs you today.
+ * Home: where every job stands, and what needs you today.
  *
  * Deliberately not the web dashboard. That page is a widget grid of counts, a
  * seven-day sparkline and a documentation-health percentage, which answer "how
  * is the business doing" for somebody at a desk. The person holding this phone
- * is standing on a site at seven in the morning and is asking something else,
- * so this screen answers that instead and loads none of the other.
+ * is standing on a site at seven in the morning, so the four counts here are
+ * the ones a crew lead acts on, and every one of them is a real query: a count
+ * with no source behind it is worse than no count.
  *
- * The order is by urgency and it is fixed. Anything the phone still has to send
- * comes first because it is the only item on the screen that can be lost;
- * overdue work comes next; everything after that is a shortcut rather than a
- * demand.
+ * The order below the counts is by urgency and it is fixed. Anything the phone
+ * still has to send comes first because it is the only item on the screen that
+ * can be lost; the two actions come next because they are why the app is
+ * opened; then the jobs, overdue work, the photographs, and last the menu.
  *
  * This replaced the project list as the first tab, and the project list moved
  * to `projects.tsx` alongside it. Opening onto a list of jobs makes finding a
  * job the first thing the app is for, and it is not: knowing whether anything
  * needs you is.
- */
-/**
- * The browse destinations, in the order somebody reaches for them.
- *
- * Map first because it is the only one that answers a question you have while
- * standing outside: which of these am I at.
- */
-/**
- * Tile width, measured rather than expressed as a percentage.
- *
- * `width: "32%"` with a gap between them overflows: three tiles plus two gaps
- * came to a few points more than the row, so the third wrapped and the grid
- * silently became two columns. Percentages cannot see the gap; arithmetic can.
- * Same approach the photo grids use.
  */
 /*
  * Three across on a phone, more on a tablet, and measured every render.
@@ -108,6 +94,23 @@ const STRIP_PHOTOS = 12;
 /** Edge of one photograph in the strip. Two and a bit visible on a phone. */
 const STRIP_TILE = 104;
 
+/** Edge of a job's cover on its card. Big enough to recognise the site from. */
+const JOB_COVER = 56;
+
+/** How many jobs the Recent jobs list shows before handing over to Projects. */
+const RECENT_JOBS = 3;
+
+/** How many attention cards before the rest collapse into a line of text. */
+const ATTENTION_CAP = 6;
+
+/*
+ * Tile width, measured rather than expressed as a percentage.
+ *
+ * `width: "32%"` with a gap between them overflows: three tiles plus two gaps
+ * came to a few points more than the row, so the third wrapped and the grid
+ * silently became two columns. Percentages cannot see the gap; arithmetic can.
+ * Same approach the photo grids use.
+ */
 function useBrowseTile(): number {
   const { width } = useWindowDimensions();
   const usable = contentWidth(width) - spacing.lg * 2;
@@ -115,18 +118,61 @@ function useBrowseTile(): number {
   return (usable - spacing.sm * (columns - 1)) / columns;
 }
 
+/**
+ * The browse destinations, in the order somebody reaches for them.
+ *
+ * Map first because it is the only one that answers a question you have while
+ * standing outside: which of these am I at.
+ *
+ * The Assistant tile is gone. The web app folded its assistant into the
+ * background rather than keeping it as a place you visit, and a tile here would
+ * be the only door left to a room the product no longer has.
+ */
 const BROWSE: { icon: LucideIcon; label: string; href: string }[] = [
+  { icon: FileText, label: "Reports", href: "/reports" },
   { icon: MapPin, label: "Map", href: "/map" },
   { icon: FolderKanban, label: "Pipelines", href: "/pipelines" },
   { icon: Calendar, label: "Timeline", href: "/timeline" },
   { icon: FolderPlus, label: "Groups", href: "/groups" },
   { icon: Activity, label: "Team", href: "/activity" },
-  // Sixth, which the responsive grid absorbs: at a 110pt target a phone still
-  // draws three across and a tablet fits all six on one row.
-  { icon: Sparkles, label: "Assistant", href: "/assistant" },
 ];
 
+/**
+ * Status to pill colour. The same mapping the Projects tab uses, so a job on
+ * hold is the same amber on both screens.
+ */
+const STATUS_TONE: Record<string, BadgeTone> = {
+  active: "success",
+  on_hold: "warning",
+  completed: "neutral",
+};
+
+/**
+ * The name a person signed up with, if they gave one.
+ *
+ * Sign-up writes `full_name` into the auth user's metadata. Nothing else on the
+ * phone knows a person's name, and the email's local part is not one: greeting
+ * "jsmith92" by name is worse than not greeting them by name at all.
+ */
+function fullNameOf(metadata: Record<string, unknown> | undefined): string | null {
+  const raw = metadata?.full_name;
+  return typeof raw === "string" && raw.trim() ? raw.trim() : null;
+}
+
+/** Up to two initials, from the name when there is one and the email when not. */
+function initialsOf(name: string | null, email: string | null | undefined): string {
+  if (name) {
+    const parts = name.split(/\s+/).filter(Boolean);
+    const first = parts[0]?.[0] ?? "";
+    const last = parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? "") : "";
+    return (first + last).toUpperCase() || "?";
+  }
+  return (email?.trim()[0] ?? "?").toUpperCase();
+}
+
 export default function HomeScreen() {
+  const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const queue = useQueue();
 
@@ -153,11 +199,8 @@ export default function HomeScreen() {
   /*
    * The photographs themselves, which is what this product is.
    *
-   * Home answered "what needs you" entirely in words: counts, task titles and
-   * a menu. Everything the app is actually for was one tap away and invisible,
-   * and a field app whose home screen shows no field is a filing cabinet. One
-   * page of the gallery, newest first across every job, is the cheapest way to
-   * put the work back on the first screen - it is the same query the Gallery
+   * One page of the gallery, newest first across every job, is the cheapest
+   * way to put the work on the first screen - it is the same query the Gallery
    * tab already runs, so it is warm by the time somebody gets there.
    */
   const recentPhotosQuery = useQuery({
@@ -168,32 +211,68 @@ export default function HomeScreen() {
 
   const tasks = useMemo(() => tasksQuery.data ?? [], [tasksQuery.data]);
   const urgent = useMemo(() => needsYou(tasks), [tasks]);
-  const overdue = urgent.filter((task) => bucketOf(task) === "overdue").length;
-  const dueToday = urgent.length - overdue;
 
   const projects = useMemo(() => projectsQuery.data ?? [], [projectsQuery.data]);
   const projectName = useMemo(() => {
     const map = new Map<string, string>();
-    for (const project of projects) map.set(project.id, project.name);
+    for (const project of projects) map.set(project.id, projectDisplayName(project));
     return map;
   }, [projects]);
 
   /*
-   * Recently touched, not starred and not all of them. `listProjects` already
-   * comes back newest-updated first, so this is the three jobs somebody was
-   * actually on, which is what "jump back in" means on a phone.
+   * The board, counted from the same list the Projects tab loads.
+   *
+   * Archived jobs are left out of both counts, as they are out of the Projects
+   * tab's default view: an archived job that was on hold when it was put away
+   * is not something anybody is waiting on.
+   */
+  const counts = useMemo(() => {
+    let active = 0;
+    let onHold = 0;
+    for (const project of projects) {
+      if (project.archived) continue;
+      if (project.status === "active") active += 1;
+      else if (project.status === "on_hold") onHold += 1;
+    }
+    return { active, onHold };
+  }, [projects]);
+
+  /*
+   * Recently touched open jobs. `listProjects` already comes back
+   * newest-updated first, so this is the few jobs somebody was actually on,
+   * which is what "jump back in" means on a phone. Completed jobs are left out:
+   * nobody goes back to a finished site from the home screen.
    */
   const recent = useMemo(
-    () => projects.filter((project) => !project.archived).slice(0, 3),
+    () =>
+      projects
+        .filter((project) => !project.archived && project.status !== "completed")
+        .slice(0, RECENT_JOBS),
     [projects],
   );
+  const recentIds = useMemo(() => {
+    const ids: string[] = [];
+    for (const project of recent) ids.push(project.id);
+    return ids;
+  }, [recent]);
+
+  // One round trip for all three covers, the same call the Projects tab makes.
+  const coversQuery = useQuery({
+    queryKey: ["project-covers", recentIds.join(",")],
+    queryFn: () => listProjectCovers(recentIds),
+    enabled: recentIds.length > 0,
+    staleTime: 5 * 60 * 1000,
+  });
+  const covers = coversQuery.data ?? {};
 
   const stripPhotos = recentPhotosQuery.data?.photos ?? [];
   const stripUrls = recentPhotosQuery.data?.urls ?? {};
 
   const unread = unreadQuery.data ?? 0;
-  const capturedToday = countToday(capturesQuery.data ?? []);
   const loading = tasksQuery.isLoading || projectsQuery.isLoading;
+
+  const fullName = fullNameOf(user?.user_metadata);
+  const firstName = fullName?.split(/\s+/)[0] ?? null;
 
   const refreshing =
     tasksQuery.isRefetching ||
@@ -207,241 +286,568 @@ export default function HomeScreen() {
     void unreadQuery.refetch();
     void capturesQuery.refetch();
     void recentPhotosQuery.refetch();
+    void coversQuery.refetch();
   };
 
+  /*
+   * A number only once its query has answered. While loading, or after an
+   * error, the tile shows a dash: a zero there would be a claim ("nothing on
+   * hold") the app cannot back.
+   */
+  const projectCount = (value: number) => (projectsQuery.data ? value : null);
+  const photosToday = capturesQuery.data ? countToday(capturesQuery.data) : null;
+  const tasksDue = tasksQuery.data ? urgent.length : null;
+
+  /*
+   * The line under the greeting. The mockup's sentence when nothing is
+   * pressing; otherwise the single most pressing thing, in words, because a
+   * greeting that says "here's where things stand" over a queue of unsent
+   * photos is reassurance the screen has not earned.
+   */
+  const overdue = urgent.filter((task) => bucketOf(task) === "overdue").length;
+  const pressing = {
+    overdue,
+    dueToday: urgent.length - overdue,
+    unread,
+    queued: queue.outstanding,
+  };
+  const calm = !pressing.overdue && !pressing.dueToday && !pressing.unread && !pressing.queued;
+
   return (
-    <Screen scroll padded={false} refreshing={refreshing} onRefresh={refresh} bottomInset={96}>
-      <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.xxl, gap: 2 }}>
-        <Text variant="title">{greeting()}</Text>
-        <Text variant="caption" tone="muted">
-          {/*
-            One line, and the most pressing thing rather than every count. A
-            summary that recites four numbers is a fifth thing to read.
-          */}
-          {headline({ overdue, dueToday, unread, queued: queue.outstanding })}
-        </Text>
+    <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+      {/*
+        The one header this tab draws. Tabs run with the navigator header
+        switched off, so this is the only bar on the screen, and it stays put
+        while the page scrolls under it.
+      */}
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          gap: spacing.sm,
+          paddingTop: insets.top + spacing.sm,
+          paddingBottom: spacing.sm,
+          paddingHorizontal: spacing.lg,
+          backgroundColor: theme.colors.card,
+          borderBottomWidth: 1,
+          borderBottomColor: theme.colors.border,
+        }}
+      >
+        <View
+          style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: spacing.sm }}
+          accessible
+          accessibilityRole="header"
+          accessibilityLabel="Everlumen"
+        >
+          <BrandMark size={28} gapColor={theme.colors.card} />
+          <Text variant="heading" style={{ fontWeight: "700" }}>
+            Everlumen
+          </Text>
+        </View>
+
+        {/*
+          Notifications moved here from a row further down the page. The count
+          is said once, in the label a screen reader reads; the dot is what a
+          sighted person sees. A number on the bell as well would be the badge
+          this screen already argued its way out of once.
+        */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={
+            unread === 0 ? "Notifications, nothing unread" : `Notifications, ${unread} unread`
+          }
+          onPress={() => router.push("/notifications")}
+          hitSlop={8}
+          style={({ pressed }) => ({
+            width: 44,
+            height: 44,
+            alignItems: "center",
+            justifyContent: "center",
+            opacity: pressed ? 0.6 : 1,
+          })}
+        >
+          <Icon icon={Bell} size="lg" />
+          {unread > 0 ? (
+            <View
+              style={{
+                position: "absolute",
+                top: 9,
+                right: 10,
+                width: 9,
+                height: 9,
+                borderRadius: radius.pill,
+                backgroundColor: theme.colors.primary,
+                borderWidth: 1.5,
+                borderColor: theme.colors.card,
+              }}
+            />
+          ) : null}
+        </Pressable>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Account"
+          onPress={() => router.push("/account")}
+          style={({ pressed }) => ({
+            width: 44,
+            height: 44,
+            borderRadius: radius.pill,
+            alignItems: "center",
+            justifyContent: "center",
+            // Inverted rather than tinted: the mockup draws the person as the
+            // one solid dark mark in the bar, in either scheme.
+            backgroundColor: theme.colors.foreground,
+            opacity: pressed ? 0.7 : 1,
+          })}
+        >
+          <Text variant="bodyStrong" style={{ color: theme.colors.background }}>
+            {initialsOf(fullName, user?.email)}
+          </Text>
+        </Pressable>
       </View>
 
-      {/*
-        The queue first, always. It is the only thing on this screen that can
-        actually be lost, and it is the one piece of state no server knows about.
-      */}
-      {/*
-        The wrapper is conditional, not just the banner.
-       
-        `QueueBanner` returns null when the queue is clear, but its padding did
-        not: an empty view kept `paddingTop: lg` plus the gap either side, which
-        on a clear queue - the normal state - left a band of nothing between the
-        greeting and the first thing to read.
-      */}
-      {queue.outstanding > 0 ? (
-        <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.lg }}>
-          <QueueBanner />
+      <Screen scroll padded={false} refreshing={refreshing} onRefresh={refresh} bottomInset={96}>
+        <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.xl, gap: spacing.xs }}>
+          <Text variant="display">
+            {firstName ? `${greeting()}, ${firstName}.` : `${greeting()}.`}
+          </Text>
+          <Text variant="body" tone="muted">
+            {calm ? "Here's where every job on the board stands today." : headline(pressing)}
+          </Text>
         </View>
-      ) : null}
 
-      {loading ? (
-        <SkeletonList rows={5} />
-      ) : (
-        <>
-          {urgent.length > 0 ? (
-            <>
-              <SectionHeader title={`Needs you (${urgent.length})`} />
-              <View style={{ paddingHorizontal: spacing.lg }}>
-                <ListGroup>
-                  {urgent.slice(0, 6).map((task, index) => {
-                    const late = bucketOf(task) === "overdue";
-                    return (
-                      <View key={task.id}>
-                        {index > 0 ? <RowDivider /> : null}
-                        <ListRow
-                          icon={CircleCheck}
-                          iconTone={late ? "destructive" : "safety"}
-                          title={task.title}
-                          subtitle={projectName.get(task.project_id) ?? "A project"}
-                          right={
-                            <Badge
-                              label={dueLabel(task.due_date) ?? "Due"}
-                              tone={late ? "danger" : "warning"}
-                              variant="soft"
-                            />
-                          }
-                          onPress={() =>
-                            router.push({
-                              pathname: "/task/[id]",
-                              params: { id: task.id, projectId: task.project_id },
-                            })
-                          }
-                        />
-                      </View>
-                    );
-                  })}
-                </ListGroup>
-                {/*
-                  Capped at six. A home screen longer than a screenful is a task
-                  list with a greeting on top, and the task list already exists.
-                */}
-                {urgent.length > 6 ? (
-                  <Text variant="caption" tone="muted" style={{ paddingTop: spacing.sm }}>
-                    {urgent.length - 6} more overdue or due today.
-                  </Text>
-                ) : null}
-              </View>
-            </>
-          ) : null}
+        {/*
+          The queue first, always. It is the only thing on this screen that can
+          actually be lost, and it is the one piece of state no server knows
+          about.
 
-          {/*
-            The photographs, below the two things that can actually be lost and
-            above everything that is only a shortcut.
-
-            Deliberately not at the very top. The order on this screen is by
-            urgency and that is a decision worth keeping: the queue can lose
-            work and an overdue task can lose a day, whereas a photograph taken
-            yesterday is not going anywhere. But it sits above the menu, because
-            between "here is the work" and "here is a list of screens", the work
-            wins.
-          */}
-          {stripPhotos.length > 0 ? (
-            <>
-              <SectionHeader
-                title="Latest photos"
-                action={{ label: "See all", onPress: () => router.push("/gallery") }}
-              />
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{
-                  paddingHorizontal: spacing.lg,
-                  gap: spacing.sm,
-                }}
-              >
-                {stripPhotos.map((photo) => (
-                  <RecentPhoto key={photo.id} photo={photo} uri={stripUrls[photo.id]} />
-                ))}
-              </ScrollView>
-            </>
-          ) : null}
-
-          {/*
-            "Today" used to carry seven identical rows, five of which were not
-            today at all: Map, Groups, Pipelines, Timeline and the activity feed
-            are the app's menu, and calling them Today made the heading a lie
-            and the screen a wall. Split by what the thing actually is.
-          */}
-          <SectionHeader title="Today" />
+          The wrapper is conditional, not just the banner. `QueueBanner`
+          returns null when the queue is clear, but its padding did not, which
+          on a clear queue - the normal state - left a band of nothing.
+        */}
+        {queue.outstanding > 0 ? (
           <View style={{ paddingHorizontal: spacing.lg }}>
-            <ListGroup>
-              <ListRow
-                icon={Camera}
-                title="Capture a photo"
-                subtitle={capturedTodayLabel(capturedToday)}
-                onPress={() => router.push("/capture-start")}
-              />
-              <RowDivider />
-              {/*
-                No count badge here, deliberately.
-
-                The row carried the same number three times: "9 unread" in the
-                subtitle, a "9" badge on the right, and the dot that `unread`
-                draws. The dot and its tinted ground are a documented pair and
-                stay - `ListRow` explains why neither works alone outdoors -
-                but the badge was a third copy of a number the subtitle already
-                says in words.
-              */}
-              <ListRow
-                icon={Bell}
-                title="Notifications"
-                subtitle={unread === 0 ? "Nothing unread" : `${unread} unread`}
-                unread={unread > 0}
-                onPress={() => router.push("/notifications")}
-              />
-            </ListGroup>
+            <QueueBanner />
           </View>
+        ) : null}
 
-          {/*
-            The menu, as a grid rather than a seventh identical row.
-           
-            These five are browse surfaces: nobody opens the app at seven in the
-            morning to read the activity feed. A grid says "pick one" where a
-            stack of rows says "work through these", and it costs a third of the
-            height, which is the difference between Home ending above the fold
-            and running off it.
-          */}
-          <SectionHeader title="Browse" />
-          <View
-            style={{
-              flexDirection: "row",
-              flexWrap: "wrap",
-              gap: spacing.sm,
-              paddingHorizontal: spacing.lg,
-            }}
-          >
-            {BROWSE.map((item) => (
-              <QuickTile
-                key={item.href}
-                icon={item.icon}
-                label={item.label}
-                onPress={() => router.push(item.href as never)}
-              />
-            ))}
-          </View>
-
-          {recent.length > 0 ? (
-            <>
-              <SectionHeader title="Jump back in" />
-              <View style={{ paddingHorizontal: spacing.lg }}>
-                <ListGroup>
-                  {recent.map((project, index) => (
-                    <View key={project.id}>
-                      {index > 0 ? <RowDivider /> : null}
-                      <ListRow
-                        icon={FolderKanban}
-                        title={project.name}
-                        subtitle={project.client_name ?? project.city ?? undefined}
-                        onPress={() =>
-                          router.push({ pathname: "/project/[id]", params: { id: project.id } })
-                        }
-                      />
-                    </View>
-                  ))}
-                </ListGroup>
-              </View>
-            </>
-          ) : null}
-
-          <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.xl, gap: spacing.sm }}>
-            <Button
-              label="All projects"
-              icon={FolderKanban}
-              variant="secondary"
-              fullWidth
+        {/*
+          The board in four numbers. Two rows of two rather than a wrapped
+          grid, so each tile is exactly half the row whatever the gap.
+        */}
+        <View style={{ paddingHorizontal: spacing.lg, gap: spacing.md }}>
+          <View style={{ flexDirection: "row", gap: spacing.md }}>
+            <StatTile
+              label="Active projects"
+              value={projectCount(counts.active)}
               onPress={() => router.push("/projects")}
             />
-            <Button
-              label="All photos"
-              icon={Images}
-              variant="ghost"
-              fullWidth
+            <StatTile
+              label="Photos today"
+              value={photosToday}
+              spoken={photosToday === null ? undefined : capturedTodayLabel(photosToday)}
               onPress={() => router.push("/gallery")}
             />
           </View>
+          <View style={{ flexDirection: "row", gap: spacing.md }}>
+            <StatTile
+              label="On hold"
+              value={projectCount(counts.onHold)}
+              warn
+              onPress={() => router.push("/projects")}
+            />
+            {/*
+              Overdue and due today, assigned to you: the same list "Needs
+              attention" draws below. The mockup has "Reports due" here, and
+              nothing in the data has a due date for a report, so this is the
+              closest thing that does.
+            */}
+            <StatTile label="Tasks due" value={tasksDue} warn />
+          </View>
+        </View>
 
-          {queue.failed > 0 ? (
-            <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.lg }}>
-              <ListGroup>
-                <ListRow
-                  icon={CloudUpload}
-                  iconTone="destructive"
-                  title="Some changes did not send"
-                  subtitle={`${queue.failed} need attention`}
-                  onPress={() => router.push("/queue")}
+        {/*
+          The two things the app is opened to do, above every list so that no
+          amount of data can push them off the first screen.
+        */}
+        <View style={{ flexDirection: "row", gap: spacing.md, paddingHorizontal: spacing.lg }}>
+          <HeroAction
+            icon={Plus}
+            text="New project"
+            fill={theme.colors.foreground}
+            ink={theme.colors.background}
+            onPress={() => router.push("/project-new")}
+          />
+          <HeroAction
+            icon={Camera}
+            text="Capture photo"
+            fill={theme.colors.accent}
+            ink={theme.colors.primary}
+            accessibilityHint="Choose a project, then open the camera"
+            onPress={() => router.push("/capture-start")}
+          />
+        </View>
+
+        {loading ? (
+          <SkeletonList rows={4} />
+        ) : (
+          <>
+            {recent.length > 0 ? (
+              <>
+                <SectionTitle
+                  title="Recent jobs"
+                  action={{ label: "See all", onPress: () => router.push("/projects") }}
                 />
-              </ListGroup>
+                <View style={{ paddingHorizontal: spacing.lg, gap: spacing.md }}>
+                  {recent.map((project) => (
+                    <JobCard key={project.id} project={project} coverUrl={covers[project.id]} />
+                  ))}
+                </View>
+              </>
+            ) : null}
+
+            {urgent.length > 0 || queue.failed > 0 ? (
+              <>
+                <SectionTitle title="Needs attention" />
+                <View style={{ paddingHorizontal: spacing.lg, gap: spacing.md }}>
+                  {queue.failed > 0 ? (
+                    <AttentionCard
+                      icon={CloudUpload}
+                      late
+                      title="Some changes did not send"
+                      subtitle={`${queue.failed} need attention`}
+                      onPress={() => router.push("/queue")}
+                    />
+                  ) : null}
+                  {urgent.slice(0, ATTENTION_CAP).map((task) => (
+                    <AttentionCard
+                      key={task.id}
+                      icon={TriangleAlert}
+                      late={bucketOf(task) === "overdue"}
+                      title={`${task.title}: ${dueLabel(task.due_date) ?? "Due"}`}
+                      subtitle={projectName.get(task.project_id) ?? "A project"}
+                      onPress={() =>
+                        router.push({
+                          pathname: "/task/[id]",
+                          params: { id: task.id, projectId: task.project_id },
+                        })
+                      }
+                    />
+                  ))}
+                  {/*
+                    Capped. A home screen longer than a screenful is a task
+                    list with a greeting on top, and the task list already
+                    exists.
+                  */}
+                  {urgent.length > ATTENTION_CAP ? (
+                    <Text variant="caption" tone="muted">
+                      {urgent.length - ATTENTION_CAP} more overdue or due today.
+                    </Text>
+                  ) : null}
+                </View>
+              </>
+            ) : null}
+
+            {/*
+              The photographs, below the things that can actually be lost and
+              above everything that is only a shortcut: between "here is the
+              work" and "here is a list of screens", the work wins.
+            */}
+            {stripPhotos.length > 0 ? (
+              <>
+                <SectionTitle
+                  title="Latest photos"
+                  action={{ label: "See all", onPress: () => router.push("/gallery") }}
+                />
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{
+                    paddingHorizontal: spacing.lg,
+                    gap: spacing.sm,
+                  }}
+                >
+                  {stripPhotos.map((photo) => (
+                    <RecentPhoto key={photo.id} photo={photo} uri={stripUrls[photo.id]} />
+                  ))}
+                </ScrollView>
+              </>
+            ) : null}
+
+            {/*
+              The menu, as a grid rather than a stack of identical rows. These
+              are browse surfaces: nobody opens the app at seven in the morning
+              to read the activity feed. A grid says "pick one" where rows say
+              "work through these".
+            */}
+            <SectionTitle title="Browse" />
+            <View
+              style={{
+                flexDirection: "row",
+                flexWrap: "wrap",
+                gap: spacing.sm,
+                paddingHorizontal: spacing.lg,
+              }}
+            >
+              {BROWSE.map((item) => (
+                <QuickTile
+                  key={item.href}
+                  icon={item.icon}
+                  label={item.label}
+                  onPress={() => router.push(item.href as never)}
+                />
+              ))}
             </View>
-          ) : null}
-        </>
-      )}
-    </Screen>
+          </>
+        )}
+      </Screen>
+    </View>
+  );
+}
+
+/**
+ * A section heading in sentence case.
+ *
+ * Not the kit's `SectionHeader`, which sets its title as a small caps overline:
+ * right for dividing a settings list, wrong for the few large headings the home
+ * mockup reads by. The `See all` link keeps that component's shape and hit
+ * slop so the two feel the same under a thumb.
+ */
+function SectionTitle({
+  title,
+  action,
+}: {
+  title: string;
+  action?: { label: string; onPress: () => void };
+}) {
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        paddingHorizontal: spacing.lg,
+        marginTop: spacing.md,
+      }}
+    >
+      <Text variant="heading" accessibilityRole="header" style={{ flex: 1, fontWeight: "700" }}>
+        {title}
+      </Text>
+      {action ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={action.label}
+          onPress={action.onPress}
+          hitSlop={12}
+        >
+          <Text variant="caption" tone="primary" style={{ fontWeight: "600" }}>
+            {action.label}
+          </Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
+/**
+ * One count on the board.
+ *
+ * `warn` paints the number in the primary orange, and only when it is above
+ * zero: a zero in orange would be an alarm about nothing. `null` is "not known
+ * yet" and draws a dash rather than a number.
+ */
+function StatTile({
+  label,
+  value,
+  warn = false,
+  spoken,
+  onPress,
+}: {
+  label: string;
+  value: number | null;
+  warn?: boolean;
+  /** What a screen reader says instead of "label: value", when words read better. */
+  spoken?: string;
+  onPress?: () => void;
+}) {
+  const theme = useTheme();
+  const hot = warn && value !== null && value > 0;
+  return (
+    <Pressable
+      accessibilityRole={onPress ? "button" : "summary"}
+      accessibilityLabel={spoken ?? `${label}: ${value ?? "loading"}`}
+      disabled={!onPress}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        flex: 1,
+        gap: spacing.xs,
+        padding: spacing.lg,
+        borderRadius: radius.lg,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        backgroundColor: pressed ? theme.colors.secondary : theme.colors.card,
+      })}
+    >
+      <Text variant="caption" tone="muted" numberOfLines={1} style={{ fontWeight: "600" }}>
+        {label}
+      </Text>
+      <Text variant="display" tone={hot ? "primary" : "default"}>
+        {value ?? "–"}
+      </Text>
+    </Pressable>
+  );
+}
+
+/**
+ * One of the two big actions under the counts.
+ *
+ * Drawn here rather than with `Button` because neither fill is a `Button`
+ * variant: one is the inverted ink of the page, the other the peach accent with
+ * orange text, and both take half the row.
+ */
+function HeroAction({
+  icon,
+  text,
+  fill,
+  ink,
+  accessibilityHint,
+  onPress,
+}: {
+  icon: LucideIcon;
+  text: string;
+  fill: string;
+  ink: string;
+  accessibilityHint?: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={text}
+      accessibilityHint={accessibilityHint}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        flex: 1,
+        height: 56,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: spacing.sm,
+        paddingHorizontal: spacing.md,
+        borderRadius: radius.lg,
+        backgroundColor: fill,
+        opacity: pressed ? 0.75 : 1,
+      })}
+    >
+      <Icon icon={icon} size="md" color={ink} />
+      <Text variant="bodyStrong" numberOfLines={1} style={{ color: ink }}>
+        {text}
+      </Text>
+    </Pressable>
+  );
+}
+
+/**
+ * One job in Recent jobs: cover, name, where it is and who for, and its status.
+ *
+ * The mockup's second line is "city · job type". Projects have no type column,
+ * so the second half is the client, which is the other thing a crew knows a job
+ * by.
+ */
+function JobCard({ project, coverUrl }: { project: ProjectListItem; coverUrl?: string }) {
+  const theme = useTheme();
+  const name = projectDisplayName(project);
+  const place = [project.city, project.state].filter(Boolean).join(", ") || project.location;
+  const subtitle = [place, project.client_name].filter(Boolean).join(" · ");
+  const status = isProjectStatus(project.status) ? PROJECT_STATUS_LABELS[project.status] : null;
+  const tone = isProjectStatus(project.status) ? STATUS_TONE[project.status] : "neutral";
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={[name, subtitle, status].filter(Boolean).join(", ")}
+      onPress={() => router.push({ pathname: "/project/[id]", params: { id: project.id } })}
+      style={({ pressed }) => ({
+        flexDirection: "row",
+        alignItems: "center",
+        gap: spacing.md,
+        padding: spacing.md,
+        borderRadius: radius.lg,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        backgroundColor: pressed ? theme.colors.secondary : theme.colors.card,
+      })}
+    >
+      <PhotoThumb uri={coverUrl} width={JOB_COVER} height={JOB_COVER} rounded={radius.md} />
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text variant="bodyStrong" numberOfLines={1}>
+          {name}
+        </Text>
+        {subtitle ? (
+          <Text variant="caption" tone="muted" numberOfLines={2}>
+            {subtitle}
+          </Text>
+        ) : null}
+      </View>
+      {status ? <Badge label={status} tone={tone} variant="soft" /> : null}
+    </Pressable>
+  );
+}
+
+/**
+ * One item in Needs attention: an amber card with a warning glyph.
+ *
+ * `late` turns the glyph red. The card stays amber either way, so the section
+ * reads as one block, but overdue work still stands out from work due today.
+ */
+function AttentionCard({
+  icon,
+  late,
+  title,
+  subtitle,
+  onPress,
+}: {
+  icon: LucideIcon;
+  late: boolean;
+  title: string;
+  subtitle: string;
+  onPress: () => void;
+}) {
+  const theme = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${title}, ${subtitle}`}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        flexDirection: "row",
+        alignItems: "center",
+        gap: spacing.md,
+        paddingVertical: spacing.md,
+        paddingHorizontal: spacing.lg,
+        borderRadius: radius.lg,
+        // The safety amber at low alpha: `#rrggbbaa`, which React Native reads.
+        backgroundColor: `${theme.colors.safety}33`,
+        opacity: pressed ? 0.7 : 1,
+      })}
+    >
+      {/*
+        The accent's ink rather than the safety amber itself, which measures
+        under 2:1 on its own tint and would vanish as a glyph.
+      */}
+      <Icon
+        icon={icon}
+        size="md"
+        color={late ? theme.colors.destructive : theme.colors.accentForeground}
+      />
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text variant="bodyStrong" numberOfLines={2}>
+          {title}
+        </Text>
+        <Text variant="caption" tone="muted" numberOfLines={1}>
+          {subtitle}
+        </Text>
+      </View>
+    </Pressable>
   );
 }
 
