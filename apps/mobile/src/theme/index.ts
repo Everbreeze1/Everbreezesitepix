@@ -13,6 +13,9 @@ import {
 } from "./tokens";
 
 export {
+  CARD_PAGE_MAX_WIDTH,
+  cardColumns,
+  cardPageInset,
   CONTENT_MAX_WIDTH,
   TABLET_MIN_WIDTH,
   TARGET_TILE,

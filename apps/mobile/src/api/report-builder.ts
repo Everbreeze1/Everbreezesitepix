@@ -43,10 +43,12 @@ export type BuiltReport = ReportRow &
     subtitle: string | null;
     photos_per_page: PhotosPerPage;
     cover_photo_ids: string[];
+    /** Who wrote it: the cover's "Prepared by" and the letterhead are theirs. */
+    created_by: string | null;
   };
 
 const BUILT_FIELDS =
-  "id, project_id, title, summary, subtitle, photo_ids, include_project_info, share_token, allow_download, revoked_at, created_at, updated_at, cover_enabled, cover_show_project_name, cover_show_address, cover_show_date, cover_show_author, photos_per_page, cover_photo_ids";
+  "id, project_id, created_by, title, summary, subtitle, photo_ids, include_project_info, share_token, allow_download, revoked_at, created_at, updated_at, cover_enabled, cover_show_project_name, cover_show_address, cover_show_date, cover_show_author, photos_per_page, cover_photo_ids";
 
 function toBuilt(row: Record<string, unknown>): BuiltReport {
   return {
@@ -54,6 +56,7 @@ function toBuilt(row: Record<string, unknown>): BuiltReport {
     subtitle: (row.subtitle as string | null) ?? null,
     photos_per_page: clampPhotosPerPage(row.photos_per_page),
     cover_photo_ids: normaliseIdList(row.cover_photo_ids),
+    created_by: (row.created_by as string | null) ?? null,
     cover_enabled: row.cover_enabled !== false,
     cover_show_project_name: row.cover_show_project_name !== false,
     cover_show_address: row.cover_show_address !== false,
@@ -70,6 +73,46 @@ export async function getBuiltReport(id: string): Promise<BuiltReport | null> {
     .maybeSingle();
   if (error) throw new Error(error.message);
   return data ? toBuilt(data as Record<string, unknown>) : null;
+}
+
+/**
+ * The letterhead and byline a report prints: its author's name and company
+ * details, from the author's profile, as the public page reads them.
+ *
+ * Null when the profile cannot be read (another member's row hidden by RLS,
+ * or no author on an old row): the reader then draws a plain header rather
+ * than failing the whole report over its letterhead.
+ */
+export type ReportLetterhead = {
+  authorName: string | null;
+  company: {
+    name: string | null;
+    logoUrl: string | null;
+    phone: string | null;
+    address: string | null;
+  };
+};
+
+export async function getReportLetterhead(
+  createdBy: string | null,
+): Promise<ReportLetterhead | null> {
+  if (!createdBy) return null;
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("full_name, company, company_logo_url, company_phone, company_address")
+    .eq("id", createdBy)
+    .maybeSingle();
+  if (error || !data) return null;
+  const row = data as unknown as Record<string, string | null>;
+  return {
+    authorName: row.full_name ?? null,
+    company: {
+      name: row.company ?? null,
+      logoUrl: row.company_logo_url ?? null,
+      phone: row.company_phone ?? null,
+      address: row.company_address ?? null,
+    },
+  };
 }
 
 export type BuiltReportPatch = Partial<

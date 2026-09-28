@@ -80,6 +80,7 @@ export { default as Paperclip } from "lucide-react-native/dist/esm/icons/papercl
 export { default as PanelRightClose } from "lucide-react-native/dist/esm/icons/panel-right-close";
 export { default as PanelRightOpen } from "lucide-react-native/dist/esm/icons/panel-right-open";
 export { default as PenLine } from "lucide-react-native/dist/esm/icons/pen-line";
+export { default as Play } from "lucide-react-native/dist/esm/icons/play";
 export { default as Plus } from "lucide-react-native/dist/esm/icons/plus";
 export { default as Quote } from "lucide-react-native/dist/esm/icons/quote";
 export { default as RefreshCw } from "lucide-react-native/dist/esm/icons/refresh-cw";
@@ -135,4 +136,5 @@ export { default as ImageIcon } from "lucide-react-native/dist/esm/icons/image";
 export { default as Pencil } from "lucide-react-native/dist/esm/icons/pencil";
 export { default as Ruler } from "lucide-react-native/dist/esm/icons/ruler";
 export { default as ScanLine } from "lucide-react-native/dist/esm/icons/scan-line";
+export { default as ScrollText } from "lucide-react-native/dist/esm/icons/scroll-text";
 export { default as SwitchCamera } from "lucide-react-native/dist/esm/icons/switch-camera";

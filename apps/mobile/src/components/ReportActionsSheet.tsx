@@ -7,7 +7,16 @@ import { builtReportPdfUrl, patchBuiltReport } from "@/api/report-builder";
 import { deleteReport } from "@/api/reports";
 import { isReportShared, shareTogglePatch } from "@/api/report-view";
 import { openShareSheet, publicUrl } from "@/api/sharing";
-import { Copy, Download, ExternalLink, Eye, EyeOff, PenLine, Trash2 } from "@/ui/icons";
+import {
+  Copy,
+  Download,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  FileText,
+  PenLine,
+  Trash2,
+} from "@/ui/icons";
 import { ActionSheet, type SheetAction } from "@/ui";
 
 /*
@@ -42,9 +51,15 @@ export type ReportMenuTarget = {
 export function useReportActions({
   onOpen,
   onDeleted,
+  onEdit,
+  openLabel = "Open report",
 }: {
   onOpen: (target: ReportMenuTarget) => void;
   onDeleted?: (target: ReportMenuTarget) => void;
+  /** Opens a built report's editor. Adds "Edit report" beside "Open report". */
+  onEdit?: (target: ReportMenuTarget) => void;
+  /** The first action's words; the report's own screen offers "Edit report". */
+  openLabel?: string;
 }) {
   const queryClient = useQueryClient();
   const [target, setTarget] = useState<ReportMenuTarget | null>(null);
@@ -96,7 +111,14 @@ export function useReportActions({
     const pdf = item.kind === "report" ? builtReportPdfUrl(item.shareToken ?? null) : null;
 
     const actions: SheetAction[] = [
-      { label: "Open report", icon: PenLine, onPress: () => onOpen(item) },
+      {
+        label: openLabel,
+        icon: onEdit ? FileText : PenLine,
+        onPress: () => onOpen(item),
+      },
+      ...(onEdit && item.kind === "report"
+        ? [{ label: "Edit report", icon: PenLine, onPress: () => onEdit(item) }]
+        : []),
       {
         label: "Copy link",
         icon: Copy,

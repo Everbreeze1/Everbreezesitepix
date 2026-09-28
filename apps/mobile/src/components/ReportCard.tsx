@@ -5,12 +5,18 @@ import { HIT_TARGET, radius, spacing, useTheme } from "@/theme";
 import { EllipsisVertical, FileText, Images, LayoutTemplate } from "@/ui/icons";
 import { Icon, PhotoThumb, Text } from "@/ui";
 
+/** The square thumbnail's side. Small enough that the words lead the row. */
+const THUMB = 52;
+
 /**
- * One report, as the web's Reports list draws it: a photo on the left, then
- * the title, the blueprint that made it, "job · date", and one line of the
- * write-up. Everything else (the link, the PDF, turning sharing off, delete)
- * sits behind the kebab, which is what keeps a list of twenty reports a list
- * rather than a control panel.
+ * One report as a compact row: a small square photo (or a document glyph),
+ * the title, the blueprint that made it, "job · date" or "photos · date", and a
+ * kebab. The web's Reports list draws a large photo tile per row; on a tablet
+ * that became a column of big pictures beside the report, and the ask was for
+ * something simpler that fits the page and says what the report is. Everything
+ * else (the link, the PDF, turning sharing off, delete) sits behind the kebab,
+ * which is what keeps a list of twenty reports a list rather than a control
+ * panel.
  *
  * Shared by the workspace Reports screen and a project's own Reports list so
  * the two read as one list seen from two places.
@@ -29,25 +35,26 @@ export function ReportCard({
   status,
   onPress,
   onMenu,
-  excerpt,
   thumbUri,
   blueprint,
   isPage = false,
+  selected = false,
 }: {
   title: string;
+  /** One line: the job or the photo count, then when it last changed. */
   subtitle: string;
-  /** The first line or two of the write-up, already stripped of markup. */
-  excerpt?: string | null;
   status: ReportIndexStatus;
   onPress: () => void;
   /** Opens the row's actions. No kebab is drawn without it. */
   onMenu?: () => void;
   /** The report's cover or first section photo, signed. */
   thumbUri?: string | null;
-  /** The blueprint that produced it, for the chip beside the title. */
+  /** The blueprint that produced it, for the chip under the title. */
   blueprint?: string | null;
   /** A report page rather than a built report: drawn with a document glyph. */
   isPage?: boolean;
+  /** The row whose report is open beside the list on a tablet. */
+  selected?: boolean;
 }) {
   const theme = useTheme();
   const flagged = status !== "shared";
@@ -55,45 +62,43 @@ export function ReportCard({
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityState={{ selected }}
       accessibilityLabel={flagged ? `${title}, ${reportStatusLabel(status)}` : title}
       accessibilityHint={subtitle}
       onPress={onPress}
       style={({ pressed }) => ({
         flexDirection: "row",
-        alignItems: "stretch",
-        minHeight: 96,
+        alignItems: "center",
+        gap: spacing.md,
+        minHeight: 72,
+        paddingVertical: spacing.sm,
+        paddingLeft: spacing.sm,
         borderRadius: radius.lg,
         borderWidth: 1,
-        borderColor: theme.colors.border,
-        backgroundColor: theme.colors.card,
-        overflow: "hidden",
+        borderColor: selected ? theme.colors.primary : theme.colors.border,
+        backgroundColor: selected ? theme.colors.accent : theme.colors.card,
         opacity: pressed ? 0.85 : 1,
       })}
     >
       <View
         style={{
-          width: 96,
+          width: THUMB,
+          height: THUMB,
+          borderRadius: radius.md,
+          overflow: "hidden",
           backgroundColor: theme.colors.secondary,
           alignItems: "center",
           justifyContent: "center",
         }}
       >
         {thumbUri ? (
-          <PhotoThumb uri={thumbUri} width={96} height="100%" rounded={0} />
+          <PhotoThumb uri={thumbUri} width={THUMB} height={THUMB} rounded={radius.md} />
         ) : (
-          <Icon icon={isPage ? FileText : Images} size="lg" tone="muted" />
+          <Icon icon={isPage ? FileText : Images} size="md" tone="muted" />
         )}
       </View>
 
-      <View
-        style={{
-          flex: 1,
-          minWidth: 0,
-          paddingVertical: spacing.md,
-          paddingLeft: spacing.md,
-          gap: 4,
-        }}
-      >
+      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
         <Text variant="bodyStrong" numberOfLines={2}>
           {title}
         </Text>
@@ -108,15 +113,6 @@ export function ReportCard({
             {subtitle}
           </Text>
         ) : null}
-        {excerpt ? (
-          <Text
-            variant="caption"
-            numberOfLines={1}
-            style={{ color: theme.colors.secondaryForeground }}
-          >
-            {excerpt}
-          </Text>
-        ) : null}
       </View>
 
       {onMenu ? (
@@ -129,14 +125,14 @@ export function ReportCard({
             width: HIT_TARGET - 8,
             minHeight: HIT_TARGET,
             alignItems: "center",
-            paddingTop: spacing.md,
+            justifyContent: "center",
             opacity: pressed ? 0.5 : 1,
           })}
         >
           <Icon icon={EllipsisVertical} size="sm" tone="muted" />
         </Pressable>
       ) : (
-        <View style={{ width: spacing.md }} />
+        <View style={{ width: spacing.sm }} />
       )}
     </Pressable>
   );

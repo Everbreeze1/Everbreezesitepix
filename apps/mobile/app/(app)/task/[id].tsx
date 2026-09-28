@@ -7,11 +7,12 @@ import {
   RefreshControl,
   ScrollView,
   TextInput,
+  useWindowDimensions,
   View,
   type NativeSyntheticEvent,
   type TextInputSelectionChangeEventData,
 } from "react-native";
-import { Stack, useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { calendarDueLabel, photoIsDone, relativeTime, taskPhotoProgress } from "@everlumen/shared";
 import { Image } from "expo-image";
@@ -50,6 +51,7 @@ import {
   type TaskPriority,
   type TaskStatus,
 } from "@/api/task-status";
+import { ProjectSubPageHeader } from "@/components/ProjectSubPageHeader";
 import { TaskEditorSheet } from "@/components/TaskEditorSheet";
 import { useAuth } from "@/lib/auth";
 import {
@@ -60,7 +62,7 @@ import {
 } from "@/offline/handlers";
 import { enqueue } from "@/offline/outbox";
 import { refreshQueue, requestSync } from "@/offline/sync";
-import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
+import { contentInset, HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
 import {
   Calendar,
   CircleCheck,
@@ -96,6 +98,9 @@ const STATUS_TONE: Record<TaskStatus, BadgeTone> = {
 export default function TaskDetailScreen() {
   const { id, projectId } = useLocalSearchParams<{ id: string; projectId?: string }>();
   const theme = useTheme();
+  // A reading column, not a stretched phone layout, on a tablet.
+  const { width } = useWindowDimensions();
+  const inset = contentInset(width, spacing.lg);
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -362,20 +367,19 @@ export default function TaskDetailScreen() {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
       style={{ flex: 1, backgroundColor: theme.colors.background }}
     >
-      <Stack.Screen
-        options={{
-          title: "Task",
-          headerRight: () =>
-            task ? (
-              <IconButton
-                icon={PenLine}
-                accessibilityLabel="Edit task"
-                surface={false}
-                tone="primary"
-                onPress={() => setEditing(true)}
-              />
-            ) : null,
-        }}
+      <ProjectSubPageHeader
+        projectId={projectId ?? task?.project_id}
+        title="Task"
+        actions={
+          task ? (
+            <IconButton
+              icon={PenLine}
+              accessibilityLabel="Edit task"
+              tone="primary"
+              onPress={() => setEditing(true)}
+            />
+          ) : null
+        }
       />
 
       {collaborationQuery.isLoading ? (
@@ -391,7 +395,11 @@ export default function TaskDetailScreen() {
         />
       ) : (
         <ScrollView
-          contentContainerStyle={{ padding: spacing.lg, gap: spacing.md }}
+          contentContainerStyle={{
+            paddingHorizontal: inset,
+            paddingVertical: spacing.lg,
+            gap: spacing.md,
+          }}
           keyboardShouldPersistTaps="handled"
           refreshControl={
             <RefreshControl

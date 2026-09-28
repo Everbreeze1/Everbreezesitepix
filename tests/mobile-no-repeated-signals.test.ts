@@ -77,7 +77,8 @@ describe("the write-up actions", () => {
     expect(s).toContain('label="Rename" icon={PenLine}');
 
     for (const [file, needle] of [
-      ["apps/mobile/app/(app)/project/[id]/documents.tsx", "icon={PenLine}"],
+      // A folder's Rename now sits in its kebab sheet, so it is an object prop.
+      ["apps/mobile/app/(app)/project/[id]/documents.tsx", "icon: PenLine"],
       ["apps/mobile/src/ui/SnippetSheet.tsx", "icon={PenLine}"],
     ] as const) {
       expect(read(file), file).toContain(needle);
@@ -200,15 +201,16 @@ describe("every display name goes through one helper", () => {
 describe("a screen offers each action once", () => {
   it("the walkthroughs FAB hides while the empty state offers the same thing", () => {
     /*
-     * With nothing recorded, `ListEmptyComponent` draws "Record one" and the
-     * FAB drew "Record" directly beside it. Same destination, same colour,
-     * abutting. The project photo grid already hid its FAB on this condition;
-     * this screen had not followed it.
+     * With nothing recorded, `ListEmptyComponent` draws "Record walkthrough"
+     * (it said "Record one" before the tab was reworked around the video and
+     * its AI Summary) and the FAB drew the same action directly beside it.
+     * Same destination, same colour, abutting. The project photo grid already
+     * hid its FAB on this condition; this screen had not followed it.
      */
     const s = read("apps/mobile/app/(app)/project/[id]/walkthroughs.tsx").replace(/\s+/g, " ");
     expect(s).toContain("{isLoading || walkthroughs.length === 0 ? null : (");
     // The empty state's action is an object prop, not a JSX attribute.
-    expect(s).toContain('label: "Record one"');
+    expect(s).toContain('label: "Record walkthrough"');
   });
 
   it("and the project photo FAB is the only capture control, even on an empty job", () => {
@@ -269,9 +271,13 @@ describe("two rows in one list do not share a glyph", () => {
      * which is what `NotebookPen` already means on the Daily Log card - so the
      * two places a site log appears now look like each other too.
      */
+    /*
+     * The list they shared was the Details tab, which is gone (Jon,
+     * 2026-09-28). The same two now sit side by side in the tab row.
+     */
     const s = read("apps/mobile/app/(app)/project/[id]/index.tsx").replace(/\s+/g, " ");
-    expect(s).toContain('icon={FileText} title="Documents"');
-    expect(s).toContain('icon={NotebookPen} title="Site logs"');
+    expect(s).toContain('label: "Documents", icon: FileText');
+    expect(s).toContain('label: "Site logs", icon: NotebookPen');
     expect(read("apps/mobile/src/ui/DailyLogCard.tsx")).toContain("icon={NotebookPen}");
   });
 });
@@ -292,7 +298,6 @@ describe("rows with their own controls drop the chevron", () => {
   const OVERLOADED = [
     "apps/mobile/app/(app)/template/[id].tsx",
     "apps/mobile/app/(app)/workflow-template/[templateId].tsx",
-    "apps/mobile/app/(app)/project/[id]/documents.tsx",
   ];
 
   for (const file of OVERLOADED) {
@@ -300,6 +305,16 @@ describe("rows with their own controls drop the chevron", () => {
       expect(read(file)).toContain("chevron={false}");
     });
   }
+
+  it("documents.tsx went further: one kebab per card instead of three buttons", () => {
+    /*
+     * Move, copy and delete moved into each document card's kebab sheet, so
+     * the title has the whole line and there is no chevron to suppress.
+     */
+    const s = read("apps/mobile/app/(app)/project/[id]/documents.tsx");
+    expect(s).not.toContain("<ListRow");
+    expect(s).toContain('onMenu={() => setMenu({ kind: "page", page })}');
+  });
 
   it("the opt-out exists and defaults to showing it", () => {
     /*

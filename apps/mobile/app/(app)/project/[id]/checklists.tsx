@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import { FlatList, RefreshControl, View } from "react-native";
-import { router, Stack, useLocalSearchParams } from "expo-router";
+import { RefreshControl, ScrollView, View } from "react-native";
+import { router, useLocalSearchParams } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listProjectChecklists } from "@/api/checklists";
 import {
@@ -11,22 +11,25 @@ import {
 import { getProjectContributors } from "@/api/task-comments";
 import { memberLabel } from "@/api/task-mentions";
 import { ActionRail } from "@/components/ActionRail";
+import { ProjectSubPageHeader } from "@/components/ProjectSubPageHeader";
 import { QueueBanner } from "@/components/QueueBanner";
 import { TemplatePickerSheet } from "@/components/TemplatePickerSheet";
 import { useAuth } from "@/lib/auth";
-import { spacing, useRightRail, useTheme } from "@/theme";
-import { ClipboardCheck, Plus } from "@/ui/icons";
+import { spacing, useTheme } from "@/theme";
+import { ClipboardCheck, LayoutTemplate, Plus, RefreshCw } from "@/ui/icons";
 import {
+  ActionSheet,
   Avatar,
-  Badge,
-  Card,
+  CardGrid,
   ChipGroup,
   EmptyState,
   ErrorState,
-  IconButton,
-  ProgressBar,
+  ItemCard,
+  KebabButton,
   SkeletonList,
+  StatusChip,
   Text,
+  useCardPage,
   type ChipOption,
 } from "@/ui";
 
@@ -35,10 +38,11 @@ type Filter = "all" | "mine" | "open";
 export default function ProjectChecklistsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const theme = useTheme();
-  const rail = useRightRail();
+  const { inset } = useCardPage();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [picking, setPicking] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [applying, setApplying] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
 
@@ -114,36 +118,44 @@ export default function ProjectChecklistsScreen() {
     { id: "all", label: "All", count: all.length },
   ];
 
+  const totals = all.reduce(
+    (acc, row) => ({ done: acc.done + row.done, total: acc.total + row.total }),
+    { done: 0, total: 0 },
+  );
+  const finished = all.filter((row) => row.total > 0 && row.done === row.total).length;
+  const summary =
+    all.length === 0
+      ? null
+      : `${all.length} checklist${all.length === 1 ? "" : "s"} · ${finished} done · ${totals.done} of ${totals.total} items checked`;
+
   return (
     <>
-      <Stack.Screen
-        options={{
-          title: "Checklists",
-          // On a tablet the same action is the floating button at the lower right.
-          headerRight: rail
-            ? undefined
-            : () => (
-                <IconButton
-                  icon={Plus}
-                  accessibilityLabel="Start a checklist from a template"
-                  surface={false}
-                  tone="primary"
-                  onPress={() => setPicking(true)}
-                />
-              ),
-        }}
-      />
       <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+        <ProjectSubPageHeader
+          projectId={id}
+          title="Checklists"
+          summary={summary}
+          progress={
+            all.length > 0
+              ? {
+                  value: totals.done,
+                  total: totals.total,
+                  tone: totals.total > 0 && totals.done === totals.total ? "success" : "primary",
+                }
+              : null
+          }
+          actions={<KebabButton onPress={() => setMenuOpen(true)} />}
+        >
+          {all.length > 0 ? (
+            <ChipGroup
+              options={filters}
+              value={filter}
+              onChange={setFilter}
+              label="Filter checklists"
+            />
+          ) : null}
+        </ProjectSubPageHeader>
         <QueueBanner />
-
-        <View style={{ paddingVertical: spacing.sm }}>
-          <ChipGroup
-            options={filters}
-            value={filter}
-            onChange={setFilter}
-            label="Filter checklists"
-          />
-        </View>
 
         {isLoading ? (
           <SkeletonList rows={5} />
@@ -153,14 +165,13 @@ export default function ProjectChecklistsScreen() {
             onRetry={() => void refetch()}
           />
         ) : (
-          <FlatList
-            data={checklists}
-            keyExtractor={(item) => item.id}
+          <ScrollView
             contentContainerStyle={{
-              padding: spacing.lg,
-              gap: spacing.md,
+              paddingHorizontal: inset,
+              paddingTop: spacing.lg,
+              // Room for the floating New checklist button.
+              paddingBottom: 120,
               flexGrow: 1,
-              paddingBottom: rail ? 120 : spacing.lg,
             }}
             refreshControl={
               <RefreshControl
@@ -170,7 +181,8 @@ export default function ProjectChecklistsScreen() {
                 colors={[theme.colors.primary]}
               />
             }
-            ListEmptyComponent={
+          >
+            {checklists.length === 0 ? (
               all.length === 0 ? (
                 <EmptyState
                   icon={ClipboardCheck}
@@ -185,66 +197,61 @@ export default function ProjectChecklistsScreen() {
                   action={{ label: "Show all", onPress: () => setFilter("all") }}
                 />
               )
-            }
-            renderItem={({ item }) => {
-              const complete = item.total > 0 && item.done === item.total;
-              const mine = item.assigned_to === user?.id;
-              const assignee = item.assigned_to ? nameById.get(item.assigned_to) : null;
-              const assigneeName = mine ? "You" : assignee ? memberLabel(assignee) : null;
+            ) : (
+              <CardGrid>
+                {checklists.map((item) => {
+                  const complete = item.total > 0 && item.done === item.total;
+                  const mine = item.assigned_to === user?.id;
+                  const assignee = item.assigned_to ? nameById.get(item.assigned_to) : null;
+                  const assigneeName = mine ? "You" : assignee ? memberLabel(assignee) : null;
 
-              return (
-                <Card
-                  onPress={() => router.push(`/checklist/${item.id}`)}
-                  accessibilityLabel={`${item.name}, ${item.done} of ${item.total} done${
-                    assigneeName ? `, assigned to ${assigneeName}` : ""
-                  }`}
-                >
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "flex-start",
-                      gap: spacing.md,
-                      marginBottom: spacing.md,
-                    }}
-                  >
-                    <Text variant="heading" style={{ flex: 1 }} numberOfLines={2}>
-                      {item.name}
-                    </Text>
-                    {complete ? <Badge label="Done" tone="success" /> : null}
-                  </View>
-
-                  {assigneeName ? (
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: spacing.sm,
-                        marginBottom: spacing.md,
+                  return (
+                    <ItemCard
+                      key={item.id}
+                      icon={ClipboardCheck}
+                      iconTone={complete ? "success" : "primary"}
+                      title={item.name}
+                      meta={`${item.total} item${item.total === 1 ? "" : "s"}`}
+                      status={
+                        complete ? (
+                          <StatusChip label="Done" tone="success" />
+                        ) : item.done > 0 ? (
+                          <StatusChip label="In progress" tone="primary" />
+                        ) : (
+                          <StatusChip label="Not started" />
+                        )
+                      }
+                      progress={{
+                        value: item.done,
+                        total: item.total,
+                        tone: complete ? "success" : "primary",
                       }}
+                      onPress={() => router.push(`/checklist/${item.id}`)}
+                      accessibilityLabel={`${item.name}, ${item.done} of ${item.total} done${
+                        assigneeName ? `, assigned to ${assigneeName}` : ""
+                      }`}
                     >
-                      <Avatar name={assigneeName} size="sm" />
-                      <Text variant="caption" tone={mine ? "primary" : "muted"}>
-                        {mine ? "Assigned to you" : assigneeName}
-                      </Text>
-                    </View>
-                  ) : null}
-
-                  <ProgressBar
-                    value={item.done}
-                    total={item.total}
-                    tone={complete ? "success" : "primary"}
-                    showLabel
-                  />
-                </Card>
-              );
-            }}
-          />
+                      {assigneeName ? (
+                        <View
+                          style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}
+                        >
+                          <Avatar name={assigneeName} size="sm" />
+                          <Text variant="caption" tone={mine ? "primary" : "muted"}>
+                            {mine ? "Assigned to you" : assigneeName}
+                          </Text>
+                        </View>
+                      ) : null}
+                    </ItemCard>
+                  );
+                })}
+              </CardGrid>
+            )}
+          </ScrollView>
         )}
 
-        {/* Tablet only; hidden while the empty state offers the same thing. */}
+        {/* Hidden while the empty state offers the same thing. */}
         {isLoading || all.length === 0 ? null : (
           <ActionRail
-            railOnly
             actions={[
               {
                 key: "new-checklist",
@@ -257,6 +264,19 @@ export default function ProjectChecklistsScreen() {
           />
         )}
       </View>
+      <ActionSheet
+        visible={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        title="Checklists"
+        actions={[
+          {
+            label: "Manage templates",
+            icon: LayoutTemplate,
+            onPress: () => router.push("/templates"),
+          },
+          { label: "Refresh", icon: RefreshCw, onPress: () => void refetch() },
+        ]}
+      />
       <TemplatePickerSheet
         visible={picking}
         onClose={() => setPicking(false)}

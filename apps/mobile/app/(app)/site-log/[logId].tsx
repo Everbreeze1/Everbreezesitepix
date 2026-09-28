@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, View } from "react-native";
 import * as WebBrowser from "expo-web-browser";
-import { Stack, useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { displayCaption, readableErrorMessage } from "@everlumen/shared";
 import { listProjectPhotoPage, signPhotoUrls, type PhotoListItem } from "@/api/photos";
@@ -10,6 +10,7 @@ import type { SiteLogRow } from "@/api/site-log-notes";
 import { enqueue } from "@/offline/outbox";
 import { requestSync } from "@/offline/sync";
 import { siteLogPatchRowId, type SiteLogPatchPayload } from "@/offline/handlers";
+import { ProjectSubPageHeader } from "@/components/ProjectSubPageHeader";
 import {
   mergeDescriptions,
   noteFor,
@@ -294,7 +295,7 @@ export default function SiteLogScreen() {
   if (query.isLoading) {
     return (
       <>
-        <Stack.Screen options={{ title: "Site log" }} />
+        <ProjectSubPageHeader projectId={projectId} title="Site log" />
         <SkeletonList rows={5} />
       </>
     );
@@ -303,7 +304,7 @@ export default function SiteLogScreen() {
   if (query.error || !query.data) {
     return (
       <>
-        <Stack.Screen options={{ title: "Site log" }} />
+        <ProjectSubPageHeader projectId={projectId ?? query.data?.project_id} title="Site log" />
         <ErrorState
           title="Could not load this log"
           message={query.error instanceof Error ? query.error.message : undefined}
@@ -322,7 +323,7 @@ export default function SiteLogScreen() {
         loading and error states above always said "Site log"; only this one
         disagreed.
       */}
-      <Stack.Screen options={{ title: "Site log" }} />
+      <ProjectSubPageHeader projectId={projectId ?? query.data?.project_id} title="Site log" />
 
       <Screen scroll padded={false} bottomInset={spacing.xxl}>
         <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.lg, gap: spacing.md }}>

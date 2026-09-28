@@ -134,3 +134,26 @@ export const TABLET_MIN_WIDTH = 768;
 export function usesRightRail(width: number, height: number): boolean {
   return width >= TABLET_MIN_WIDTH || width > height;
 }
+
+/**
+ * The widest a page of cards gets on a tablet before it stops growing.
+ *
+ * Wider than `CONTENT_MAX_WIDTH` because a list of cards is not a line of
+ * prose: at 768pt and up the project sub-pages lay their cards out two across,
+ * and two 440pt cards read as a board where one 900pt card reads as a banner.
+ */
+export const CARD_PAGE_MAX_WIDTH = 960;
+
+/** One column of cards on a phone, two from a hand-held tablet up. */
+export function cardColumns(width: number): number {
+  return width >= TABLET_MIN_WIDTH ? 2 : 1;
+}
+
+/**
+ * Horizontal padding that centres a page of cards, capped at
+ * `CARD_PAGE_MAX_WIDTH`. `contentInset` with a different ceiling.
+ */
+export function cardPageInset(width: number, base: number): number {
+  if (width <= CARD_PAGE_MAX_WIDTH) return base;
+  return Math.max(base, Math.floor((width - CARD_PAGE_MAX_WIDTH) / 2));
+}

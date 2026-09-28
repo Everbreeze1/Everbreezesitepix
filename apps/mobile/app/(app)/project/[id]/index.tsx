@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import {
   Archive,
+  Calendar,
   Camera,
   CheckCheck,
   ChevronLeft,
@@ -22,6 +23,7 @@ import {
   GitMerge,
   History,
   ImageOff,
+  Images,
   ListTodo,
   MapPin,
   Navigation,
@@ -96,11 +98,13 @@ import {
 import { projectMapsUrl } from "@/api/project-actions";
 import { GenerateReportSheet } from "@/components/GenerateReportSheet";
 import { ProjectGroupSheet, ProjectMergeSheet } from "@/components/ProjectOrganizeSheets";
-import { ProjectCrewAvatars } from "@/components/ProjectCrewAvatars";
 import { MoreGlyph } from "@/components/ProjectGlyphs";
-import { getBlueprintOrigin } from "@/api/blueprints";
-import { getProjectCrew, listCrewCandidates } from "@/api/project-assignees";
-import { crewName } from "@/api/project-assignees-view";
+import { listProjectChecklists } from "@/api/checklists";
+import { listProjectWorkflows } from "@/api/workflows";
+import { listProjectTasks } from "@/api/tasks";
+import { normaliseStatus } from "@/api/task-status";
+import { listSiteLogs } from "@/api/site-logs";
+import { listDocumentTree } from "@/api/pages";
 import { PhotoBulkBar, type PhotoBulkAction } from "@/components/PhotoBulkBar";
 import { generateSummaryFromPhotos } from "@/api/summaries";
 import { photoSelectionError } from "@/api/summary-view";
@@ -115,7 +119,7 @@ import {
 import { useQueue } from "@/offline/use-queue";
 import { enqueue } from "@/offline/outbox";
 import { refreshQueue, requestSync } from "@/offline/sync";
-import { HIT_TARGET, radius, spacing, useTheme } from "@/theme";
+import { cardPageInset, HIT_TARGET, radius, spacing, useTheme } from "@/theme";
 import {
   DailyLogCard,
   ProjectBlueprint,
@@ -126,10 +130,7 @@ import {
   Icon,
   EmptyState,
   ErrorState,
-  ListGroup,
-  ListRow,
   PhotoThumb,
-  RowDivider,
   SkeletonList,
   Text as UIText,
   type ChipOption,
@@ -141,7 +142,7 @@ const FILTERS: ChipOption<PhaseFilter>[] = PHASE_FILTER_LABELS;
 const GRID_GAP = spacing.sm;
 
 /** Tabs drawn on this screen. */
-type InPlaceTab = "photos" | "calendar" | "details";
+type InPlaceTab = "photos" | "calendar";
 /** Tabs that open the section's own screen, which already exists as a route. */
 type LinkedTab =
   | "documents"
@@ -154,22 +155,29 @@ type LinkedTab =
 type DetailTab = InPlaceTab | LinkedTab;
 
 /*
- * The tab row. Photos and Details render here; the others push the screen
- * that section has always had, so each keeps its own header, create action
- * and list rather than being squeezed into a second copy under this one.
+ * The tab row. Photos and Calendar render here; the others push the page
+ * that section has, each built on the same project sub-page header, so every
+ * tab lands somewhere that looks like part of this screen.
+ *
+ * There is no Details tab any more (Jon, 2026-09-28): it listed these same
+ * tabs a second time. What it held that nothing else did now sits in the
+ * header card above the tabs: the address, the crew and the blueprint.
+ *
+ * Documents and Site logs draw different glyphs. Both used `FileText` once,
+ * which is the same as neither having one; `NotebookPen` is what the Daily
+ * Log card already uses for a day written up.
  */
-const TABS: ProjectTab<DetailTab>[] = [
-  { id: "photos", label: "Photos" },
-  { id: "documents", label: "Documents" },
-  { id: "reports", label: "Reports" },
-  { id: "checklists", label: "Checklists" },
-  { id: "workflows", label: "Workflows" },
-  { id: "tasks", label: "Tasks" },
-  { id: "site-logs", label: "Site logs" },
-  { id: "walkthroughs", label: "Walkthroughs" },
+const TAB_DEFS: ProjectTab<DetailTab>[] = [
+  { id: "photos", label: "Photos", icon: Images },
+  { id: "documents", label: "Documents", icon: FileText },
+  { id: "reports", label: "Reports", icon: Send },
+  { id: "checklists", label: "Checklists", icon: ClipboardCheck },
+  { id: "workflows", label: "Workflows", icon: Workflow },
+  { id: "tasks", label: "Tasks", icon: ListTodo },
+  { id: "site-logs", label: "Site logs", icon: NotebookPen },
+  { id: "walkthroughs", label: "Walkthroughs", icon: Video },
   // This job's photos by day, as the web project page's Calendar tab.
-  { id: "calendar", label: "Calendar" },
-  { id: "details", label: "Details" },
+  { id: "calendar", label: "Calendar", icon: Calendar },
 ];
 
 const LINKED_TABS: Record<LinkedTab, (id: string) => void> = {
@@ -379,45 +387,55 @@ export default function ProjectDetailScreen() {
   const project = projectQuery.data;
 
   /*
-   * What kind of job this is, read from the blueprint that set it up. The same
-   * query key `ProjectBlueprint` reads, so the Details tab does not fetch it
-   * twice.
+   * How much is in each section, for the counts on the tab row. The same keys
+   * and fetchers the section pages use, so opening a tab is a cache read and
+   * its list is already there when the page slides in.
    */
-  const blueprintOrigin = useQuery({
-    queryKey: ["blueprint-origin", String(id)],
-    queryFn: () => getBlueprintOrigin(String(id)),
-    enabled: Boolean(id),
+  const countsEnabled = Boolean(id);
+  const checklistsQuery = useQuery({
+    queryKey: ["project-checklists", id],
+    queryFn: () => listProjectChecklists(id!),
+    enabled: countsEnabled,
+    staleTime: 60_000,
+  });
+  const workflowsQuery = useQuery({
+    queryKey: ["project-workflows", id],
+    queryFn: () => listProjectWorkflows(id!),
+    enabled: countsEnabled,
+    staleTime: 60_000,
+  });
+  const tasksQuery = useQuery({
+    queryKey: ["project-tasks", id],
+    queryFn: () => listProjectTasks(id!),
+    enabled: countsEnabled,
+    staleTime: 60_000,
+  });
+  const siteLogsQuery = useQuery({
+    queryKey: ["site-logs", id],
+    queryFn: () => listSiteLogs(id!),
+    enabled: countsEnabled,
+    staleTime: 60_000,
+  });
+  const documentsQuery = useQuery({
+    queryKey: ["document-tree", id],
+    queryFn: () => listDocumentTree(id!),
+    enabled: countsEnabled,
+    staleTime: 60_000,
   });
 
-  /*
-   * The crew as avatars for the row under the hero. Same keys as
-   * `ProjectCrew`, so changing the crew on the Details tab updates these too.
-   */
-  const crewQuery = useQuery({
-    queryKey: ["project-crew", String(id)],
-    queryFn: () => getProjectCrew(String(id)),
-    enabled: Boolean(id),
-  });
-  const peopleQuery = useQuery({
-    queryKey: ["crew-candidates"],
-    queryFn: listCrewCandidates,
-    enabled: (crewQuery.data?.assigned.length ?? 0) > 0,
-    staleTime: 5 * 60 * 1000,
-  });
-  const crewPeople = useMemo(
-    () =>
-      (crewQuery.data?.assigned ?? []).map((userId) => {
-        const person = peopleQuery.data?.find((p) => p.userId === userId);
-        return { name: person ? crewName(person) : null, uri: person?.avatarUrl ?? null };
-      }),
-    [crewQuery.data, peopleQuery.data],
-  );
   const address = project ? formatAddress(project) : null;
   const mapsUrl = project ? projectMapsUrl(project) : null;
   const loading = projectQuery.isLoading || photosQuery.isLoading;
   const error = projectQuery.error ?? photosQuery.error;
 
   const tileSize = (screenWidth - spacing.lg * 2 - GRID_GAP * (columns - 1)) / columns;
+  /*
+   * The header card and the calendar centre on a tablet rather than running
+   * a line of status and labels a metre across. The photo grid stays full
+   * width: it is a contact sheet, and wider means more photographs.
+   */
+  const headerInset = cardPageInset(screenWidth, spacing.xl);
+  const calendarInset = cardPageInset(screenWidth, spacing.lg);
 
   /*
    * What the photo viewer pages through: the day picked on the Calendar tab,
@@ -680,7 +698,6 @@ export default function ProjectDetailScreen() {
   // Newest loaded photo, which is what the project list and the web card use
   // as a job's cover. No photo falls back to the gradient.
   const coverUri = photos.length > 0 ? (urls[photos[0].id] ?? null) : null;
-  const blueprintName = blueprintOrigin.data?.applications[0]?.blueprintName ?? null;
   const photoCount = showPhotos
     ? `${photos.length}${photosQuery.hasNextPage ? "+" : ""} photo${photos.length === 1 ? "" : "s"}`
     : `${videos.length} video${videos.length === 1 ? "" : "s"}`;
@@ -709,6 +726,33 @@ export default function ProjectDetailScreen() {
     },
     [id, queryClient],
   );
+
+  /*
+   * Counts that say what is left to do where there is such a thing (open
+   * tasks, unfinished checklists) and how many there are otherwise.
+   */
+  const tabs = useMemo<ProjectTab<DetailTab>[]>(() => {
+    const counts: Partial<Record<DetailTab, number | string | null>> = {
+      photos: photos.length > 0 ? `${photos.length}${photosQuery.hasNextPage ? "+" : ""}` : null,
+      checklists: checklistsQuery.data?.filter((row) => row.total === 0 || row.done < row.total)
+        .length,
+      workflows: workflowsQuery.data?.filter((row) => !row.completed_at).length,
+      tasks: tasksQuery.data?.filter((task) => normaliseStatus(task.status) !== "done").length,
+      "site-logs": siteLogsQuery.data?.length,
+      documents: documentsQuery.data
+        ? documentsQuery.data.pages.length + documentsQuery.data.files.length
+        : null,
+    };
+    return TAB_DEFS.map((tab) => ({ ...tab, count: counts[tab.id] ?? null }));
+  }, [
+    photos.length,
+    photosQuery.hasNextPage,
+    checklistsQuery.data,
+    workflowsQuery.data,
+    tasksQuery.data,
+    siteLogsQuery.data,
+    documentsQuery.data,
+  ]);
 
   const onTab = (next: DetailTab) => {
     const go = LINKED_TABS[next as LinkedTab];
@@ -841,60 +885,67 @@ export default function ProjectDetailScreen() {
                 />
 
                 {/*
-                  Status, what kind of job it is, and who is on it: the three
-                  facts somebody opening a job checks before anything else.
-                  The avatars open the Details tab, where the crew can be
-                  changed.
+                  The job at a glance, in one card under the cover: status,
+                  the blueprint that set it up, who is on it, where it is,
+                  what it is and how it is filed. The blueprint and crew are
+                  the same controls the old Details tab had, drawn compact:
+                  each still opens its sheet to change it.
                 */}
                 <View
                   style={{
-                    flexDirection: "row",
-                    alignItems: "center",
                     gap: spacing.md,
-                    paddingHorizontal: spacing.xl,
-                    paddingVertical: spacing.md,
+                    paddingHorizontal: headerInset,
+                    paddingVertical: spacing.lg,
                     backgroundColor: theme.colors.card,
                     borderBottomWidth: StyleSheet.hairlineWidth,
                     borderBottomColor: theme.colors.border,
                   }}
                 >
-                  {project?.status ? (
-                    <ProjectStatusChip
-                      projectId={String(id)}
-                      status={project.status}
-                      stageId={project.pipeline_stage_id}
-                      onSetStatus={(status) => void patchProject("status", { status })}
-                      onStageChanged={onStageChanged}
-                    />
-                  ) : null}
-                  <UIText variant="body" tone="muted" numberOfLines={1} style={{ flex: 1 }}>
-                    {blueprintName ?? ""}
-                  </UIText>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Who is on this job"
-                    onPress={() => setTab("details")}
-                    hitSlop={8}
-                  >
-                    <ProjectCrewAvatars people={crewPeople} size="md" />
-                  </Pressable>
-                </View>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.md }}>
+                    {project?.status ? (
+                      <ProjectStatusChip
+                        projectId={String(id)}
+                        status={project.status}
+                        stageId={project.pipeline_stage_id}
+                        onSetStatus={(status) => void patchProject("status", { status })}
+                        onStageChanged={onStageChanged}
+                      />
+                    ) : null}
+                    <View style={{ flex: 1, flexDirection: "row" }}>
+                      <ProjectBlueprint
+                        compact
+                        projectId={String(id)}
+                        projectName={project?.name ?? ""}
+                        projectAddress={address}
+                      />
+                    </View>
+                    <ProjectCrew compact projectId={String(id)} />
+                  </View>
 
-                {/*
-                  What the job is and how the team files it: the description
-                  the web shows under the title, then the labels, which are
-                  applied and removed right here as on the web header.
-                */}
-                <View
-                  style={{
-                    gap: spacing.sm,
-                    paddingHorizontal: spacing.xl,
-                    paddingVertical: spacing.md,
-                    backgroundColor: theme.colors.card,
-                    borderBottomWidth: StyleSheet.hairlineWidth,
-                    borderBottomColor: theme.colors.border,
-                  }}
-                >
+                  {address ? (
+                    <Pressable
+                      accessibilityRole={mapsUrl ? "link" : "text"}
+                      accessibilityLabel={mapsUrl ? `${address}, open in Maps` : address}
+                      disabled={!mapsUrl}
+                      onPress={() => (mapsUrl ? void Linking.openURL(mapsUrl) : undefined)}
+                      hitSlop={6}
+                      style={({ pressed }) => ({
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: spacing.xs,
+                        opacity: pressed ? 0.6 : 1,
+                      })}
+                    >
+                      <MapPin size={14} color={theme.colors.mutedForeground} strokeWidth={2.25} />
+                      <UIText variant="caption" tone="muted" numberOfLines={1} style={{ flex: 1 }}>
+                        {address}
+                      </UIText>
+                      {mapsUrl ? (
+                        <Navigation size={14} color={theme.colors.primary} strokeWidth={2.25} />
+                      ) : null}
+                    </Pressable>
+                  ) : null}
+
                   {project?.description?.trim() ? (
                     <UIText variant="body" tone="muted" numberOfLines={6}>
                       {project.description.trim()}
@@ -911,7 +962,7 @@ export default function ProjectDetailScreen() {
                   onOpen={() => router.push(`/project/${id}/workflows`)}
                 />
 
-                <ProjectTabs tabs={TABS} value={tab} onChange={onTab} />
+                <ProjectTabs tabs={tabs} value={tab} onChange={onTab} />
 
                 <QueueBanner />
                 {shareError ? (
@@ -1069,115 +1120,17 @@ export default function ProjectDetailScreen() {
                     ) : null}
                   </View>
                 ) : tab === "calendar" ? (
-                  <View style={{ padding: spacing.lg }}>
+                  <View style={{ paddingVertical: spacing.lg, paddingHorizontal: calendarInset }}>
                     <ProjectPhotoCalendar
                       projectId={String(id)}
-                      width={screenWidth - spacing.lg * 2}
+                      width={screenWidth - calendarInset * 2}
                       onOpenPhoto={(photo, _url, day) => {
                         setCalendarPick(day ?? null);
                         setLightboxId(photo.id);
                       }}
                     />
                   </View>
-                ) : (
-                  <View style={{ gap: spacing.md, padding: spacing.lg }}>
-                    {address ? (
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.xs }}>
-                        <MapPin size={14} color={theme.colors.mutedForeground} strokeWidth={2.25} />
-                        <UIText variant="caption" tone="muted" style={{ flex: 1 }}>
-                          {address}
-                        </UIText>
-                      </View>
-                    ) : null}
-
-                    {/*
-                      Who is on the job, directly under the address. It is the
-                      same kind of fact: where this is and who is there. The
-                      row shows for everybody and only offers "Change" to a
-                      role the server would actually accept a write from.
-                    */}
-                    <ProjectCrew projectId={String(id)} />
-
-                    {/*
-                      Next to the crew, because they are the same act: setting
-                      a job up is deciding who is on it and what it needs. The
-                      row reads as provenance once a blueprint has been applied.
-                    */}
-                    <ProjectBlueprint
-                      projectId={String(id)}
-                      projectName={project?.name ?? ""}
-                      projectAddress={address}
-                    />
-
-                    {/*
-                     * Every way deeper into a job, as one grouped block. Most
-                     * are also tabs above; this is the full list, including
-                     * the ones the tab row leaves off (Trash).
-                     */}
-                    <ListGroup>
-                      <ListRow
-                        icon={ClipboardCheck}
-                        title="Checklists"
-                        subtitle="Run the checks for this site"
-                        onPress={() => router.push(`/project/${id}/checklists`)}
-                      />
-                      <RowDivider />
-                      <ListRow
-                        icon={ListTodo}
-                        title="Tasks"
-                        subtitle="Punch list and assignments"
-                        onPress={() => router.push(`/project/${id}/tasks`)}
-                      />
-                      <RowDivider />
-                      <ListRow
-                        icon={Workflow}
-                        title="Workflows"
-                        subtitle="Phases and progress"
-                        onPress={() => router.push(`/project/${id}/workflows`)}
-                      />
-                      <RowDivider />
-                      <ListRow
-                        icon={FileText}
-                        title="Documents"
-                        subtitle="Pages and files on this job"
-                        onPress={() => router.push(`/project/${id}/documents`)}
-                      />
-                      <RowDivider />
-                      <ListRow
-                        icon={Send}
-                        title="Reports"
-                        subtitle="What the client receives"
-                        onPress={() => router.push(`/project/${id}/reports`)}
-                      />
-                      <RowDivider />
-                      <ListRow
-                        // Not `FileText`: that is the Documents row above, and two
-                        // rows in one list drawing the same glyph is the same as
-                        // neither having one. `NotebookPen` is what `DailyLogCard`
-                        // already uses for the same idea, a day written up.
-                        icon={NotebookPen}
-                        title="Site logs"
-                        subtitle="The day's photos, written up"
-                        onPress={() => router.push(`/project/${id}/site-logs`)}
-                      />
-                      <RowDivider />
-                      <ListRow
-                        icon={Video}
-                        title="Walkthroughs"
-                        subtitle="Recorded site walks"
-                        onPress={() => router.push(`/project/${id}/walkthroughs`)}
-                      />
-                      <RowDivider />
-                      <ListRow
-                        icon={Trash2}
-                        iconTone="muted"
-                        title="Trash"
-                        subtitle="Restore deleted photos"
-                        onPress={() => router.push(`/project/${id}/trash`)}
-                      />
-                    </ListGroup>
-                  </View>
-                )}
+                ) : null}
               </View>
             }
             ListEmptyComponent={
@@ -1474,7 +1427,7 @@ export default function ProjectDetailScreen() {
             onPress: () => void patchProject("starred", starPatch(!project?.starred)),
           },
           {
-            label: "Recently deleted",
+            label: "Deleted photos",
             icon: History,
             onPress: () => router.push(`/project/${id}/trash`),
           },

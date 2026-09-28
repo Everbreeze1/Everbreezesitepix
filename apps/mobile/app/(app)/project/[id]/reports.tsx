@@ -6,12 +6,12 @@ import { projectDisplayName, relativeTime, titleWithinProject } from "@everlumen
 import { getProject } from "@/api/projects";
 import { listProjectReports } from "@/api/reports";
 import { listProjectReportPages, listReportCardExtras } from "@/api/report-index";
-import { builtReportStatus, reportExcerpt, reportIndexSubtitle } from "@/api/report-index-view";
+import { builtReportStatus, reportIndexSubtitle } from "@/api/report-index-view";
 import { ambiguousReportIds, reportClockTime, reportSummaryLine } from "@/api/report-view";
 import { GenerateReportSheet } from "@/components/GenerateReportSheet";
 import { useReportActions, type ReportMenuTarget } from "@/components/ReportActionsSheet";
 import { ReportCard } from "@/components/ReportCard";
-import { ReportEditor } from "@/components/ReportEditor";
+import { ReportReader } from "@/components/ReportReader";
 import { ReportsSplitView, useReportsTwoPane } from "@/components/ReportsSplitView";
 import { radius, spacing, useTheme } from "@/theme";
 import { FileText, Plus } from "@/ui/icons";
@@ -25,8 +25,9 @@ import { EmptyState, ErrorState, Icon, SkeletonList, Text } from "@/ui";
  * pages; hand-built reports are the cover-and-sections kind. Both are here so a
  * report written on the web is never missing on the phone.
  *
- * The + opens the same menu the web's New report button does. On a tablet the
- * list stays on the left and a hand-built report opens beside it. Each row's
+ * The + opens the same menu the web's New report button does. Tapping a
+ * hand-built report opens it ready to read; Edit on it opens the editor. On a
+ * tablet the list stays on the left and the report reads beside it. Each row's
  * link, PDF and delete sit behind its kebab, as on the web's Reports list.
  */
 export default function ProjectReportsScreen() {
@@ -63,6 +64,8 @@ export default function ProjectReportsScreen() {
     if (twoPane) setOpenReport(reportId);
     else router.push({ pathname: "/report/[reportId]", params: { reportId, projectId: id! } });
   };
+  const editBuilt = (reportId: string) =>
+    router.push({ pathname: "/report/edit/[reportId]", params: { reportId, projectId: id! } });
 
   const reportIds = useMemo(() => reports.map((report) => report.id), [reports]);
   // Photos and blueprint chips fill in after the words, and never block them.
@@ -78,6 +81,7 @@ export default function ProjectReportsScreen() {
       item.kind === "page"
         ? router.push({ pathname: "/page/[pageId]", params: { pageId: item.id } })
         : openBuilt(item.id),
+    onEdit: (item) => editBuilt(item.id),
     onDeleted: (item) => {
       if (openReport === item.id) setOpenReport(null);
     },
@@ -100,7 +104,7 @@ export default function ProjectReportsScreen() {
       onRetry={refetch}
     />
   ) : (
-    <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.lg, gap: spacing.md }}>
+    <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.lg, gap: spacing.sm }}>
       {empty ? (
         <EmptyState
           icon={FileText}
@@ -111,7 +115,7 @@ export default function ProjectReportsScreen() {
       ) : null}
 
       {pages.length > 0 ? (
-        <View style={{ gap: spacing.md }}>
+        <View style={{ gap: spacing.sm }}>
           <Text variant="overline" tone="muted" style={{ marginTop: spacing.sm }}>
             GENERATED REPORTS
           </Text>
@@ -136,7 +140,7 @@ export default function ProjectReportsScreen() {
       ) : null}
 
       {reports.length > 0 ? (
-        <View style={{ gap: spacing.md }}>
+        <View style={{ gap: spacing.sm }}>
           <Text variant="overline" tone="muted" style={{ marginTop: spacing.sm }}>
             BUILT REPORTS
           </Text>
@@ -150,7 +154,7 @@ export default function ProjectReportsScreen() {
                   : relativeTime(report.updated_at)
               }`}
               status={builtReportStatus(report)}
-              excerpt={reportExcerpt(report.summary)}
+              selected={twoPane && openReport === report.id}
               thumbUri={extrasQuery.data?.thumbs[report.id]}
               blueprint={extrasQuery.data?.blueprints[report.id]}
               onPress={() => openBuilt(report.id)}
@@ -203,10 +207,11 @@ export default function ProjectReportsScreen() {
         onRefresh={refetch}
         detail={
           openReport ? (
-            <ReportEditor
+            <ReportReader
               key={openReport}
               reportId={openReport}
               projectId={id}
+              onEdit={() => editBuilt(openReport)}
               onDeleted={() => setOpenReport(null)}
             />
           ) : null
@@ -221,7 +226,12 @@ export default function ProjectReportsScreen() {
           projectName={projectName}
           scope="all"
           onClose={() => setGenerating(false)}
-          onOpenBuiltReport={(report) => openBuilt(report.id)}
+          onOpenBuiltReport={(report) => {
+            // A new report is empty: straight to the editor, with it open
+            // beside the list on a tablet for when Done comes back.
+            if (twoPane) setOpenReport(report.id);
+            editBuilt(report.id);
+          }}
         />
       ) : null}
     </>

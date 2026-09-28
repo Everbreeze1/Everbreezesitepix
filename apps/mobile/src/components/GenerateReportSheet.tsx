@@ -352,8 +352,9 @@ export function GenerateReportSheet({
           onClose();
           if (onOpenBuiltReport) onOpenBuiltReport(report);
           else
+            // A new report has nothing to read yet: straight to the editor.
             router.push({
-              pathname: "/report/[reportId]",
+              pathname: "/report/edit/[reportId]",
               params: { reportId: report.id, projectId: report.project_id },
             });
         }}

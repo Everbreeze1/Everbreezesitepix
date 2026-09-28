@@ -16,9 +16,10 @@ export function useReportsTwoPane(): boolean {
  *
  * On a phone this is an ordinary scrolling screen and a tap opens the report
  * full screen. From 768 wide (a tablet, or a big phone on its side) the list
- * keeps a fixed column on the left and the report opens on the right, so a
- * crew going through a week of reports is not pushing and popping the same two
- * screens forty times.
+ * keeps a narrow column of compact rows on the left and the report opens on
+ * the right, read only, so a crew going through a week of reports is not
+ * pushing and popping the same two screens forty times. The right side is
+ * never the editor: Edit on the report opens that as its own screen.
  */
 export function ReportsSplitView({
   list,
@@ -50,7 +51,7 @@ export function ReportsSplitView({
     );
   }
 
-  const listWidth = Math.min(420, Math.max(320, Math.round(width * 0.36)));
+  const listWidth = Math.min(400, Math.max(300, Math.round(width * 0.32)));
 
   return (
     <View style={{ flex: 1, flexDirection: "row", backgroundColor: theme.colors.background }}>
@@ -84,7 +85,7 @@ export function ReportsSplitView({
             <EmptyState
               icon={FileText}
               title="Pick a report"
-              body="Choose a report on the left to read and edit it here."
+              body="Choose a report on the left to read it here."
             />
           </View>
         )}

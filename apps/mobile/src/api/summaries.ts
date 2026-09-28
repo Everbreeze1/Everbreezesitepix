@@ -94,7 +94,33 @@ export async function generateSummaryFromPhotos(input: {
   return { summaryId: result?.summary?.id ?? result?.summaryId ?? null };
 }
 
-/** Write it again from the same source. Spends another LLM call. */
+/**
+ * The AI Summary of a recorded walk: write it, or write it again.
+ *
+ * The op the web's Walkthroughs tab uses. Without `force` the service hands
+ * back the summary the recording already has instead of a second copy, which
+ * is what makes a double tap safe. With `force` it writes a NEW summary and
+ * leaves the old one in place, so edits somebody made to it are not lost.
+ */
+export async function generateSummaryForWalkthrough(
+  walkthroughId: string,
+  force = false,
+): Promise<{ summaryId: string | null; aiFailed: string | null }> {
+  const result = await api.rpc<{ summary?: { id?: string }; aiFailed?: string | null }>(
+    "generateSummaryForWalkthrough",
+    { walkthroughId, ...(force ? { force: true } : {}) },
+    { idempotencyKey: randomUUID(), timeoutMs: AI_TIMEOUT_MS },
+  );
+  return { summaryId: result?.summary?.id ?? null, aiFailed: result?.aiFailed ?? null };
+}
+
+/**
+ * Write it again from the same source. Spends another LLM call.
+ *
+ * Only for a summary-type walkthrough row (written from photos). The service
+ * refuses it for a recorded walk, which is what `generateSummaryForWalkthrough`
+ * with `force` is for.
+ */
 export async function regenerateSummary(walkthroughId: string): Promise<void> {
   await api.rpc(
     "regenerateWalkthroughSummary",

@@ -48,10 +48,17 @@ export function ProjectBlueprint({
   projectId,
   projectName,
   projectAddress,
+  compact = false,
 }: {
   projectId: string;
   projectName: string;
   projectAddress?: string | null;
+  /**
+   * One line of text for the project header's status row: the blueprint's
+   * name, or an invitation to pick one. The row it replaces lived on the old
+   * Details tab; the sheet it opens is the same.
+   */
+  compact?: boolean;
 }) {
   const theme = useTheme();
   const queryClient = useQueryClient();
@@ -107,6 +114,8 @@ export function ProjectBlueprint({
         ["project-checklists", projectId],
         ["project-workflows", projectId],
         ["project-documents", projectId],
+        // What the Documents screen is actually keyed on.
+        ["document-tree", projectId],
         ["project-reports", projectId],
         ["blueprint-origin", projectId],
         ["project", projectId],
@@ -133,31 +142,59 @@ export function ProjectBlueprint({
 
   return (
     <>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={
-          origin ? "Blueprint that set this job up" : "Set this job up from a blueprint"
-        }
-        onPress={() => setOpen(true)}
-        style={({ pressed }) => ({
-          flexDirection: "row",
-          alignItems: "center",
-          gap: spacing.sm,
-          paddingVertical: spacing.sm,
-          opacity: pressed ? 0.6 : 1,
-        })}
-      >
-        <Icon icon={LayoutTemplate} size="md" tone="muted" />
-        <Text variant="caption" tone="muted" style={{ flex: 1 }} numberOfLines={1}>
-          {origin?.blueprintName
-            ? `Set up from ${origin.blueprintName}`
-            : "Set this job up from a blueprint"}
-        </Text>
-        {warning ? <Badge label={warning} tone="neutral" variant="soft" /> : null}
-        <Text variant="caption" tone="primary">
-          {origin ? "Add another" : "Choose"}
-        </Text>
-      </Pressable>
+      {compact ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={
+            origin ? "Blueprint that set this job up" : "Set this job up from a blueprint"
+          }
+          onPress={() => setOpen(true)}
+          hitSlop={8}
+          style={({ pressed }) => ({
+            flexDirection: "row",
+            alignItems: "center",
+            gap: spacing.xs,
+            flexShrink: 1,
+            opacity: pressed ? 0.6 : 1,
+          })}
+        >
+          <Icon icon={LayoutTemplate} size="sm" tone={origin ? "muted" : "primary"} />
+          <Text
+            variant="caption"
+            tone={origin ? "muted" : "primary"}
+            numberOfLines={1}
+            style={{ flexShrink: 1 }}
+          >
+            {origin?.blueprintName ?? "Add a blueprint"}
+          </Text>
+        </Pressable>
+      ) : (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={
+            origin ? "Blueprint that set this job up" : "Set this job up from a blueprint"
+          }
+          onPress={() => setOpen(true)}
+          style={({ pressed }) => ({
+            flexDirection: "row",
+            alignItems: "center",
+            gap: spacing.sm,
+            paddingVertical: spacing.sm,
+            opacity: pressed ? 0.6 : 1,
+          })}
+        >
+          <Icon icon={LayoutTemplate} size="md" tone="muted" />
+          <Text variant="caption" tone="muted" style={{ flex: 1 }} numberOfLines={1}>
+            {origin?.blueprintName
+              ? `Set up from ${origin.blueprintName}`
+              : "Set this job up from a blueprint"}
+          </Text>
+          {warning ? <Badge label={warning} tone="neutral" variant="soft" /> : null}
+          <Text variant="caption" tone="primary">
+            {origin ? "Add another" : "Choose"}
+          </Text>
+        </Pressable>
+      )}
 
       <Sheet
         visible={open}

@@ -11,7 +11,7 @@ import { groupTemplates } from "@/api/template-picker-view";
 import { GenerateReportSheet } from "@/components/GenerateReportSheet";
 import { useReportActions, type ReportMenuTarget } from "@/components/ReportActionsSheet";
 import { ReportCard } from "@/components/ReportCard";
-import { ReportEditor } from "@/components/ReportEditor";
+import { ReportReader } from "@/components/ReportReader";
 import { ReportProjectPickerSheet } from "@/components/ReportProjectPickerSheet";
 import { ReportsSplitView, useReportsTwoPane } from "@/components/ReportsSplitView";
 import { HIT_TARGET, radius, spacing, useTheme } from "@/theme";
@@ -93,6 +93,8 @@ export default function ReportsScreen() {
     if (twoPane) setOpenReport({ id: reportId, projectId });
     else router.push({ pathname: "/report/[reportId]", params: { reportId, projectId } });
   };
+  const editBuilt = (reportId: string, projectId: string) =>
+    router.push({ pathname: "/report/edit/[reportId]", params: { reportId, projectId } });
 
   const openItem = (item: ReportMenuTarget) =>
     item.kind === "page"
@@ -101,6 +103,7 @@ export default function ReportsScreen() {
 
   const menu = useReportActions({
     onOpen: openItem,
+    onEdit: (item) => editBuilt(item.id, item.projectId),
     onDeleted: (item) => {
       if (openReport?.id === item.id) setOpenReport(null);
     },
@@ -180,10 +183,11 @@ export default function ReportsScreen() {
         onRefresh={() => void activeQuery.refetch()}
         detail={
           openReport ? (
-            <ReportEditor
+            <ReportReader
               key={openReport.id}
               reportId={openReport.id}
               projectId={openReport.projectId}
+              onEdit={() => editBuilt(openReport.id, openReport.projectId)}
               onDeleted={() => setOpenReport(null)}
             />
           ) : null
@@ -227,7 +231,7 @@ export default function ReportsScreen() {
                   />
                 ) : (
                   sections.map((section) => (
-                    <View key={section.key} style={{ gap: spacing.md, marginBottom: spacing.sm }}>
+                    <View key={section.key} style={{ gap: spacing.sm, marginBottom: spacing.sm }}>
                       <Text
                         variant="overline"
                         tone="muted"
@@ -241,8 +245,10 @@ export default function ReportsScreen() {
                           title={item.title}
                           subtitle={reportIndexSubtitle(item)}
                           status={item.status}
-                          excerpt={item.excerpt}
                           isPage={item.kind === "page"}
+                          selected={
+                            twoPane && item.kind === "report" && openReport?.id === item.id
+                          }
                           thumbUri={extrasQuery.data?.thumbs[item.id]}
                           blueprint={extrasQuery.data?.blueprints[item.id]}
                           onPress={() => openItem(item)}
@@ -323,7 +329,12 @@ export default function ReportsScreen() {
           projectName={projectDisplayName(generateFor)}
           scope="all"
           onClose={() => setGenerateFor(null)}
-          onOpenBuiltReport={(report) => openBuilt(report.id, report.project_id)}
+          onOpenBuiltReport={(report) => {
+            // A new report is empty: straight to the editor, with it open
+            // beside the list on a tablet for when Done comes back.
+            if (twoPane) setOpenReport({ id: report.id, projectId: report.project_id });
+            editBuilt(report.id, report.project_id);
+          }}
         />
       ) : null}
 
