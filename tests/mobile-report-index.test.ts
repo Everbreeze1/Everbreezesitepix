@@ -3,8 +3,10 @@ import {
   builtReportStatus,
   groupReportIndex,
   mergeReportIndex,
+  reportBlueprintNames,
   reportIndexSubtitle,
   reportStatusLabel,
+  reportThumbPhotoIds,
 } from "../apps/mobile/src/api/report-index-view";
 
 /*
@@ -88,5 +90,56 @@ describe("the merged list", () => {
     expect(reportIndexSubtitle({ ...items[1]!, updatedAt: daysAgo(1) }, NOW)).toBe(
       "Oak Hollow · yesterday",
     );
+  });
+});
+
+describe("the report card's photo and blueprint", () => {
+  it("uses the first cover photo, else the earliest section's first photo", () => {
+    const thumbs = reportThumbPhotoIds(
+      [
+        { id: "r1", project_id: "p1", cover_photo_ids: ["c1", "c2"] },
+        { id: "r2", project_id: "p1", cover_photo_ids: [] },
+        { id: "r3", project_id: "p1", cover_photo_ids: null },
+      ],
+      [
+        { report_id: "r2", position: 2, photos: [{ photo_id: "late" }] },
+        { report_id: "r2", position: 1, photos: [{ photo_id: "early" }] },
+        { report_id: "r1", position: 0, photos: [{ photo_id: "ignored" }] },
+        { report_id: "r3", position: 0, photos: [] },
+      ],
+    );
+    expect(Object.fromEntries(thumbs)).toEqual({ r1: "c1", r2: "early" });
+  });
+
+  it("names the blueprint only for reports a blueprint produced", () => {
+    const names = reportBlueprintNames(
+      [
+        { id: "r1", project_id: "p1", source_template: "t1" },
+        { id: "r2", project_id: "p1", source_template: null },
+        { id: "r3", project_id: "p2", source_template: "t9" },
+      ],
+      { p1: { t1: { blueprintId: "b1", blueprintName: "Normal HVAC Service Call" } } },
+    );
+    expect(names).toEqual({ r1: "Normal HVAC Service Call" });
+  });
+
+  it("carries the link state so the row menu can act without opening the report", () => {
+    const [item] = mergeReportIndex(
+      [
+        {
+          id: "r1",
+          project_id: "p1",
+          title: "T",
+          summary: "S",
+          share_token: "tok",
+          revoked_at: null,
+          updated_at: NOW.toISOString(),
+        },
+      ],
+      [],
+      new Map(),
+    );
+    expect(item.shareToken).toBe("tok");
+    expect(item.revokedAt).toBeNull();
   });
 });

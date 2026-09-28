@@ -41,10 +41,15 @@ import {
 import { openShareSheet, publicUrl } from "@/api/sharing";
 import { radius, spacing, useTheme } from "@/theme";
 import {
+  Check,
   ChevronDown,
   ChevronUp,
+  CloudUpload,
   Copy,
+  Download,
+  EllipsisVertical,
   ExternalLink,
+  Eye,
   FileText,
   Images,
   ListTodo,
@@ -56,10 +61,11 @@ import {
   X,
 } from "@/ui/icons";
 import {
-  Badge,
+  ActionSheet,
   Button,
   ButtonRow,
   Card,
+  Chip,
   EmptyState,
   ErrorState,
   Field,
@@ -70,6 +76,7 @@ import {
   PhotoThumb,
   RowDivider,
   SectionHeader,
+  Sheet,
   SkeletonList,
   Text,
 } from "@/ui";
@@ -132,6 +139,8 @@ export function ReportEditor({
   const [picker, setPicker] = useState<PickerTarget>(null);
   const [taskPickerOpen, setTaskPickerOpen] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
 
   /*
    * Seed once. Re-seeding on every refetch would throw away a half-written
@@ -359,146 +368,94 @@ export function ReportEditor({
         keyboardShouldPersistTaps="handled"
         automaticallyAdjustKeyboardInsets
       >
+        {/*
+          The web editor's top bar, and nothing else above the title: whether
+          it saved, Preview, PDF, and Copy link. The link's settings (on or
+          off, downloads, sending the PDF) open from Copy link rather than
+          sitting on the page as a stack of switches.
+        */}
+        <View
+          style={{
+            flexDirection: "row",
+            flexWrap: "wrap",
+            alignItems: "center",
+            gap: spacing.sm,
+          }}
+        >
+          <View
+            accessibilityLabel={save.isPending ? "Saving" : "Auto-save on"}
+            style={{ flexDirection: "row", alignItems: "center", gap: 4, marginRight: "auto" }}
+          >
+            <Icon icon={save.isPending ? CloudUpload : Check} size="xs" tone="muted" />
+            <Text variant="caption" tone="muted">
+              {save.isPending ? "Saving" : "Auto-save on"}
+            </Text>
+          </View>
+          <Button
+            label="Preview"
+            icon={Eye}
+            variant="outline"
+            size="sm"
+            onPress={() => {
+              const url = shared ? publicUrl("reports", report.share_token) : null;
+              if (url) void WebBrowser.openBrowserAsync(url);
+              else setShareOpen(true);
+            }}
+          />
+          <Button
+            label="PDF"
+            icon={Download}
+            variant="outline"
+            size="sm"
+            onPress={() => {
+              if (pdfUrl) void WebBrowser.openBrowserAsync(pdfUrl);
+              else setShareOpen(true);
+            }}
+          />
+          <Button label="Copy link" icon={Copy} size="sm" onPress={() => setShareOpen(true)} />
+          <IconButton
+            icon={EllipsisVertical}
+            size="sm"
+            surface={false}
+            accessibilityLabel="More report actions"
+            onPress={() => setMoreOpen(true)}
+          />
+        </View>
+
         {failure ? (
           <Text variant="caption" tone="destructive">
             {failure}
           </Text>
         ) : null}
 
-        {/*
-          The web editor's top bar: Preview, PDF and Copy link, for the report
-          somebody is about to send. The same actions sit in Share and PDF
-          below, with the switch that turns the link on.
-        */}
-        {shared ? (
-          <ButtonRow>
-            <Button
-              label="Preview"
-              icon={ExternalLink}
-              variant="outline"
-              size="sm"
-              onPress={() => {
-                const url = publicUrl("reports", report.share_token);
-                if (url) void WebBrowser.openBrowserAsync(url);
-                else setFailure("Sharing is not set up for this workspace, so there is no link.");
+        <Card>
+          <View style={{ gap: spacing.md }}>
+            <Field
+              label="Report title"
+              value={title}
+              onChangeText={(next) => {
+                setTitle(next);
+                if (titleError) setTitleError(null);
               }}
-            />
-            <Button
-              label="PDF"
-              icon={FileText}
-              variant="outline"
-              size="sm"
-              onPress={() => {
-                if (pdfUrl) void WebBrowser.openBrowserAsync(pdfUrl);
-              }}
-            />
-            <Button
-              label="Copy link"
-              icon={Copy}
-              size="sm"
-              onPress={() => {
-                const url = publicUrl("reports", report.share_token);
-                if (!url) {
-                  setFailure("Sharing is not set up for this workspace, so there is no link.");
+              error={titleError ?? undefined}
+              onBlur={() => {
+                const bad = reportTitleError(title);
+                if (bad) {
+                  setTitleError(bad);
                   return;
                 }
-                void openShareSheet(url, report.title);
+                const trimmed = title.trim();
+                if (trimmed !== report.title) save.mutate({ title: trimmed });
               }}
+              returnKeyType="done"
             />
-          </ButtonRow>
-        ) : null}
 
-        <Field
-          label="Report title"
-          value={title}
-          onChangeText={(next) => {
-            setTitle(next);
-            if (titleError) setTitleError(null);
-          }}
-          error={titleError ?? undefined}
-          onBlur={() => {
-            const bad = reportTitleError(title);
-            if (bad) {
-              setTitleError(bad);
-              return;
-            }
-            const trimmed = title.trim();
-            if (trimmed !== report.title) save.mutate({ title: trimmed });
-          }}
-          returnKeyType="done"
-        />
-
-        <PhotosPerPagePicker
-          value={report.photos_per_page}
-          onChange={(n) => save.mutate({ photos_per_page: n })}
-        />
-
-        {/* ------------------------------------------------ share and PDF */}
-        <SectionHeader title="Share and PDF" />
-        <ListGroup>
-          <ListRow
-            icon={Share2}
-            iconTone={shared ? "success" : "muted"}
-            title={shared ? "Sharing is on" : "Sharing is off"}
-            subtitle={shareStatusLabel(report)}
-            right={
-              <Badge
-                label={shared ? "On" : "Off"}
-                tone={shared ? "success" : "neutral"}
-                variant={shared ? "soft" : "outline"}
-              />
-            }
-            onPress={() => save.mutate(shareTogglePatch(!shared))}
-          />
-          {shared ? (
-            <>
-              <RowDivider />
-              <ListRow
-                icon={Send}
-                title="Copy or send the link"
-                subtitle="Your customer sees a review button at the bottom of this report"
-                onPress={() => {
-                  const url = publicUrl("reports", report.share_token);
-                  if (!url) {
-                    setFailure("Sharing is not set up for this workspace, so there is no link.");
-                    return;
-                  }
-                  void openShareSheet(url, report.title);
-                }}
-              />
-              <RowDivider />
-              <ListRow
-                icon={FileText}
-                title="Open the PDF"
-                subtitle="View, save or print it from the browser"
-                right={<Icon icon={ExternalLink} size="sm" tone="muted" />}
-                onPress={() => {
-                  if (pdfUrl) void WebBrowser.openBrowserAsync(pdfUrl);
-                }}
-              />
-              <RowDivider />
-              <ListRow
-                icon={Send}
-                title="Send the PDF"
-                subtitle="Shares a link that downloads the PDF"
-                onPress={() => {
-                  if (pdfUrl) void openShareSheet(pdfUrl, `${report.title} (PDF)`);
-                }}
-              />
-              <RowDivider />
-              <ToggleRow
-                title="Allow downloading"
-                subtitle="Lets the reader save a copy from the public page"
-                value={report.allow_download}
-                onChange={(v) => save.mutate({ allow_download: v })}
-              />
-            </>
-          ) : null}
-        </ListGroup>
-        <Text variant="caption" tone="muted">
-          The PDF and the link work only while sharing is on. Turning sharing back on restores the
-          same link rather than making a new one; delete the report to kill a link for good.
-        </Text>
+            <PhotosPerPagePicker
+              value={report.photos_per_page}
+              onChange={(n) => save.mutate({ photos_per_page: n })}
+            />
+          </View>
+        </Card>
         {isReportEmpty(report) && sections.length === 0 ? (
           <Text variant="caption" tone="muted">
             This report has no sections, photos or write-up yet. The reader would get an almost
@@ -507,66 +464,68 @@ export function ReportEditor({
         ) : null}
 
         {/* ------------------------------------------------ cover page */}
-        <SectionHeader title="Cover page" />
-        <ListGroup>
-          <ToggleRow
-            title="Cover page"
-            value={report.cover_enabled}
-            onChange={(v) => setCover({ cover_enabled: v })}
-          />
-          {report.cover_enabled ? (
-            <>
-              <RowDivider />
-              <ToggleRow
-                title="Project name"
-                value={report.cover_show_project_name}
-                onChange={(v) => setCover({ cover_show_project_name: v })}
+        <Card>
+          <View style={{ gap: spacing.md }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
+              <Text variant="overline" tone="muted" style={{ flex: 1 }}>
+                COVER PAGE
+              </Text>
+              <Chip
+                label={report.cover_enabled ? "Enabled" : "Off"}
+                icon={report.cover_enabled ? Check : undefined}
+                selected={report.cover_enabled}
+                onPress={() => setCover({ cover_enabled: !report.cover_enabled })}
               />
-              <RowDivider />
-              <ToggleRow
-                title="Address"
-                value={report.cover_show_address}
-                onChange={(v) => setCover({ cover_show_address: v })}
-              />
-              <RowDivider />
-              <ToggleRow
-                title="Date"
-                value={report.cover_show_date}
-                onChange={(v) => setCover({ cover_show_date: v })}
-              />
-              <RowDivider />
-              <ToggleRow
-                title="Author name"
-                value={report.cover_show_author}
-                onChange={(v) => setCover({ cover_show_author: v })}
-              />
-            </>
-          ) : null}
-        </ListGroup>
-        {report.cover_enabled ? (
-          <>
-            <Field
-              label="Subtitle (optional)"
-              value={subtitle}
-              onChangeText={setSubtitle}
-              placeholder="A short line under the title"
-              onBlur={() => {
-                const next = subtitle.trim() || null;
-                if (next !== (report.subtitle ?? null)) save.mutate({ subtitle: next });
-              }}
-            />
-            <PhotoStrip
-              label="Cover photos"
-              ids={report.cover_photo_ids}
-              urls={urls}
-              emptyText="No cover photos yet. Add a hero shot or two."
-              onAdd={() => setPicker({ kind: "cover" })}
-              onRemove={(id) =>
-                save.mutate({ cover_photo_ids: report.cover_photo_ids.filter((x) => x !== id) })
-              }
-            />
-          </>
-        ) : null}
+            </View>
+            {report.cover_enabled ? (
+              <>
+                <Text variant="caption" tone="muted">
+                  Show on cover
+                </Text>
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }}>
+                  {(
+                    [
+                      ["cover_show_project_name", "Project name"],
+                      ["cover_show_address", "Address"],
+                      ["cover_show_date", "Date"],
+                      ["cover_show_author", "Author name"],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <Chip
+                      key={key}
+                      label={label}
+                      icon={report[key] ? Check : undefined}
+                      selected={report[key]}
+                      onPress={() => setCover({ [key]: !report[key] })}
+                    />
+                  ))}
+                </View>
+                <Field
+                  label="Subtitle (optional)"
+                  value={subtitle}
+                  onChangeText={setSubtitle}
+                  placeholder="A short line under the title"
+                  onBlur={() => {
+                    const next = subtitle.trim() || null;
+                    if (next !== (report.subtitle ?? null)) save.mutate({ subtitle: next });
+                  }}
+                />
+                <PhotoStrip
+                  label="Cover photos"
+                  ids={report.cover_photo_ids}
+                  urls={urls}
+                  emptyText="No cover photos yet. Add a hero shot or two."
+                  onAdd={() => setPicker({ kind: "cover" })}
+                  onRemove={(id) =>
+                    save.mutate({
+                      cover_photo_ids: report.cover_photo_ids.filter((x) => x !== id),
+                    })
+                  }
+                />
+              </>
+            ) : null}
+          </View>
+        </Card>
 
         {/* ------------------------------------------------ write-up */}
         <SectionHeader title="Write-up" />
@@ -667,17 +626,94 @@ export function ReportEditor({
           fullWidth
           onPress={() => setTaskPickerOpen(true)}
         />
-
-        <View style={{ height: spacing.lg }} />
-        <Button
-          label={remove.isPending ? "Deleting" : "Delete report"}
-          icon={Trash2}
-          variant="destructive"
-          fullWidth
-          disabled={remove.isPending}
-          onPress={confirmDelete}
-        />
       </ScrollView>
+
+      <Sheet
+        visible={shareOpen}
+        onClose={() => setShareOpen(false)}
+        title="Share this report"
+        subtitle={shareStatusLabel(report)}
+      >
+        <View style={{ gap: spacing.md }}>
+          <ListGroup>
+            <ToggleRow
+              icon={Share2}
+              title="Public link"
+              subtitle={
+                shared
+                  ? "Anyone with the link can read it. Your customer sees a review button at the bottom."
+                  : "Off. Preview, the PDF and the link work only while it is on."
+              }
+              value={shared}
+              onChange={(on) => save.mutate(shareTogglePatch(on))}
+            />
+            {shared ? (
+              <>
+                <RowDivider />
+                <ListRow
+                  icon={Send}
+                  title="Copy or send the link"
+                  onPress={() => {
+                    const url = publicUrl("reports", report.share_token);
+                    if (!url) {
+                      setFailure("Sharing is not set up for this workspace, so there is no link.");
+                      setShareOpen(false);
+                      return;
+                    }
+                    setShareOpen(false);
+                    setTimeout(() => void openShareSheet(url, report.title), 350);
+                  }}
+                />
+                <RowDivider />
+                <ListRow
+                  icon={FileText}
+                  title="Send the PDF"
+                  subtitle="Shares a link that downloads the PDF"
+                  onPress={() => {
+                    if (!pdfUrl) return;
+                    setShareOpen(false);
+                    setTimeout(() => void openShareSheet(pdfUrl, `${report.title} (PDF)`), 350);
+                  }}
+                />
+                <RowDivider />
+                <ToggleRow
+                  title="Allow downloading"
+                  subtitle="Lets the reader save a copy from the public page"
+                  value={report.allow_download}
+                  onChange={(v) => save.mutate({ allow_download: v })}
+                />
+              </>
+            ) : null}
+          </ListGroup>
+          <Text variant="caption" tone="muted">
+            Turning the link back on restores the same link rather than making a new one. Delete the
+            report to kill a link for good.
+          </Text>
+        </View>
+      </Sheet>
+
+      <ActionSheet
+        visible={moreOpen}
+        onClose={() => setMoreOpen(false)}
+        title={report.title}
+        actions={[
+          {
+            label: "Open the PDF in the browser",
+            icon: ExternalLink,
+            disabled: !pdfUrl,
+            onPress: () => {
+              if (pdfUrl) setTimeout(() => void WebBrowser.openBrowserAsync(pdfUrl), 350);
+            },
+          },
+          {
+            label: remove.isPending ? "Deleting" : "Delete report",
+            icon: Trash2,
+            destructive: true,
+            disabled: remove.isPending,
+            onPress: () => setTimeout(confirmDelete, 350),
+          },
+        ]}
+      />
 
       <ReportTaskPickerSheet
         visible={taskPickerOpen}

@@ -20,6 +20,8 @@ import { ScanCropper } from "@/components/ScanCropper";
 import { TagPickerSheet } from "@/components/TagPickerSheet";
 import { jpegFileToPdfBase64 } from "@/components/scan-pdf";
 import { HIT_TARGET, radius, spacing, useTheme } from "@/theme";
+import { Icon, type LucideIcon } from "@/ui";
+import { Check, Crop, FileText, Pencil, RotateCcw, Ruler, StickyNote, Tag, X } from "@/ui/icons";
 
 export type EditableShot = {
   uri: string;
@@ -71,6 +73,8 @@ export function ShotEditor({
   const [tagsOpen, setTagsOpen] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
+  /** The description field, folded away until asked for so the photo keeps the screen. */
+  const [noteOpen, setNoteOpen] = useState(Boolean(shot.caption?.trim()));
 
   const tags = shot.tags ?? [];
 
@@ -102,16 +106,47 @@ export function ShotEditor({
     }
   }
 
-  const actions: { id: string; label: string; onPress: () => void; badge?: number }[] = [
-    { id: "retake", label: "Retake", onPress: onRetake },
-    { id: "annotate", label: "Annotate", onPress: () => setAnnotating("pen") },
+  /*
+   * Web's post-capture toolbar: each tool an icon over a short word, on one
+   * translucent bar over the photo.
+   */
+  const actions: {
+    id: string;
+    label: string;
+    icon: LucideIcon;
+    onPress: () => void;
+    badge?: number;
+    active?: boolean;
+  }[] = [
+    { id: "retake", label: "Retake", icon: RotateCcw, onPress: onRetake },
+    { id: "annotate", label: "Annotate", icon: Pencil, onPress: () => setAnnotating("pen") },
     ...(canMeasure
-      ? [{ id: "measure", label: "Measure", onPress: () => setAnnotating("measure") }]
+      ? [
+          {
+            id: "measure",
+            label: "Measure",
+            icon: Ruler,
+            onPress: () => setAnnotating("measure"),
+          },
+        ]
       : []),
-    { id: "crop", label: "Crop", onPress: () => setCropping(true) },
-    { id: "tags", label: "Tags", onPress: () => setTagsOpen(true), badge: tags.length },
+    { id: "crop", label: "Crop", icon: Crop, onPress: () => setCropping(true) },
+    {
+      id: "tags",
+      label: "Tags",
+      icon: Tag,
+      onPress: () => setTagsOpen(true),
+      badge: tags.length,
+    },
+    {
+      id: "note",
+      label: "Note",
+      icon: StickyNote,
+      onPress: () => setNoteOpen((open) => !open),
+      active: noteOpen,
+    },
     ...(shot.scan
-      ? [{ id: "pdf", label: pdfBusy ? "PDF..." : "PDF", onPress: () => void saveAsPdf() }]
+      ? [{ id: "pdf", label: "PDF", icon: FileText, onPress: () => void saveAsPdf() }]
       : []),
   ];
 
@@ -140,68 +175,98 @@ export function ShotEditor({
         ) : null}
       </View>
 
-      <View style={[styles.topBar, { paddingTop: insets.top + spacing.sm }]}>
+      <View
+        style={[
+          styles.topBar,
+          {
+            top: insets.top + spacing.sm,
+            left: insets.left + spacing.lg,
+            right: insets.right + spacing.lg,
+          },
+        ]}
+        pointerEvents="box-none"
+      >
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Back to the batch"
           onPress={onClose}
           hitSlop={8}
-          style={styles.topButton}
+          style={styles.roundButton}
         >
-          <Text style={styles.topButtonText}>Back</Text>
+          <Icon icon={X} size="md" color="#fff" />
         </Pressable>
       </View>
 
-      <View style={[styles.bottom, { paddingBottom: insets.bottom + spacing.lg }]}>
+      <View
+        style={[
+          styles.bottom,
+          {
+            bottom: insets.bottom + spacing.lg,
+            left: insets.left + spacing.lg,
+            right: insets.right + spacing.lg,
+          },
+        ]}
+        pointerEvents="box-none"
+      >
         {message ? (
           <Text style={[styles.message, message.error && styles.messageError]}>{message.text}</Text>
         ) : null}
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.toolbar}
-        >
-          {actions.map((action) => (
-            <Pressable
-              key={action.id}
-              accessibilityRole="button"
-              accessibilityLabel={action.label}
-              onPress={action.onPress}
-              disabled={pdfBusy && action.id === "pdf"}
-              style={styles.toolButton}
-            >
-              {action.id === "pdf" && pdfBusy ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.toolText}>{action.label}</Text>
-              )}
-              {action.badge ? (
-                <View style={[styles.badge, { backgroundColor: theme.colors.primary }]}>
-                  <Text style={[styles.badgeText, { color: theme.colors.primaryForeground }]}>
-                    {action.badge}
-                  </Text>
-                </View>
-              ) : null}
-            </Pressable>
-          ))}
-        </ScrollView>
+        {noteOpen ? (
+          <TextInput
+            value={shot.caption ?? ""}
+            onChangeText={(caption) => onChange({ caption })}
+            placeholder="Add a description (optional)"
+            placeholderTextColor="rgba(255,255,255,0.5)"
+            multiline
+            style={styles.description}
+            accessibilityLabel="Photo description"
+          />
+        ) : null}
 
-        <TextInput
-          value={shot.caption ?? ""}
-          onChangeText={(caption) => onChange({ caption })}
-          placeholder="Add a description (optional)"
-          placeholderTextColor="rgba(255,255,255,0.5)"
-          multiline
-          style={styles.description}
-          accessibilityLabel="Photo description"
-        />
+        <View style={styles.toolbarWrap}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.toolbar}
+          >
+            {actions.map((action) => (
+              <Pressable
+                key={action.id}
+                accessibilityRole="button"
+                accessibilityLabel={action.label}
+                accessibilityState={
+                  action.active !== undefined ? { selected: action.active } : undefined
+                }
+                onPress={action.onPress}
+                disabled={pdfBusy && action.id === "pdf"}
+                style={[styles.toolButton, action.active && styles.toolButtonActive]}
+              >
+                {action.id === "pdf" && pdfBusy ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Icon icon={action.icon} size="md" color="#fff" />
+                )}
+                <Text style={styles.toolText}>{action.label}</Text>
+                {action.badge ? (
+                  <View style={[styles.badge, { backgroundColor: theme.colors.primary }]}>
+                    <Text style={[styles.badgeText, { color: theme.colors.primaryForeground }]}>
+                      {action.badge}
+                    </Text>
+                  </View>
+                ) : null}
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
 
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel="Done"
           onPress={onClose}
-          style={[styles.doneButton, { backgroundColor: "#ffffff" }]}
+          style={styles.doneButton}
         >
+          <Icon icon={Check} size="md" color="#18130d" />
           <Text style={styles.doneText}>Done</Text>
         </Pressable>
       </View>
@@ -289,40 +354,45 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   scanBadgeText: { fontSize: 12, fontWeight: "800", letterSpacing: 0.8 },
-  topBar: { paddingHorizontal: spacing.lg, flexDirection: "row" },
-  topButton: {
-    backgroundColor: "rgba(40, 36, 32, 0.72)",
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.lg,
-    minHeight: 40,
-    justifyContent: "center",
-  },
-  topButtonText: { color: "#fff", fontSize: 15, fontWeight: "700" },
-  bottom: {
-    marginTop: "auto",
-    paddingHorizontal: spacing.lg,
-    gap: spacing.md,
-  },
-  toolbar: {
-    gap: spacing.sm,
-    padding: spacing.sm,
-    backgroundColor: "rgba(10, 8, 6, 0.82)",
-    borderRadius: radius.lg,
-  },
-  toolButton: {
-    minWidth: 64,
-    minHeight: HIT_TARGET,
-    paddingHorizontal: spacing.md,
-    borderRadius: radius.md,
-    backgroundColor: "rgba(255,255,255,0.1)",
+  topBar: { position: "absolute", flexDirection: "row" },
+  roundButton: {
+    width: HIT_TARGET,
+    height: HIT_TARGET,
+    borderRadius: HIT_TARGET / 2,
+    backgroundColor: "rgba(24, 20, 16, 0.55)",
     alignItems: "center",
     justifyContent: "center",
   },
-  toolText: { color: "#fff", fontSize: 14, fontWeight: "700" },
+  /* Floats over the photo, centred and capped so a tablet gets the same bar. */
+  bottom: {
+    position: "absolute",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  toolbarWrap: {
+    maxWidth: 560,
+    backgroundColor: "rgba(10, 8, 6, 0.6)",
+    borderRadius: radius.xl,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.18)",
+    overflow: "hidden",
+  },
+  toolbar: { gap: spacing.xs, padding: 6 },
+  toolButton: {
+    minWidth: 62,
+    minHeight: 56,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.lg,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+  },
+  toolButtonActive: { backgroundColor: "rgba(255,255,255,0.18)" },
+  toolText: { color: "#fff", fontSize: 11, fontWeight: "700", letterSpacing: 0.3 },
   badge: {
     position: "absolute",
-    top: -4,
-    right: -4,
+    top: 2,
+    right: 4,
     minWidth: 18,
     height: 18,
     borderRadius: 9,
@@ -332,23 +402,29 @@ const styles = StyleSheet.create({
   },
   badgeText: { fontSize: 11, fontWeight: "800" },
   description: {
+    alignSelf: "stretch",
+    maxWidth: 560,
     color: "#fff",
     fontSize: 15,
-    backgroundColor: "rgba(10, 8, 6, 0.82)",
+    backgroundColor: "rgba(10, 8, 6, 0.6)",
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
     minHeight: HIT_TARGET,
-    maxHeight: 110,
+    maxHeight: 96,
   },
   doneButton: {
-    borderRadius: radius.lg,
-    minHeight: 52,
+    flexDirection: "row",
+    gap: spacing.xs,
+    backgroundColor: "#ffffff",
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.xl,
+    minHeight: HIT_TARGET,
     alignItems: "center",
     justifyContent: "center",
   },
-  doneText: { color: "#18130d", fontSize: 16, fontWeight: "700" },
+  doneText: { color: "#18130d", fontSize: 15, fontWeight: "700" },
   message: {
     alignSelf: "center",
     color: "#fff",

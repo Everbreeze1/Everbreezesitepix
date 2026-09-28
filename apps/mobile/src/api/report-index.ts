@@ -1,11 +1,17 @@
 import { api } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
+import { signReportPhotos } from "./report-builder";
 import {
   mergeReportIndex,
   pagesForProject,
+  reportBlueprintNames,
+  reportThumbPhotoIds,
+  type BlueprintSources,
   type BuiltReportInput,
+  type ReportCardSource,
   type ReportIndexItem,
   type ReportPageInput,
+  type ReportSectionPhotos,
 } from "./report-index-view";
 
 /**
@@ -75,4 +81,92 @@ export async function listAllReports(): Promise<ReportIndexItem[]> {
 export async function listProjectReportPages(projectId: string): Promise<ReportIndexItem[]> {
   const result = await api.rpc<{ reports?: ReportPageInput[] }>("listReportPages", {});
   return pagesForProject(result?.reports ?? [], projectId);
+}
+
+/** What a report card draws beside its words: a photo and a blueprint chip. */
+export type ReportCardExtras = {
+  /** Signed thumbnail URL per built report id. */
+  thumbs: Record<string, string>;
+  /** Blueprint name per built report id, for the ones a blueprint produced. */
+  blueprints: Record<string, string>;
+};
+
+/**
+ * Thumbnails and blueprint chips for a list of built reports, as the web's
+ * Reports page resolves them.
+ *
+ * Its own query, after the list, so the words draw at once and the pictures
+ * fill in. Every step is best-effort: a card without its photo or chip is
+ * still a card, and nothing here may stand between somebody and a report.
+ *
+ * `source_template` is asked for and dropped if the database does not have it
+ * yet, for the reason the web gives: PostgREST refuses the whole select over
+ * one unknown column, and losing the chip is better than losing the photos.
+ */
+export async function listReportCardExtras(reportIds: string[]): Promise<ReportCardExtras> {
+  const ids = Array.from(new Set(reportIds));
+  if (ids.length === 0) return { thumbs: {}, blueprints: {} };
+
+  const rows: ReportCardSource[] = [];
+  for (let i = 0; i < ids.length; i += 200) {
+    const slice = ids.slice(i, i + 200);
+    const withSource = await supabase
+      .from("project_reports")
+      .select("id, project_id, cover_photo_ids, source_template")
+      .in("id", slice);
+    if (!withSource.error) {
+      rows.push(...((withSource.data as ReportCardSource[]) ?? []));
+      continue;
+    }
+    const plain = await supabase
+      .from("project_reports")
+      .select("id, project_id, cover_photo_ids")
+      .in("id", slice);
+    if (!plain.error) rows.push(...((plain.data as ReportCardSource[]) ?? []));
+  }
+
+  const coverless = rows
+    .filter((row) => !Array.isArray(row.cover_photo_ids) || row.cover_photo_ids.length === 0)
+    .map((row) => row.id);
+  const sections: ReportSectionPhotos[] = [];
+  for (let i = 0; i < coverless.length; i += 200) {
+    const { data, error } = await supabase
+      .from("project_report_sections")
+      .select("report_id, position, photos")
+      .in("report_id", coverless.slice(i, i + 200))
+      .order("position", { ascending: true });
+    if (!error) sections.push(...((data as ReportSectionPhotos[]) ?? []));
+  }
+
+  const photoFor = reportThumbPhotoIds(rows, sections);
+  let signed: Record<string, string> = {};
+  try {
+    signed = await signReportPhotos(Array.from(photoFor.values()));
+  } catch (error) {
+    console.warn("[reports] thumbnails unavailable", {
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+  const thumbs: Record<string, string> = {};
+  for (const [reportId, photoId] of photoFor) {
+    if (signed[photoId]) thumbs[reportId] = signed[photoId];
+  }
+
+  let blueprints: Record<string, string> = {};
+  const projectIds = Array.from(new Set(rows.map((row) => row.project_id))).slice(0, 200);
+  if (rows.some((row) => row.source_template) && projectIds.length > 0) {
+    try {
+      const result = await api.rpc<{ status?: string; byProject?: BlueprintSources }>(
+        "listBlueprintItemSources",
+        { projectIds },
+      );
+      if (result?.status === "ok") blueprints = reportBlueprintNames(rows, result.byProject ?? {});
+    } catch (error) {
+      console.warn("[reports] blueprint sources unavailable", {
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  return { thumbs, blueprints };
 }

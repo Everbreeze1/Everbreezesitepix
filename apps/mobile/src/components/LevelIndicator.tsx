@@ -62,9 +62,12 @@ export function LevelIndicator({ size = 56 }: { size?: number }) {
 }
 
 const styles = StyleSheet.create({
+  /* Web's rounded square beside the shutter, translucent over the live view. */
   box: {
     borderRadius: 16,
-    backgroundColor: "rgba(40, 36, 32, 0.72)",
+    backgroundColor: "rgba(24, 20, 16, 0.55)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.18)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -74,5 +77,5 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.45)",
   },
   bar: { position: "absolute", height: 3, borderRadius: 1.5 },
-  off: { color: "rgba(255,255,255,0.5)", fontSize: 10, fontWeight: "700" },
+  off: { color: "rgba(255,255,255,0.55)", fontSize: 11, fontWeight: "700", letterSpacing: 0.5 },
 });

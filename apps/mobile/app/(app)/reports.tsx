@@ -5,10 +5,11 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { projectDisplayName } from "@everlumen/shared";
 import { listDocumentTemplates, type DocumentTemplate } from "@/api/pages";
 import type { ProjectListItem } from "@/api/projects";
-import { listAllReports } from "@/api/report-index";
+import { listAllReports, listReportCardExtras } from "@/api/report-index";
 import { groupReportIndex, reportIndexSubtitle, searchReportIndex } from "@/api/report-index-view";
 import { groupTemplates } from "@/api/template-picker-view";
 import { GenerateReportSheet } from "@/components/GenerateReportSheet";
+import { useReportActions, type ReportMenuTarget } from "@/components/ReportActionsSheet";
 import { ReportCard } from "@/components/ReportCard";
 import { ReportEditor } from "@/components/ReportEditor";
 import { ReportProjectPickerSheet } from "@/components/ReportProjectPickerSheet";
@@ -67,6 +68,18 @@ export default function ReportsScreen() {
     staleTime: 5 * 60 * 1000,
   });
 
+  const builtIds = useMemo(
+    () => (reportsQuery.data ?? []).filter((item) => item.kind === "report").map((item) => item.id),
+    [reportsQuery.data],
+  );
+  // Photos and blueprint chips fill in after the words, and never block them.
+  const extrasQuery = useQuery({
+    queryKey: ["all-reports-extras", builtIds.join(",")],
+    queryFn: () => listReportCardExtras(builtIds),
+    enabled: builtIds.length > 0,
+    staleTime: 30 * 60 * 1000,
+  });
+
   const sections = useMemo(
     () => groupReportIndex(searchReportIndex(reportsQuery.data ?? [], search)),
     [reportsQuery.data, search],
@@ -80,6 +93,18 @@ export default function ReportsScreen() {
     if (twoPane) setOpenReport({ id: reportId, projectId });
     else router.push({ pathname: "/report/[reportId]", params: { reportId, projectId } });
   };
+
+  const openItem = (item: ReportMenuTarget) =>
+    item.kind === "page"
+      ? router.push({ pathname: "/page/[pageId]", params: { pageId: item.id } })
+      : openBuilt(item.id, item.projectId);
+
+  const menu = useReportActions({
+    onOpen: openItem,
+    onDeleted: (item) => {
+      if (openReport?.id === item.id) setOpenReport(null);
+    },
+  });
 
   const activeQuery = tab === "reports" ? reportsQuery : templatesQuery;
 
@@ -217,14 +242,11 @@ export default function ReportsScreen() {
                           subtitle={reportIndexSubtitle(item)}
                           status={item.status}
                           excerpt={item.excerpt}
-                          onPress={() =>
-                            item.kind === "page"
-                              ? router.push({
-                                  pathname: "/page/[pageId]",
-                                  params: { pageId: item.id },
-                                })
-                              : openBuilt(item.id, item.projectId)
-                          }
+                          isPage={item.kind === "page"}
+                          thumbUri={extrasQuery.data?.thumbs[item.id]}
+                          blueprint={extrasQuery.data?.blueprints[item.id]}
+                          onPress={() => openItem(item)}
+                          onMenu={() => menu.open(item)}
                         />
                       ))}
                     </View>
@@ -292,6 +314,8 @@ export default function ReportsScreen() {
           else setTimeout(() => setGenerateFor(project), 350);
         }}
       />
+
+      {menu.sheet}
 
       {generateFor ? (
         <GenerateReportSheet

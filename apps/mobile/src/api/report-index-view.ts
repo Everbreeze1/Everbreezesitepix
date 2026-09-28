@@ -26,6 +26,12 @@ export type ReportIndexItem = {
   status: ReportIndexStatus;
   /** The write-up as one plain line for the card, or null. Built reports only. */
   excerpt?: string | null;
+  /**
+   * The public link's token and switch, so the row's menu can copy the link
+   * or turn it off without opening the report first.
+   */
+  shareToken?: string | null;
+  revokedAt?: string | null;
 };
 
 /**
@@ -107,6 +113,8 @@ export function mergeReportIndex(
       updatedAt: report.updated_at,
       status: builtReportStatus(report),
       excerpt: reportExcerpt(report.summary),
+      shareToken: report.share_token,
+      revokedAt: report.revoked_at,
     })),
     ...pages.map((page) => ({
       kind: "page" as const,
@@ -116,6 +124,8 @@ export function mergeReportIndex(
       title: page.title,
       updatedAt: page.updatedAt,
       status: (page.shareToken && !page.revokedAt ? "shared" : "link_off") as ReportIndexStatus,
+      shareToken: page.shareToken,
+      revokedAt: page.revokedAt,
     })),
   ];
   return items.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
@@ -204,4 +214,67 @@ export function pagesForProject(pages: ReportPageInput[], projectId: string): Re
     pages.filter((page) => page.projectId === projectId),
     new Map(),
   );
+}
+
+/** A report row as the thumbnail and blueprint lookups read it. */
+export type ReportCardSource = {
+  id: string;
+  project_id: string;
+  cover_photo_ids?: unknown;
+  source_template?: string | null;
+};
+
+/** A `project_report_sections` row, as much as the thumbnail lookup needs. */
+export type ReportSectionPhotos = { report_id: string; position: number; photos: unknown };
+
+/**
+ * Which photo stands for each report in the list, as the web picks it: the
+ * first cover photo, else the first photo of the earliest section that has
+ * one. A report with neither gets no entry, and the card draws its icon.
+ */
+export function reportThumbPhotoIds(
+  reports: ReportCardSource[],
+  sections: ReportSectionPhotos[],
+): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const report of reports) {
+    const cover = Array.isArray(report.cover_photo_ids) ? report.cover_photo_ids : [];
+    const first = cover.find((id): id is string => typeof id === "string" && id.length > 0);
+    if (first) out.set(report.id, first);
+  }
+  const ordered = [...sections].sort((a, b) => a.position - b.position);
+  for (const section of ordered) {
+    if (out.has(section.report_id)) continue;
+    const photos = Array.isArray(section.photos) ? section.photos : [];
+    const head = photos[0] as { photo_id?: unknown } | undefined;
+    if (head && typeof head.photo_id === "string" && head.photo_id) {
+      out.set(section.report_id, head.photo_id);
+    }
+  }
+  return out;
+}
+
+/** `listBlueprintItemSources`' answer: project, then source template, then blueprint. */
+export type BlueprintSources = Record<
+  string,
+  Record<string, { blueprintId: string | null; blueprintName: string | null }>
+>;
+
+/**
+ * The blueprint chip for each report, by report id.
+ *
+ * Only reports a blueprint actually produced get one. A report somebody built
+ * by hand has no `source_template`, and no chip is the right rendering for it.
+ */
+export function reportBlueprintNames(
+  reports: ReportCardSource[],
+  sources: BlueprintSources,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const report of reports) {
+    if (!report.source_template) continue;
+    const name = sources[report.project_id]?.[report.source_template]?.blueprintName?.trim();
+    if (name) out[report.id] = name;
+  }
+  return out;
 }

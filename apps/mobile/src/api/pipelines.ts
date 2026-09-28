@@ -48,7 +48,7 @@ export async function setProjectStage(projectId: string, stageId: string | null)
 export async function listStagedProjects(): Promise<StagedProject[]> {
   const { data, error } = await supabase
     .from("projects")
-    .select("id, name, client_name, city, pipeline_stage_id")
+    .select("id, name, client_name, location, street, city, state, updated_at, pipeline_stage_id")
     .is("deleted_at", null)
     .not("archived", "is", true)
     .order("updated_at", { ascending: false });

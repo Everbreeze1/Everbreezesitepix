@@ -24,7 +24,9 @@ import {
   walkthroughVideoPath,
 } from "@/api/walkthroughs";
 import { useAuth } from "@/lib/auth";
-import { HIT_TARGET, radius, spacing, typography, useRightRail, useTheme } from "@/theme";
+import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
+import { Icon } from "@/ui";
+import { X } from "@/ui/icons";
 
 /**
  * Cap on one recording.
@@ -50,7 +52,6 @@ export default function WalkthroughRecordScreen() {
   const siteVideo = kind === "video";
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const rail = useRightRail();
   const { user } = useAuth();
 
   const [cameraPermission, requestCamera] = useCameraPermissions();
@@ -344,14 +345,24 @@ export default function WalkthroughRecordScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing={facing} mode="video" />
 
-      <View style={[styles.topBar, { top: insets.top + spacing.sm, right: rail ? 120 : 0 }]}>
+      <View
+        style={[
+          styles.topBar,
+          {
+            top: insets.top + spacing.sm,
+            left: insets.left + spacing.lg,
+            right: insets.right + spacing.lg,
+          },
+        ]}
+      >
         <Pressable
           accessibilityRole="button"
-          style={styles.chip}
+          accessibilityLabel="Close"
+          style={styles.roundButton}
           onPress={() => router.back()}
           hitSlop={8}
         >
-          <Text style={styles.chipText}>Close</Text>
+          <Icon icon={X} size="md" color="#fff" />
         </Pressable>
         {stage === "recording" ? (
           <View style={[styles.chip, styles.recordingChip]}>
@@ -377,15 +388,19 @@ export default function WalkthroughRecordScreen() {
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
       {/*
-        On a tablet or in landscape the controls stand down the right edge,
-        where the right thumb rests while both hands hold the device.
+        The same place as the camera's shutter on every phone and tablet, in
+        either orientation: floating at the bottom centre of the live view,
+        never a panel beside it.
       */}
       <View
-        style={
-          rail
-            ? [styles.sideBar, { right: insets.right + spacing.lg }]
-            : [styles.bottomBar, { bottom: insets.bottom + 40 }]
-        }
+        style={[
+          styles.bottomBar,
+          {
+            bottom: insets.bottom + 40,
+            left: insets.left,
+            right: insets.right,
+          },
+        ]}
       >
         {/* A site video has no stills, so the snap control gives way to a spacer. */}
         {siteVideo ? (
@@ -446,12 +461,18 @@ const styles = StyleSheet.create({
   centered: { flex: 1, alignItems: "center", justifyContent: "center" },
   topBar: {
     position: "absolute",
-    top: 48,
-    left: 0,
-    right: 0,
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: spacing.lg,
+    gap: spacing.sm,
+  },
+  roundButton: {
+    width: HIT_TARGET,
+    height: HIT_TARGET,
+    borderRadius: HIT_TARGET / 2,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   chip: {
     backgroundColor: "rgba(0,0,0,0.55)",
@@ -474,19 +495,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     overflow: "hidden",
   },
-  sideBar: {
-    position: "absolute",
-    top: 0,
-    bottom: 0,
-    flexDirection: "column-reverse",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: spacing.xl,
-  },
   bottomBar: {
     position: "absolute",
-    left: 0,
-    right: 0,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",

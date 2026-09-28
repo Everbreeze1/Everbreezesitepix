@@ -9,16 +9,15 @@ import { Icon } from "@/ui";
  * them.
  *
  * Which four is a judgement about the field, not a mirror of the web sidebar.
- * Web has thirteen sidebar entries because it is where the office works;
- * everything to do with authoring (templates, blueprints, the report builder,
- * the portfolio) belongs there and is deliberately absent here. What is left is
- * the set someone standing on a site opens: what needs them, the jobs, the
- * pictures, and their own account.
+ * The bar holds the set someone standing on a site opens: what needs them, the
+ * jobs, the pictures, and their own account. Everything else the web sidebar
+ * lists is one tap further, in the app menu (`AppMenu`), which Home's header
+ * opens on a phone.
  *
  * **Home replaced Projects as the first tab**, and the project list moved to
  * `projects.tsx` beside it. Opening onto a list of jobs makes finding a job the
  * first thing the app is for, and it is not: knowing whether anything needs you
- * is. Activity moved out of the bar entirely and is reached from Home, because
+ * is. Activity moved out of the bar entirely and is reached from the menu, because
  * "what everyone else did" is a browse surface rather than a reason to open the
  * app, and because a fifth tab would push the camera off centre. It kept its
  * `/activity` path, so nothing that linked to it broke.
@@ -26,9 +25,11 @@ import { Icon } from "@/ui";
  * `headerShown` is off because the parent stack draws the header. Two
  * navigators both rendering one would stack two title bars on every tab.
  *
- * On a tablet or in landscape the bar is a rail on the right edge (see
- * `TabBar`), and `tabBarPosition` tells the navigator to lay the screens out
- * beside it rather than above it. Read here, from the same hook the bar uses,
+ * On a tablet or in landscape there is no bar: `TabBar` floats a menu button
+ * and the camera on the right edge instead, and these four are rows in the
+ * app menu with everything else. `tabBarPosition` is "right" there so the
+ * navigator reports no bottom bar height to the screens, and the floating
+ * buttons take no width from them. Read here, from the same hook the bar uses,
  * so the two can never disagree after a rotation.
  */
 export default function TabsLayout() {

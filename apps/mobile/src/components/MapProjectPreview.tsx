@@ -7,7 +7,7 @@ import { photoCountLabel } from "@/api/dashboard-view";
 import { listProjectCovers } from "@/api/photos";
 import { formatAddress, type ProjectListItem } from "@/api/projects";
 import { ProjectStatusPill } from "@/components/ProjectStatusPill";
-import { radius, spacing, useTheme } from "@/theme";
+import { elevation, radius, spacing, useTheme } from "@/theme";
 import { MapPin, X } from "@/ui/icons";
 import { Button, Icon, IconButton, PhotoThumb, Skeleton, Text } from "@/ui";
 
@@ -61,53 +61,53 @@ export function MapProjectPreview({
       style={{
         gap: spacing.sm,
         padding: spacing.md,
-        borderRadius: radius.lg,
+        borderRadius: radius.xl,
         borderWidth: 1,
         borderColor: theme.colors.border,
         backgroundColor: theme.colors.card,
+        ...elevation.sheet,
       }}
     >
-      <View style={{ flexDirection: "row", gap: spacing.md }}>
+      {/*
+        The web card's layout: the job's newest photo across the top, then the
+        name, its status and photo count, where it is, and one way in.
+      */}
+      <View>
         {preview.isLoading ? (
-          <Skeleton width={96} height={96} rounded={radius.md} />
+          <Skeleton width="100%" height={128} rounded={radius.lg} />
         ) : (
           <PhotoThumb
             uri={preview.data?.cover ?? undefined}
-            width={96}
-            height={96}
-            rounded={radius.md}
+            width="100%"
+            height={128}
+            rounded={radius.lg}
           />
         )}
-        <View style={{ flex: 1, minWidth: 0, gap: spacing.xs }}>
-          <View style={{ flexDirection: "row", alignItems: "flex-start", gap: spacing.xs }}>
-            <Text variant="bodyStrong" numberOfLines={2} style={{ flex: 1 }}>
-              {name}
-            </Text>
-            <IconButton
-              icon={X}
-              accessibilityLabel="Close preview"
-              surface={false}
-              size="sm"
-              onPress={onClose}
-            />
-          </View>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
-            <ProjectStatusPill status={project.status} />
-            <Text variant="caption" tone="muted" numberOfLines={1} style={{ flex: 1 }}>
-              {[
-                project.archived ? "Archived" : null,
-                stats ? photoCountLabel(stats.photoCount) : preview.isLoading ? "Counting" : null,
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-            </Text>
-          </View>
+        <View style={{ position: "absolute", top: spacing.xs, right: spacing.xs }}>
+          <IconButton icon={X} accessibilityLabel="Close preview" size="sm" onPress={onClose} />
+        </View>
+      </View>
+
+      <View style={{ gap: spacing.xs }}>
+        <Text variant="bodyStrong" numberOfLines={2}>
+          {name}
+        </Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
+          <ProjectStatusPill status={project.status} />
+          <Text variant="caption" tone="muted" numberOfLines={1} style={{ flex: 1 }}>
+            {[
+              project.archived ? "Archived" : null,
+              stats ? photoCountLabel(stats.photoCount) : preview.isLoading ? "Counting" : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </Text>
         </View>
       </View>
 
       {address ? (
         <View style={{ flexDirection: "row", gap: spacing.xs, alignItems: "flex-start" }}>
-          <Icon icon={MapPin} size="sm" tone="primary" />
+          <Icon icon={MapPin} size="sm" tone="muted" />
           <Text variant="caption" tone="muted" numberOfLines={2} style={{ flex: 1 }}>
             {address}
           </Text>
@@ -120,7 +120,7 @@ export function MapProjectPreview({
       )}
 
       <Button
-        label="View project"
+        label="Open project"
         fullWidth
         onPress={() => router.push({ pathname: "/project/[id]", params: { id: project.id } })}
       />

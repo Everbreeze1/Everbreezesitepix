@@ -1,14 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
+  boardColumnWidth,
   boardSummary,
+  cardAddress,
   emptyStageBody,
   orderedStages,
   projectsInStage,
   readableOn,
   stageCountLabel,
   stageCounts,
+  nextStage,
   stageOnBoard,
   unstaged,
+  withStage,
   type PipelineStage,
   type StagedProject,
 } from "../apps/mobile/src/api/pipeline-view";
@@ -202,5 +206,36 @@ describe("stageCountLabel", () => {
   it("keeps the stage name exactly as the customer wrote it", () => {
     // Stage names are free text and often carry a slash or an ampersand.
     expect(stageCountLabel("Lead/Quoted", 3)).toBe("Lead/Quoted, 3 jobs");
+  });
+});
+
+describe("the board card helpers", () => {
+  it("writes the address the way the web board does", () => {
+    expect(cardAddress({ ...project("a", null), location: " 1 Main St, Davis " })).toBe(
+      "1 Main St, Davis",
+    );
+    expect(
+      cardAddress({ ...project("a", null), street: "1 Main St", city: "Davis", state: "CA" }),
+    ).toBe("1 Main St, Davis, CA");
+    expect(cardAddress(project("a", null))).toBeNull();
+  });
+
+  it("advances to the next stage, and nowhere from the last or from off the board", () => {
+    const stages = [stage("s1", 0), stage("s2", 1)];
+    expect(nextStage(stages, "s1")?.id).toBe("s2");
+    expect(nextStage(stages, "s2")).toBeNull();
+    expect(nextStage(stages, null)).toBeNull();
+  });
+
+  it("moves exactly one job, and only its stage", () => {
+    const before = [project("a", "s1"), project("b", "s1")];
+    const after = withStage(before, "a", "s2");
+    expect(after.map((p) => p.pipeline_stage_id)).toEqual(["s2", "s1"]);
+    expect(before[0].pipeline_stage_id).toBe("s1");
+  });
+
+  it("shows the edge of the next column on a phone", () => {
+    expect(boardColumnWidth(390)).toBeLessThan(390 - 32);
+    expect(boardColumnWidth(1024)).toBe(280);
   });
 });

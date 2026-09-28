@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, View } from "react-native";
+import { useCallback, useMemo, useState } from "react";
+import { ScrollView, useWindowDimensions, View } from "react-native";
 import { router, Stack } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   listProjectBoards,
@@ -10,60 +11,66 @@ import {
   type StagedProject,
 } from "@/api/pipelines";
 import {
+  boardColumnWidth,
   boardSummary,
   emptyStageBody,
+  nextStage,
   orderedStages,
   projectsInStage,
-  readableOn,
-  stageCountLabel,
   stageCounts,
   unstaged,
+  withStage,
+  type PipelineStage,
 } from "@/api/pipeline-view";
-import { HIT_TARGET, radius, spacing, useTheme } from "@/theme";
-import { FolderKanban, FolderInput, Plus } from "@/ui/icons";
+import { listProjectCardExtras } from "@/api/project-cards";
+import { BoardCard, BoardColumn } from "@/components/PipelineBoard";
+import { useProjectCrews } from "@/components/ProjectCrewAvatars";
+import { spacing, useTheme } from "@/theme";
+import { CircleCheck, FolderInput, FolderKanban, X } from "@/ui/icons";
 import {
   ActionSheet,
-  Badge,
-  Button,
+  Chip,
   EmptyState,
   ErrorState,
-  ListGroup,
-  ListRow,
-  RowDivider,
-  Screen,
-  SectionHeader,
+  SearchField,
   SkeletonList,
   Text,
   type SheetAction,
 } from "@/ui";
 
 /**
- * Pipelines.
+ * Pipelines, as the web draws them: a board.
  *
- * **A kanban board on a six inch screen is a column picker plus a list.** Not a
- * board: horizontally scrolling columns on a phone show one and a half of them,
- * hide the rest behind a gesture nobody knows is there, and fight the vertical
- * scroll inside each. So the stages are a row of pills across the top, and the
- * jobs in the chosen one are an ordinary list underneath.
+ * One column per stage with the stage's colour along its top and a count,
+ * cards with the job's newest photo, address, crew and last activity, and the
+ * columns scrolling sideways. On a phone a column is most of the screen wide
+ * and snaps into place, so one stage reads at a time and the edge of the next
+ * says there is more.
  *
- * Moving a job is a sheet rather than a drag, for the same reason the template
- * editor uses arrows: drag on a touch screen needs a long press to disambiguate
- * from scrolling, and the target here is off screen anyway.
+ * The web's drag becomes two things on a touch screen. The advance arrow on a
+ * card moves it on to the next stage in one tap, which is the move somebody
+ * makes nine times out of ten. The kebab (or a long press) opens the move menu,
+ * which reaches any stage, including one scrolled off screen. A drag would need
+ * a long press to tell it from a scroll and a target that is usually not in
+ * view.
  *
  * A stage is exclusive, and this screen must never suggest otherwise. That is
  * the whole point of `20260917000000_pipeline_stages.sql`: the old boards made
  * a column a tag, tags are many-per-project, and a job could stand in three
- * columns at once. `projectsInStage` matches one id, and jobs with no stage are
- * a separate list rather than a first column.
+ * columns at once. `projectsInStage` matches one id, and jobs with no stage sit
+ * in their own "Not in a pipeline" column at the end, never in the first stage.
  */
 export default function PipelinesScreen() {
   const theme = useTheme();
   const queryClient = useQueryClient();
+  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
 
   const [boardId, setBoardId] = useState<string | null>(null);
-  const [stageId, setStageId] = useState<string | null>(null);
   const [moving, setMoving] = useState<StagedProject | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [boardHeight, setBoardHeight] = useState(0);
 
   const boardsQuery = useQuery({ queryKey: ["project-boards"], queryFn: listProjectBoards });
   const projectsQuery = useQuery({
@@ -78,62 +85,108 @@ export default function PipelinesScreen() {
     boards.find((candidate) => candidate.id === boardId) ?? boards[0] ?? null;
   const stages = useMemo(() => (board ? orderedStages(board) : []), [board]);
   const counts = useMemo(() => stageCounts(projects, stages), [projects, stages]);
+  const notOnBoard = useMemo(() => unstaged(projects), [projects]);
+  const placed = useMemo(
+    () => Array.from(counts.values()).reduce((sum, n) => sum + n, 0),
+    [counts],
+  );
+
+  const q = search.trim().toLowerCase();
+  const matches = useCallback(
+    (project: StagedProject) =>
+      !q ||
+      [project.name, project.client_name, project.location, project.street, project.city]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(q),
+    [q],
+  );
 
   /*
-   * Default to the first stage whenever the chosen one is not on this board.
-   *
-   * Covers three cases with one rule: nothing chosen yet, a board switch, and a
-   * stage deleted underneath somebody. Without it the list silently shows
-   * nothing and looks like an empty pipeline.
+   * Photos and crews for the cards on this board, in one request each. The
+   * jobs not on a pipeline are included because they have a column too, but
+   * capped: a workspace with hundreds of unstaged jobs should not pay for
+   * pictures of all of them to draw one board.
    */
-  useEffect(() => {
-    if (stages.length === 0) return;
-    if (!stageId || !stages.some((stage) => stage.id === stageId)) {
-      setStageId(stages[0].id);
-    }
-  }, [stages, stageId]);
-
-  const stage = stages.find((candidate) => candidate.id === stageId) ?? null;
-  const inStage = stage ? projectsInStage(projects, stage.id) : [];
-  const notOnBoard = useMemo(() => unstaged(projects), [projects]);
+  const cardIds = useMemo(() => {
+    const onBoard = projects.filter((project) => counts.has(project.pipeline_stage_id ?? ""));
+    return [...onBoard, ...notOnBoard.slice(0, 40)].slice(0, 200).map((project) => project.id);
+  }, [projects, counts, notOnBoard]);
+  const extrasQuery = useQuery({
+    queryKey: ["pipeline-card-extras", cardIds.join(",")],
+    queryFn: () => listProjectCardExtras(cardIds),
+    enabled: cardIds.length > 0,
+    staleTime: 10 * 60 * 1000,
+  });
+  const crews = useProjectCrews(cardIds);
 
   const move = useMutation({
     mutationFn: (args: { projectId: string; stageId: string | null }) =>
       setProjectStage(args.projectId, args.stageId),
-    onSuccess: () => {
+    onMutate: async ({ projectId, stageId }) => {
+      await queryClient.cancelQueries({ queryKey: ["staged-projects"] });
+      const before = queryClient.getQueryData<StagedProject[]>(["staged-projects"]);
+      if (before) {
+        queryClient.setQueryData(["staged-projects"], withStage(before, projectId, stageId));
+      }
+      return { before };
+    },
+    onSuccess: () => setFailure(null),
+    onError: (error: unknown, _args, context) => {
+      if (context?.before) queryClient.setQueryData(["staged-projects"], context.before);
+      setFailure(error instanceof Error ? error.message : "Could not move that job.");
+    },
+    onSettled: () => {
       /*
-       * Refetched, not patched. Moving a job also changes its `status`, because
-       * the stage owns which of the three buckets it counts as, and guessing
-       * that here would put a second copy of a server rule on the phone.
+       * Refetched after the optimistic move. Moving a job also changes its
+       * `status`, because the stage owns which of the three buckets it counts
+       * as, and guessing that here would put a second copy of a server rule
+       * on the phone.
        */
       void queryClient.invalidateQueries({ queryKey: ["staged-projects"] });
       void queryClient.invalidateQueries({ queryKey: ["projects"] });
-      setFailure(null);
     },
-    onError: (error: unknown) =>
-      setFailure(error instanceof Error ? error.message : "Could not move that job."),
   });
 
   const moveActions = useCallback(
     (project: StagedProject): SheetAction[] => {
-      const actions: SheetAction[] = stages
-        .filter((candidate) => candidate.id !== project.pipeline_stage_id)
-        .map((candidate) => ({
-          label: candidate.name,
-          onPress: () => move.mutate({ projectId: project.id, stageId: candidate.id }),
-        }));
-
+      const onBoard = counts.has(project.pipeline_stage_id ?? "");
+      const actions: SheetAction[] = stages.map((candidate) => ({
+        label:
+          candidate.id === project.pipeline_stage_id
+            ? `${candidate.name} (here now)`
+            : onBoard
+              ? `Move to ${candidate.name}`
+              : `Add to ${candidate.name}`,
+        icon: candidate.id === project.pipeline_stage_id ? CircleCheck : FolderInput,
+        disabled: candidate.id === project.pipeline_stage_id,
+        onPress: () => move.mutate({ projectId: project.id, stageId: candidate.id }),
+      }));
       if (project.pipeline_stage_id) {
         actions.push({
           label: "Take off this pipeline",
+          icon: X,
           destructive: true,
           onPress: () => move.mutate({ projectId: project.id, stageId: null }),
         });
       }
+      actions.push({
+        label: "Open project",
+        icon: FolderKanban,
+        onPress: () => router.push({ pathname: "/project/[id]", params: { id: project.id } }),
+      });
       return actions;
     },
-    [stages, move],
+    [stages, counts, move],
   );
+
+  const refreshing = projectsQuery.isRefetching || boardsQuery.isRefetching;
+  const refresh = () => {
+    void boardsQuery.refetch();
+    void projectsQuery.refetch();
+    void extrasQuery.refetch();
+  };
 
   if (boardsQuery.isLoading || projectsQuery.isLoading) {
     return (
@@ -170,209 +223,171 @@ export default function PipelinesScreen() {
     );
   }
 
+  const columnWidth = boardColumnWidth(width);
+  const columnGap = spacing.md;
+  const columnHeight = Math.max(
+    240,
+    boardHeight - spacing.md - Math.max(insets.bottom, spacing.md),
+  );
+
+  /*
+   * Every job in the workspace can be off the pipeline, so this column is
+   * capped rather than drawing hundreds of cards nobody scrolls through.
+   * Search reaches the rest.
+   */
+  const unstagedMatching = notOnBoard.filter(matches);
+  const unstagedShown = unstagedMatching.slice(0, 40);
+  const unstagedHidden = unstagedMatching.length - unstagedShown.length;
+
+  const card = (project: StagedProject, stage: PipelineStage | null) => {
+    const extras = extrasQuery.data?.[project.id];
+    const next = stage ? nextStage(stages, stage.id) : (stages[0] ?? null);
+    return (
+      <BoardCard
+        key={project.id}
+        project={project}
+        color={stage?.color}
+        thumb={extras?.urls[0] ?? null}
+        latestPhotoAt={extras?.latestAt ?? null}
+        crew={crews[project.id]}
+        next={next}
+        busy={move.isPending && move.variables?.projectId === project.id}
+        onOpen={() => router.push({ pathname: "/project/[id]", params: { id: project.id } })}
+        onMenu={() => setMoving(project)}
+        onAdvance={() => {
+          if (next) move.mutate({ projectId: project.id, stageId: next.id });
+        }}
+      />
+    );
+  };
+
   return (
     <>
       <Stack.Screen options={{ title: board?.name ?? "Pipelines" }} />
 
-      <Screen
-        scroll
-        padded={false}
-        refreshing={projectsQuery.isRefetching}
-        onRefresh={() => {
-          void boardsQuery.refetch();
-          void projectsQuery.refetch();
-        }}
-        bottomInset={spacing.xxl}
-      >
-        {/*
-          The board picker only appears when there is more than one. A single
-          control with a single option is a control that teaches nothing and
-          takes a row of screen.
-        */}
-        {boards.length > 1 ? (
-          <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.lg }}>
-            <ListGroup>
-              {boards.map((candidate, index) => (
-                <View key={candidate.id}>
-                  {index > 0 ? <RowDivider inset={false} /> : null}
-                  <ListRow
-                    title={candidate.name}
-                    subtitle={boardSummary(
-                      candidate.stages?.length ?? 0,
-                      projects.filter((project) =>
-                        (candidate.stages ?? []).some((s) => s.id === project.pipeline_stage_id),
-                      ).length,
-                    )}
-                    value={candidate.id === board?.id ? "Showing" : undefined}
-                    onPress={() => {
-                      setBoardId(candidate.id);
-                      setStageId(null);
-                    }}
-                  />
-                </View>
+      <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+        <View style={{ paddingTop: spacing.md, gap: spacing.sm }}>
+          {/*
+            The board picker only appears when there is more than one. A single
+            control with a single option teaches nothing and costs a row.
+          */}
+          {boards.length > 1 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingHorizontal: spacing.lg, gap: spacing.sm }}
+            >
+              {boards.map((candidate) => (
+                <Chip
+                  key={candidate.id}
+                  label={candidate.name}
+                  selected={candidate.id === board?.id}
+                  onPress={() => setBoardId(candidate.id)}
+                />
               ))}
-            </ListGroup>
-          </View>
-        ) : null}
+            </ScrollView>
+          ) : null}
 
-        {/*
-          The stages, as a horizontally scrolling row of pills. This is the one
-          place a horizontal scroll is right: the pills are small, there are
-          rarely more than six, and the selected one is always brought into view
-          because it is what the list below is showing.
-        */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{
-            paddingHorizontal: spacing.lg,
-            paddingTop: spacing.lg,
-            gap: spacing.sm,
-          }}
-        >
-          {stages.map((candidate) => {
-            const on = candidate.id === stage?.id;
-            return (
-              <Pressable
-                key={candidate.id}
-                accessibilityRole="tab"
-                accessibilityState={{ selected: on }}
-                accessibilityLabel={stageCountLabel(candidate.name, counts.get(candidate.id) ?? 0)}
-                onPress={() => setStageId(candidate.id)}
-                style={{
-                  borderRadius: radius.pill,
-                  paddingHorizontal: spacing.md,
-                  // Tall enough to hit with gloves on, which is the floor
-                  // everything tappable in this app is held to.
-                  minHeight: HIT_TARGET,
-                  justifyContent: "center",
-                  // The stage's own colour when selected, so the pill row is
-                  // the legend for the board rather than a second colour
-                  // scheme to learn.
-                  backgroundColor: on ? candidate.color : theme.colors.secondary,
-                }}
-              >
-                <Text
-                  variant="caption"
-                  // Computed from the stage colour, because stage colours run
-                  // from near-black to amber and a fixed foreground is
-                  // unreadable against half of them.
-                  style={{ color: on ? readableOn(candidate.color) : theme.colors.foreground }}
-                >
-                  {candidate.name} {counts.get(candidate.id) ?? 0}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+          <SearchField
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Find a job on this board"
+            accessibilityLabel="Search this pipeline"
+          />
 
-        {failure ? (
-          <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.md }}>
-            <Text variant="caption" tone="destructive">
-              {failure}
+          <View style={{ paddingHorizontal: spacing.lg, gap: spacing.xs }}>
+            <Text variant="caption" tone="muted">
+              {boardSummary(stages.length, placed)}
+              {stages.length > 0 ? ". Tap the arrow on a card to move it to the next stage." : ""}
             </Text>
+            {failure ? (
+              <Text variant="caption" tone="destructive">
+                {failure}
+              </Text>
+            ) : null}
           </View>
-        ) : null}
+        </View>
 
-        {/*
-          Only when there is nothing selected.
-
-          This used to read `${stage.name} (${inStage.length})`, which is the
-          same string the selected chip directly above it already shows - so
-          "Lead/Quoted 0" sat immediately under "LEAD/QUOTED (0)", saying one
-          thing twice and costing a section header's worth of height to do it.
-          The chip row IS the section header on this screen.
-        */}
-        {stage ? null : <SectionHeader title="Stages" />}
         <View
-          style={{
-            paddingHorizontal: spacing.lg,
-            // The header carried the top margin. Without it the first row
-            // would sit against the chips.
-            paddingTop: stage ? spacing.lg : 0,
-            gap: spacing.md,
-          }}
+          style={{ flex: 1 }}
+          onLayout={(event) => setBoardHeight(event.nativeEvent.layout.height)}
         >
           {stages.length === 0 ? (
-            <Text variant="caption" tone="muted">
-              This pipeline has no stages yet. Add them on the web and they appear here.
-            </Text>
-          ) : inStage.length === 0 ? (
             <EmptyState
               icon={FolderKanban}
-              title="Nothing here"
-              body={emptyStageBody(stage?.name ?? "this stage")}
+              title="This pipeline has no stages yet"
+              body="Add stages on the web and they appear here."
             />
-          ) : (
-            <ListGroup>
-              {inStage.map((project, index) => (
-                <View key={project.id}>
-                  {index > 0 ? <RowDivider /> : null}
-                  <ListRow
-                    icon={FolderKanban}
-                    title={project.name}
-                    subtitle={project.client_name ?? project.city ?? undefined}
-                    right={
-                      <Badge
-                        label="Move"
-                        tone="neutral"
-                        variant="outline"
-                        icon={FolderInput}
-                        style={{ opacity: move.isPending ? 0.5 : 1 }}
-                      />
+          ) : boardHeight > 0 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              snapToInterval={columnWidth + columnGap}
+              snapToAlignment="start"
+              decelerationRate="fast"
+              contentContainerStyle={{
+                paddingHorizontal: spacing.lg,
+                paddingTop: spacing.md,
+                gap: columnGap,
+              }}
+            >
+              {stages.map((stage) => {
+                const inStage = projectsInStage(projects, stage.id).filter(matches);
+                return (
+                  <BoardColumn
+                    key={stage.id}
+                    stage={stage}
+                    title={stage.name}
+                    count={counts.get(stage.id) ?? 0}
+                    width={columnWidth}
+                    height={columnHeight}
+                    empty={
+                      q && (counts.get(stage.id) ?? 0) > 0
+                        ? "Nothing here matches your search."
+                        : emptyStageBody(stage.name)
                     }
-                    // The row moves the job. Opening the project is a longer
-                    // journey and is one tap away from the project list; what
-                    // somebody is on this screen to do is move things.
-                    onPress={() => setMoving(project)}
-                    accessibilityHint="Choose a different stage for this job"
-                  />
-                </View>
-              ))}
-            </ListGroup>
-          )}
+                    isEmpty={inStage.length === 0}
+                    refreshing={refreshing}
+                    onRefresh={refresh}
+                  >
+                    {inStage.map((project) => card(project, stage))}
+                  </BoardColumn>
+                );
+              })}
 
-          {notOnBoard.length > 0 ? (
-            <>
-              <SectionHeader title={`Not on a pipeline (${notOnBoard.length})`} />
               {/*
-                A separate list, never a first column. A job with no stage is
-                not a job at the start of the pipeline, and folding the two
-                together would pull every job in the workspace onto whichever
-                board somebody happened to open.
+                Its own column at the end, never folded into the first stage. A
+                job with no stage is not a job at the start of the pipeline.
               */}
-              <ListGroup>
-                {notOnBoard.slice(0, 10).map((project, index) => (
-                  <View key={project.id}>
-                    {index > 0 ? <RowDivider /> : null}
-                    <ListRow
-                      icon={FolderKanban}
-                      iconTone="muted"
-                      title={project.name}
-                      subtitle={project.client_name ?? project.city ?? undefined}
-                      right={<Badge label="Add" tone="primary" variant="outline" icon={Plus} />}
-                      onPress={() => setMoving(project)}
-                    />
-                  </View>
-                ))}
-              </ListGroup>
-              {notOnBoard.length > 10 ? (
-                <Button
-                  label="All projects"
-                  variant="ghost"
-                  fullWidth
-                  onPress={() => router.push("/projects")}
-                />
+              {notOnBoard.length > 0 ? (
+                <BoardColumn
+                  stage={null}
+                  title="Not in a pipeline"
+                  count={notOnBoard.length}
+                  width={columnWidth}
+                  height={columnHeight}
+                  empty="Nothing here matches your search."
+                  isEmpty={unstagedShown.length === 0}
+                  refreshing={refreshing}
+                  onRefresh={refresh}
+                >
+                  {unstagedShown.map((project) => card(project, null))}
+                  {unstagedHidden > 0 ? (
+                    <Text key="more" variant="caption" tone="muted" align="center">
+                      {`And ${unstagedHidden} more. Search to find one.`}
+                    </Text>
+                  ) : null}
+                </BoardColumn>
               ) : null}
-            </>
+            </ScrollView>
           ) : null}
         </View>
-      </Screen>
+      </View>
 
       <ActionSheet
         visible={moving !== null}
         onClose={() => setMoving(null)}
-        title={moving ? `Move ${moving.name}` : undefined}
+        title={moving ? moving.name : undefined}
         actions={moving ? moveActions(moving) : []}
       />
     </>

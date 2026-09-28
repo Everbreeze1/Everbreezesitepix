@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Pressable, ScrollView, useWindowDimensions, View } from "react-native";
+import { Pressable, ScrollView, View } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery } from "@tanstack/react-query";
@@ -32,25 +32,14 @@ import { getUnreadNotificationCount } from "@/api/notifications";
 import { listGalleryPhotoPage, listProjectCovers, type GalleryPhotoItem } from "@/api/photos";
 import { listProjects, type ProjectListItem } from "@/api/projects";
 import { ActionRail } from "@/components/ActionRail";
+import { MenuButton } from "@/components/AppMenu";
 import { BrandMark } from "@/components/BrandMark";
 import { QueueBanner } from "@/components/QueueBanner";
 import { useAuth } from "@/lib/auth";
 import { useQuickCapture } from "@/lib/use-quick-capture";
 import { useQueue } from "@/offline/use-queue";
-import { contentWidth, gridColumns, radius, spacing, useRightRail, useTheme } from "@/theme";
-import {
-  Activity,
-  Bell,
-  Calendar,
-  Camera,
-  CloudUpload,
-  FileText,
-  FolderKanban,
-  FolderPlus,
-  MapPin,
-  Plus,
-  TriangleAlert,
-} from "@/ui/icons";
+import { radius, spacing, useRightRail, useTheme } from "@/theme";
+import { Bell, Camera, CloudUpload, Plus, TriangleAlert } from "@/ui/icons";
 import {
   Badge,
   Icon,
@@ -75,28 +64,15 @@ import {
  * The order below the counts is by urgency and it is fixed. Anything the phone
  * still has to send comes first because it is the only item on the screen that
  * can be lost; the two actions come next because they are why the app is
- * opened; then the jobs, overdue work, the photographs, and last the menu.
+ * opened; then the jobs, overdue work, and the photographs. The menu of other
+ * screens that used to close the page is the app menu now, opened from the
+ * header, because the foot of a long page is where nobody finds anything.
  *
  * This replaced the project list as the first tab, and the project list moved
  * to `projects.tsx` alongside it. Opening onto a list of jobs makes finding a
  * job the first thing the app is for, and it is not: knowing whether anything
  * needs you is.
  */
-/*
- * Three across on a phone, more on a tablet, and measured every render.
- *
- * The count was hardcoded and the width came from `Dimensions.get("window")`,
- * read once and never again, so rotating an iPad left the tiles at the old
- * size. It is `contentWidth` rather than the raw width because this screen is
- * inside a `Screen`, which centres its content in a 640pt column on a wide
- * display: sizing five tiles across 1024pt would push them straight out of it.
- *
- * The target is smaller than the photo-grid default on purpose. These are
- * shortcut buttons, not thumbnails, and the 130pt photo tile would give a phone
- * two columns where it has always had three.
- */
-const BROWSE_TARGET_TILE = 110;
-
 /**
  * How many photographs the home strip asks for.
  *
@@ -118,40 +94,6 @@ const RECENT_JOBS = 3;
 
 /** How many attention cards before the rest collapse into a line of text. */
 const ATTENTION_CAP = 6;
-
-/*
- * Tile width, measured rather than expressed as a percentage.
- *
- * `width: "32%"` with a gap between them overflows: three tiles plus two gaps
- * came to a few points more than the row, so the third wrapped and the grid
- * silently became two columns. Percentages cannot see the gap; arithmetic can.
- * Same approach the photo grids use.
- */
-function useBrowseTile(): number {
-  const { width } = useWindowDimensions();
-  const usable = contentWidth(width) - spacing.lg * 2;
-  const columns = gridColumns(usable, BROWSE_TARGET_TILE);
-  return (usable - spacing.sm * (columns - 1)) / columns;
-}
-
-/**
- * The browse destinations, in the order somebody reaches for them.
- *
- * Map first because it is the only one that answers a question you have while
- * standing outside: which of these am I at.
- *
- * The Assistant tile is gone. The web app folded its assistant into the
- * background rather than keeping it as a place you visit, and a tile here would
- * be the only door left to a room the product no longer has.
- */
-const BROWSE: { icon: LucideIcon; label: string; href: string }[] = [
-  { icon: FileText, label: "Reports", href: "/reports" },
-  { icon: MapPin, label: "Map", href: "/map" },
-  { icon: FolderKanban, label: "Pipelines", href: "/pipelines" },
-  { icon: Calendar, label: "Timeline", href: "/timeline" },
-  { icon: FolderPlus, label: "Groups", href: "/groups" },
-  { icon: Activity, label: "Team", href: "/activity" },
-];
 
 /**
  * Status to pill colour. The same mapping the Projects tab uses, so a job on
@@ -470,6 +412,14 @@ export default function HomeScreen() {
             {initialsOf(fullName, user?.email)}
           </Text>
         </Pressable>
+
+        {/*
+          The app menu: every screen the web sidebar lists. Last in the row, at
+          the right end where the thumb of the hand holding a phone reaches.
+          A tablet floats its own menu button on the right edge, so it is not
+          drawn twice there.
+        */}
+        {rail ? null : <MenuButton />}
       </View>
 
       <Screen scroll padded={false} refreshing={refreshing} onRefresh={refresh} bottomInset={96}>
@@ -680,31 +630,6 @@ export default function HomeScreen() {
                 </ScrollView>
               </>
             ) : null}
-
-            {/*
-              The menu, as a grid rather than a stack of identical rows. These
-              are browse surfaces: nobody opens the app at seven in the morning
-              to read the activity feed. A grid says "pick one" where rows say
-              "work through these".
-            */}
-            <SectionTitle title="Browse" />
-            <View
-              style={{
-                flexDirection: "row",
-                flexWrap: "wrap",
-                gap: spacing.sm,
-                paddingHorizontal: spacing.lg,
-              }}
-            >
-              {BROWSE.map((item) => (
-                <QuickTile
-                  key={item.href}
-                  icon={item.icon}
-                  label={item.label}
-                  onPress={() => router.push(item.href as never)}
-                />
-              ))}
-            </View>
           </>
         )}
       </Screen>
@@ -990,51 +915,6 @@ function AttentionCard({
           {subtitle}
         </Text>
       </View>
-    </Pressable>
-  );
-}
-
-/**
- * One destination in the Browse grid.
- *
- * Deliberately a different shape from `ListRow`: an icon over a short label, no
- * subtitle, no chevron. A row and a tile mean different things - a row is a
- * thing to read, a tile is a place to go - and the app had drawn every one of
- * them as a row, which is what made eight screens look like the same settings
- * page.
- */
-function QuickTile({
-  icon,
-  label,
-  onPress,
-}: {
-  icon: LucideIcon;
-  label: string;
-  onPress: () => void;
-}) {
-  const theme = useTheme();
-  const tile = useBrowseTile();
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      onPress={onPress}
-      style={({ pressed }) => ({
-        width: tile,
-        alignItems: "center",
-        justifyContent: "center",
-        gap: spacing.xs,
-        paddingVertical: spacing.md,
-        borderRadius: radius.lg,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        backgroundColor: pressed ? theme.colors.secondary : theme.colors.card,
-      })}
-    >
-      <Icon icon={icon} size="lg" tone="primary" />
-      <Text variant="caption" numberOfLines={1}>
-        {label}
-      </Text>
     </Pressable>
   );
 }

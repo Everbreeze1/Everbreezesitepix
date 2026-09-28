@@ -117,7 +117,15 @@ describe("the pipeline stage list", () => {
      */
     const s = read("apps/mobile/app/(app)/pipelines.tsx").replace(/\s+/g, " ");
     expect(s).not.toContain('title={stage ? `${stage.name} (${inStage.length})` : "Stages"}');
-    expect(s).toContain('{stage ? null : <SectionHeader title="Stages" />}');
+    /*
+     * The chip row and its list became the web's board: a stage is now a
+     * column, and its header is the one place the stage's name and count
+     * appear. No section header above the columns says either again.
+     */
+    expect(s).not.toContain("<SectionHeader");
+    const column = read("apps/mobile/src/components/PipelineBoard.tsx").replace(/\s+/g, " ");
+    expect(column).toContain("accessibilityLabel={stageCountLabel(title, count)}");
+    expect(column).not.toContain("{title} ({count})");
   });
 });
 

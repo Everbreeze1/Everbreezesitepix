@@ -1,9 +1,10 @@
-import { Camera } from "@/ui/icons";
+import { Camera, Menu } from "@/ui/icons";
 import { Platform, Pressable, View } from "react-native";
 import type { BottomTabBarProps } from "expo-router/js-tabs";
 import { radius, spacing, useRightRail, useTheme } from "@/theme";
 import { Icon, Text } from "@/ui";
 import { useQuickCapture } from "@/lib/use-quick-capture";
+import { useAppMenu, withAlpha } from "./AppMenu";
 
 /**
  * The bottom tab bar.
@@ -27,22 +28,25 @@ import { useQuickCapture } from "@/lib/use-quick-capture";
  * of jobs in between read as the camera button opening Projects. Modelling it
  * as a tab would leave a tab you can never be "on".
  *
- * **On a tablet, or any screen in landscape, the bar becomes a rail down the
- * right edge**, with the camera at its foot. A bottom bar is right for a phone
- * held in one hand, where the thumb sweeps the bottom of the screen. A tablet is
- * held with a hand on each side, most often by someone right handed, and on a
- * landscape 11 inch screen the bottom centre is the one spot neither thumb can
- * reach without letting go of the device. The right edge is where the tapping
- * thumb already rests, so the tabs stack there and the camera sits lowest,
- * where that thumb lands without moving. A left-hand rail, the Material
- * default, was rejected for the same reason: it puts navigation under the hand
- * that is holding the tablet. `_layout.tsx` sets `tabBarPosition` to match, so
- * the screens lay out beside the rail rather than under it.
+ * **On a tablet, or any screen in landscape, there is no bar at all.** Two
+ * round buttons float on the right edge instead: the menu, and the camera
+ * under it. A tablet is held with a hand on each side, most often by someone
+ * right handed, and on a landscape 11 inch screen the bottom centre is the one
+ * spot neither thumb can reach without letting go; the right edge is where the
+ * tapping thumb already rests.
+ *
+ * This replaced a full-height dark rail on that edge. The rail cost a strip of
+ * the screen for four tabs and a lot of empty chrome, and still reached less
+ * of the product than the website's sidebar. The menu button opens
+ * `AppMenu`, which lists every destination the web sidebar has, and the page
+ * keeps the full width. The buttons sit at the middle of the edge, clear of
+ * the create actions `ActionRail` keeps in the lower right corner.
  */
 export function TabBar({ state, descriptors, navigation, insets }: BottomTabBarProps) {
   const theme = useTheme();
   const rail = useRightRail();
   const openCamera = useQuickCapture();
+  const menu = useAppMenu();
 
   /*
    * The bar is always-dark chrome, in both schemes, so the inactive tint is the
@@ -88,12 +92,11 @@ export function TabBar({ state, descriptors, navigation, insets }: BottomTabBarP
           }
         }}
         style={({ pressed }) => ({
-          // Rows of a fixed height on the rail, columns sharing the width on the bar.
-          ...(rail ? { alignSelf: "stretch" as const, minHeight: 56 } : { flex: 1 }),
+          flex: 1,
           alignItems: "center",
           justifyContent: "center",
           gap: 3,
-          paddingVertical: rail ? spacing.xs : spacing.sm,
+          paddingVertical: spacing.sm,
           opacity: pressed ? 0.6 : 1,
         })}
       >
@@ -139,13 +142,14 @@ export function TabBar({ state, descriptors, navigation, insets }: BottomTabBarP
           justifyContent: "center",
           backgroundColor: theme.colors.primary,
           // Lifted above the bar so it reads as the primary action rather
-          // than a fifth tab that happens to be orange. The rail has the
-          // height to give it its own space instead.
+          // than a fifth tab that happens to be orange. Floating on the edge
+          // there is no bar to lift it out of.
           marginTop: rail ? 0 : -26,
           // The ring is the bar's own colour, so the button looks cut into
-          // the chrome rather than stuck on top of it.
-          borderWidth: 5,
-          borderColor: theme.colors.chrome,
+          // the chrome rather than stuck on top of it. Floating over a page
+          // it is the page's colour instead, which reads as a clean edge.
+          borderWidth: rail ? 3 : 5,
+          borderColor: rail ? theme.colors.background : theme.colors.chrome,
           opacity: pressed ? 0.85 : 1,
           transform: [{ scale: pressed ? 0.96 : 1 }],
         },
@@ -168,26 +172,56 @@ export function TabBar({ state, descriptors, navigation, insets }: BottomTabBarP
   if (rail) {
     return (
       <View
+        pointerEvents="box-none"
         style={{
-          width: 96 + insets.right,
+          /*
+           * Out of the layout, so the screens take the full width. Pinned to
+           * the whole height of the edge and centred in it, which puts the two
+           * buttons under a resting thumb in either orientation.
+           */
+          position: "absolute",
+          top: 0,
+          bottom: 0,
+          right: insets.right + spacing.md,
+          justifyContent: "center",
           alignItems: "center",
-          backgroundColor: theme.colors.chrome,
-          borderLeftWidth: theme.scheme === "dark" ? 1 : 0,
-          borderLeftColor: theme.colors.border,
-          paddingTop: insets.top + spacing.md,
-          paddingBottom: insets.bottom + spacing.lg,
-          paddingRight: insets.right,
-          gap: spacing.xs,
+          gap: spacing.md,
         }}
       >
-        {/*
-          The spacer pushes the tabs down towards the thumb: the top of a
-          tablet's right edge is as far from a resting hand as the bottom
-          centre is, so nothing that is tapped often lives there.
-        */}
-        <View style={{ flex: 1 }} />
-        {state.routes.map(renderTab)}
-        <View style={{ marginTop: spacing.md }}>{cameraButton}</View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Open menu"
+          accessibilityHint="Lists every part of the app"
+          onPress={menu.open}
+          style={({ pressed }) => [
+            {
+              width: 52,
+              height: 52,
+              borderRadius: radius.pill,
+              alignItems: "center",
+              justifyContent: "center",
+              borderWidth: 1,
+              borderColor: theme.colors.border,
+              // See-through enough to read as floating over the page.
+              backgroundColor: withAlpha(theme.colors.card, 0.9),
+              opacity: pressed ? 0.8 : 1,
+              transform: [{ scale: pressed ? 0.96 : 1 }],
+            },
+            Platform.select({
+              ios: {
+                shadowColor: "#000",
+                shadowOpacity: 0.15,
+                shadowRadius: 12,
+                shadowOffset: { width: 0, height: 4 },
+              },
+              android: { elevation: 4 },
+              default: {},
+            }),
+          ]}
+        >
+          <Icon icon={Menu} size="lg" />
+        </Pressable>
+        {cameraButton}
       </View>
     );
   }
@@ -221,18 +255,4 @@ export function TabBar({ state, descriptors, navigation, insets }: BottomTabBarP
       {right.map(renderTab)}
     </View>
   );
-}
-
-/**
- * A `#rrggbb` token at the given opacity.
- *
- * Anything that is not a six-digit hex comes back unchanged: the dark palette
- * already writes some tokens as `rgba()`, and guessing at those would be worse
- * than leaving the colour at full strength.
- */
-function withAlpha(hex: string, alpha: number): string {
-  const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
-  if (!match) return hex;
-  const [r, g, b] = match.slice(1).map((part) => parseInt(part, 16));
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }

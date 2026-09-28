@@ -42,9 +42,9 @@ import { enqueue, newOutboxId } from "@/offline/outbox";
 import { recordSessionPhoto } from "@/offline/capture-session";
 import { refreshQueue, requestSync } from "@/offline/sync";
 import type { PhotoUploadPayload } from "@/offline/handlers";
-import { HIT_TARGET, radius, spacing, typography, useRightRail, useTheme } from "@/theme";
+import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
 import { Icon } from "@/ui";
-import { ChevronDown, Images, MapPin, RefreshCw, X } from "@/ui/icons";
+import { ChevronDown, Grid3x3, ImageIcon, MapPin, Ruler, SwitchCamera, X } from "@/ui/icons";
 
 /**
  * `scan` marks a shot taken in Scan mode. Its file already has the document
@@ -67,6 +67,13 @@ const PHASES: { id: PhotoPhase; label: string }[] = [
   { id: "before", label: "Before" },
   { id: "untagged", label: "Untagged" },
   { id: "after", label: "After" },
+];
+
+/** The viewfinder's Before/After toggle, worded as web's. */
+const PHASE_TOGGLE: { id: PhotoPhase; label: string }[] = [
+  { id: "before", label: "BEFORE" },
+  { id: "untagged", label: "None" },
+  { id: "after", label: "AFTER" },
 ];
 
 export default function CaptureScreen() {
@@ -99,6 +106,8 @@ export default function CaptureScreen() {
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** A passing word on the viewfinder, such as Dual being on its way. */
+  const [notice, setNotice] = useState<string | null>(null);
 
   const [phase, setPhase] = useState<PhotoPhase>("untagged");
   const [mode, setMode] = useState<CameraMode>("photo");
@@ -132,16 +141,6 @@ export default function CaptureScreen() {
   const scanGuide = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
   const scanView = useRef<{ width: number; height: number } | null>(null);
 
-  /*
-   * Tablet and landscape layout: the shutter, modes, library and flip stand in
-   * a column down the right edge, where a right-handed person's thumb rests
-   * while both hands hold the device, and the viewfinder fills the rest. A row
-   * along the bottom, the phone layout, is out of reach there. `sideWidth` is
-   * that column as laid out, so the viewfinder and the overlays stop at it.
-   */
-  const side = useRightRail();
-  const [sideWidth, setSideWidth] = useState(0);
-  const viewRight = side ? sideWidth : 0;
   const keyCounter = useRef(0);
 
   /*
@@ -304,13 +303,32 @@ export default function CaptureScreen() {
       });
       return;
     }
+    if (next === "dual") {
+      // Coming soon on web too; say so rather than fake a second stream.
+      showNotice("Dual camera is coming soon");
+      return;
+    }
     if (next === "measure" && !canMeasure) return;
     setError(null);
     setMode(next);
     if (next !== "before-after") setPhase("untagged");
-    // Web's Untagged mode also drops any tags picked for the run.
-    if (next === "untagged") setTagText("");
+    // Untagged is where tags are picked, as web's tag picker: it opens the
+    // picker every time it is tapped, and the bar then shows what was picked.
+    if (next === "untagged") setBatchTagsOpen(true);
   }
+
+  const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function showNotice(text: string) {
+    if (noticeTimer.current) clearTimeout(noticeTimer.current);
+    setNotice(text);
+    noticeTimer.current = setTimeout(() => setNotice(null), 2500);
+  }
+  useEffect(
+    () => () => {
+      if (noticeTimer.current) clearTimeout(noticeTimer.current);
+    },
+    [],
+  );
 
   /**
    * Where a new shot goes, by mode.
@@ -974,6 +992,17 @@ export default function CaptureScreen() {
               accessibilityRole="button"
               disabled={busy}
               style={[styles.secondaryButton, { borderColor: theme.colors.border }]}
+              onPress={() => void pickFromLibrary()}
+            >
+              <Text style={[typography.bodyStrong, { color: theme.colors.foreground }]}>
+                Add from library
+              </Text>
+            </Pressable>
+
+            <Pressable
+              accessibilityRole="button"
+              disabled={busy}
+              style={[styles.secondaryButton, { borderColor: theme.colors.border }]}
               onPress={() => setReviewing(false)}
             >
               <Text style={[typography.bodyStrong, { color: theme.colors.foreground }]}>
@@ -996,70 +1025,24 @@ export default function CaptureScreen() {
     );
   }
 
-  /*
-   * The recent-shots strip shows at most four tiles. With more than that in the
-   * batch the fourth becomes a "+N" tile for the rest, which opens review, so
-   * the strip never scrolls under a thumb that is trying to reach the shutter.
-   */
   const lastShot = shots.length > 0 ? shots[shots.length - 1] : null;
-  const stripShots = shots.length > STRIP_MAX ? shots.slice(-(STRIP_MAX - 1)) : shots;
-  const hiddenCount = shots.length - stripShots.length;
   const measuringShot = measuringKey ? shots.find((shot) => shot.key === measuringKey) : undefined;
   const projectLabel = project
     ? (formatAddress(project) ?? projectDisplayName(project))
     : "Loading job";
+  const pickedTags = splitTags(tagText);
 
   /*
-   * The capture controls, built once and placed by the layout below: in a row
-   * under the viewfinder on a phone, in a column on its right on a tablet.
+   * The bottom-left slot. On an empty camera it is web's gallery button. Once
+   * a batch is building it becomes the last shot with the batch count on it,
+   * which opens review, where the batch gets its caption, tags, a last look at
+   * the phase and more photos from the library before Save.
    */
-  const recentStrips = (
-    <>
-      {quick && quickSaved.length > 0 ? (
-        <View style={styles.strip} accessibilityLabel={`${quickSaved.length} saved this session`}>
-          <Text style={styles.quickCount}>{quickSaved.length} SAVED</Text>
-          {quickSaved.slice(0, STRIP_MAX).map((uri, i) => (
-            <Image key={`${uri}-${i}`} source={{ uri }} style={styles.stripThumb} />
-          ))}
-        </View>
-      ) : null}
-      {shots.length > 0 ? (
-        <View style={styles.strip}>
-          {stripShots.map((shot) => (
-            <Image key={shot.key} source={{ uri: shot.uri }} style={styles.stripThumb} />
-          ))}
-          {hiddenCount > 0 ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`${hiddenCount} more. Review all ${shots.length}`}
-              style={[styles.stripThumb, styles.stripMore]}
-              onPress={() => setReviewing(true)}
-            >
-              <Text style={styles.stripMoreText}>+{hiddenCount}</Text>
-            </Pressable>
-          ) : null}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Add from photo library"
-            style={[styles.stripThumb, styles.stripMore]}
-            onPress={() => void pickFromLibrary()}
-          >
-            <Icon icon={Images} size="md" color={CHROME_FG} />
-          </Pressable>
-        </View>
-      ) : null}
-    </>
-  );
-  const lastShotButton = lastShot ? (
-    /*
-     * The last shot opens review, where the batch gets its caption,
-     * tags and a last look at the phase before Save. The count on it is
-     * the old "Review N" label, kept so nobody loses track of a burst.
-     */
+  const leftSlot = lastShot ? (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`Review ${shots.length} photo${shots.length === 1 ? "" : "s"}`}
-      style={styles.lastShot}
+      style={styles.squareButton}
       onPress={() => setReviewing(true)}
     >
       <Image source={{ uri: lastShot.uri }} style={styles.lastShotImage} />
@@ -1072,84 +1055,95 @@ export default function CaptureScreen() {
   ) : (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel="Add from photo library"
-      style={[styles.lastShot, styles.libraryButton]}
+      accessibilityLabel="Add from gallery"
+      style={styles.squareButton}
       onPress={() => void pickFromLibrary()}
     >
-      <Icon icon={Images} size="lg" color={CHROME_FG} />
-    </Pressable>
-  );
-  const shutterButton = (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={mode === "scan" ? "Scan document" : "Take photo"}
-      disabled={busy}
-      accessibilityHint={
-        quick
-          ? "Saves the photo straight away"
-          : "Adds a photo to this batch without leaving the camera"
-      }
-      style={styles.shutter}
-      onPress={() => void takeShot()}
-    >
-      <View style={styles.shutterInner} />
-    </Pressable>
-  );
-  const flipButton = (
-    <Pressable
-      accessibilityRole="button"
-      style={styles.flipButton}
-      hitSlop={8}
-      accessibilityLabel="Switch camera"
-      onPress={() => setFacing(facing === "back" ? "front" : "back")}
-    >
-      <Icon icon={RefreshCw} size="lg" color={CHROME_FG} />
+      <Icon icon={ImageIcon} size="lg" color={CHROME_FG} />
+      {quick && quickSaved.length > 0 ? (
+        <View
+          style={[styles.countBadge, styles.savedBadge]}
+          accessibilityLabel={`${quickSaved.length} saved this session`}
+        >
+          <Text style={[styles.countText, { color: "#fff" }]}>{quickSaved.length}</Text>
+        </View>
+      ) : null}
     </Pressable>
   );
 
   /*
-   * Before / None / After, beside the shutter, as web draws it directly above
-   * its shutter. It used to sit at the top left of the viewfinder, out of
-   * reach of the thumb that is about to press the shutter; the phase is picked
-   * in the same movement as the shot, so it lives where that thumb is. The
-   * same `phase` state is what the review step shows and what `stamp` burns
-   * in on Save, and it applies to the whole batch.
-   *
-   * Shown only in Before/After mode, as on web. Photo and Scan clear the
-   * phase when picked (see `changeMode`), so a hidden pill never tags a shot
-   * nobody meant to tag.
+   * Before / None / After, as web draws it: its own small dark toggle between
+   * the mode bar and the shutter row, only in Before/After mode. The same
+   * `phase` state is what the review step shows and what `stamp` burns in on
+   * Save, and it applies to the whole batch. Tapping the chosen side again
+   * goes back to None, as on web.
    */
   const phaseSelector =
     mode === "before-after" ? (
-      <View style={[styles.phaseRow, side && styles.phaseColumn]} accessibilityRole="radiogroup">
-        {PHASES.map((option) => {
+      <View style={styles.phaseRow} accessibilityRole="radiogroup">
+        {PHASE_TOGGLE.map((option) => {
           const active = phase === option.id;
-          const label = option.id === "untagged" ? "None" : option.label;
+          const isNone = option.id === "untagged";
           return (
             <Pressable
               key={option.id}
               accessibilityRole="radio"
               accessibilityState={{ selected: active }}
-              accessibilityLabel={
-                option.id === "untagged" ? "No before or after tag" : `${option.label} photos`
-              }
-              onPress={() => setPhase(option.id)}
+              accessibilityLabel={isNone ? "No before or after tag" : `${option.label} photos`}
+              onPress={() => setPhase(active && !isNone ? "untagged" : option.id)}
               hitSlop={4}
-              style={[styles.phasePill, active && styles.phasePillActive]}
+              style={[
+                styles.phasePill,
+                active &&
+                  (isNone
+                    ? styles.phaseNoneActive
+                    : option.id === "after"
+                      ? { backgroundColor: theme.colors.primary }
+                      : styles.phasePillActive),
+              ]}
             >
-              <Text style={[styles.phaseText, active && styles.phaseTextActive]}>{label}</Text>
+              <Text
+                style={[
+                  isNone ? styles.phaseNoneText : styles.phaseText,
+                  active &&
+                    !isNone &&
+                    (option.id === "after"
+                      ? { color: theme.colors.primaryForeground }
+                      : styles.phaseTextActive),
+                ]}
+              >
+                {option.label}
+              </Text>
             </Pressable>
           );
         })}
       </View>
     ) : null;
 
+  /*
+   * Untagged is web's tag picker in the mode bar: once tags are picked the
+   * mode shows the tag, or how many, so nobody shoots a run under a tag they
+   * forgot was on.
+   */
+  const modeLabels: Partial<Record<CameraMode, string>> =
+    pickedTags.length === 1
+      ? { untagged: pickedTags[0] }
+      : pickedTags.length > 1
+        ? { untagged: `${pickedTags.length} tags` }
+        : {};
+
+  /*
+   * One layout on every phone and tablet, in either orientation, as web's
+   * camera: the live view fills the screen edge to edge and every control
+   * floats on it, translucent. No column or panel ever takes a strip of the
+   * screen away from the picture.
+   */
   return (
     <View style={styles.cameraRoot}>
       <Stack.Screen options={{ headerShown: false }} />
       <CameraView
         ref={cameraRef}
-        style={[StyleSheet.absoluteFill, { right: viewRight }]}
+        style={StyleSheet.absoluteFill}
         facing={facing}
         flash={flash}
         animateShutter
@@ -1160,7 +1154,7 @@ export default function CaptureScreen() {
         square a wall up in the frame, not to be noticed.
       */}
       {gridOn ? (
-        <View style={[StyleSheet.absoluteFill, { right: viewRight }]} pointerEvents="none">
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
           <View style={[styles.gridLine, styles.gridV, { left: "33.333%" }]} />
           <View style={[styles.gridLine, styles.gridV, { left: "66.666%" }]} />
           <View style={[styles.gridLine, styles.gridH, { top: "33.333%" }]} />
@@ -1168,133 +1162,13 @@ export default function CaptureScreen() {
         </View>
       ) : null}
 
-      <View
-        style={[
-          styles.topArea,
-          { top: insets.top + spacing.sm, right: viewRight, left: side ? insets.left : 0 },
-        ]}
-      >
-        <View style={styles.topBar}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Close camera"
-            style={styles.roundButton}
-            onPress={() => router.back()}
-            hitSlop={8}
-          >
-            <Icon icon={X} size="lg" color={CHROME_FG} />
-          </Pressable>
-
-          {/*
-            Which job these photos land on, so nobody shoots a whole run into
-            the wrong project. The street address when there is one, because
-            that is what a crew calls a job; the project name otherwise.
-
-            Tapping it switches job. The camera button opens straight onto the
-            nearest or last worked on job, so this is the one tap that corrects
-            it. Not offered when the camera was opened for a checklist or
-            workflow item, whose evidence has to land on this job.
-          */}
-          {canSwitchJob ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Job: ${projectLabel}. Change job`}
-              accessibilityHint="Pick a different project for these photos"
-              onPress={switchJob}
-              hitSlop={4}
-              style={styles.locationPill}
-            >
-              <Icon icon={MapPin} size="sm" color={CHROME_FG} />
-              <Text style={styles.locationText} numberOfLines={1}>
-                {projectLabel}
-              </Text>
-              <Icon icon={ChevronDown} size="sm" color={CHROME_FG} />
-            </Pressable>
-          ) : (
-            <View style={styles.locationPill} accessibilityRole="text">
-              <Icon icon={MapPin} size="sm" color={CHROME_FG} />
-              <Text style={styles.locationText} numberOfLines={1}>
-                {projectLabel}
-              </Text>
-            </View>
-          )}
-
-          <Pressable
-            accessibilityRole="button"
-            style={styles.roundButton}
-            hitSlop={8}
-            accessibilityLabel={`Flash ${flash}. Tap to change`}
-            onPress={() => setFlash(flash === "off" ? "auto" : flash === "auto" ? "on" : "off")}
-          >
-            <FlashGlyph mode={flash} />
-          </Pressable>
-        </View>
-
-        {/*
-          Web's other viewfinder tools: the grid toggle, quick capture (web's
-          autoSave) and the level. Text chips rather than glyphs, because the
-          icon registry has no grid or level icon and the words are clearer.
-        */}
-        <View style={styles.toolRow}>
-          <Pressable
-            accessibilityRole="switch"
-            accessibilityState={{ checked: gridOn }}
-            accessibilityLabel="Grid"
-            onPress={() => setGridOn((on) => !on)}
-            hitSlop={4}
-            style={[styles.toolChip, gridOn && { backgroundColor: theme.colors.primary }]}
-          >
-            <Text style={styles.toolChipText}>GRID</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="switch"
-            accessibilityState={{ checked: quick }}
-            accessibilityLabel="Quick capture"
-            accessibilityHint="Saves each photo as soon as it is taken"
-            onPress={() => {
-              if (quick) quickSession.current = null;
-              setQuick((on) => !on);
-            }}
-            hitSlop={4}
-            style={[styles.toolChip, quick && { backgroundColor: theme.colors.primary }]}
-          >
-            <Text style={styles.toolChipText}>QUICK</Text>
-          </Pressable>
-          {/*
-            Web's Tags button, reachable before the shutter. Tags picked here
-            go on every shot of the batch (and on each quick capture), so a
-            run of "Condenser" shots is tagged once rather than per photo.
-          */}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={
-              splitTags(tagText).length > 0
-                ? `Tags, ${splitTags(tagText).length} picked`
-                : "Tag these photos"
-            }
-            onPress={() => setBatchTagsOpen(true)}
-            hitSlop={4}
-            style={[
-              styles.toolChip,
-              splitTags(tagText).length > 0 && { backgroundColor: theme.colors.primary },
-            ]}
-          >
-            <Text style={styles.toolChipText}>
-              {splitTags(tagText).length > 0 ? `TAGS ${splitTags(tagText).length}` : "TAGS"}
-            </Text>
-          </Pressable>
-          <View style={{ flex: 1 }} />
-          <LevelIndicator size={44} />
-        </View>
-      </View>
-
       {/*
         Scan mode frames the page, the way document scanners do, and says what
-        will happen to the shot so the greyscale strip is not a surprise.
+        will happen to the shot so the greyscale result is not a surprise.
       */}
       {mode === "scan" ? (
         <View
-          style={[styles.scanOverlay, { right: viewRight }]}
+          style={styles.scanOverlay}
           pointerEvents="none"
           onLayout={(event) => {
             const { width, height } = event.nativeEvent.layout;
@@ -1317,129 +1191,215 @@ export default function CaptureScreen() {
             <View style={[styles.scanCorner, styles.scanCornerBR]} />
             <View style={[styles.scanCorner, styles.scanCornerBL]} />
           </View>
-          <Text style={styles.scanHint}>Fit the page inside the frame, then scan</Text>
+          <Text style={styles.scanHint}>Fit the page inside the frame</Text>
         </View>
       ) : null}
 
       {/*
-        Measure mode, as on web: a reticle and the distance advice. The shot
-        opens in the Measure tool the moment it is taken.
+        Measure mode, as on web: a thin reticle in the middle of the view. The
+        PRO MEASURE pill sits under the top buttons and the distance advice
+        just above the mode bar. The shot opens in the Measure tool the moment
+        it is taken.
       */}
       {mode === "measure" ? (
-        <View style={[styles.scanOverlay, { right: viewRight }]} pointerEvents="none">
+        <View style={styles.scanOverlay} pointerEvents="none">
           <View style={[styles.reticle, { borderColor: theme.colors.primary }]} />
-          <Text style={styles.scanHint}>
-            Measure: stand 3 to 6 feet away, phone parallel to the surface
-          </Text>
         </View>
       ) : null}
 
+      <View
+        style={[
+          styles.topArea,
+          {
+            top: insets.top + spacing.sm,
+            left: insets.left + spacing.lg,
+            right: insets.right + spacing.lg,
+          },
+        ]}
+        pointerEvents="box-none"
+      >
+        <View style={styles.topBar} pointerEvents="box-none">
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close camera"
+            style={styles.roundButton}
+            onPress={() => router.back()}
+            hitSlop={8}
+          >
+            <Icon icon={X} size="md" color={CHROME_FG} />
+          </Pressable>
+
+          <View style={styles.topRight}>
+            <Pressable
+              accessibilityRole="switch"
+              accessibilityState={{ checked: gridOn }}
+              accessibilityLabel="Grid"
+              onPress={() => setGridOn((on) => !on)}
+              hitSlop={4}
+              style={[styles.roundButton, gridOn && { backgroundColor: theme.colors.primary }]}
+            >
+              <Icon icon={Grid3x3} size="md" color={CHROME_FG} />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              style={styles.roundButton}
+              hitSlop={4}
+              accessibilityLabel={`Flash ${flash}. Tap to change`}
+              onPress={() => setFlash(flash === "off" ? "auto" : flash === "auto" ? "on" : "off")}
+            >
+              <FlashGlyph mode={flash} />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              style={styles.roundButton}
+              hitSlop={4}
+              accessibilityLabel="Switch camera"
+              onPress={() => setFacing(facing === "back" ? "front" : "back")}
+            >
+              <Icon icon={SwitchCamera} size="md" color={CHROME_FG} />
+            </Pressable>
+          </View>
+        </View>
+
+        {/*
+          Small pills under the top bar, never a panel. Which job these photos
+          land on, so nobody shoots a whole run into the wrong project (the
+          street address when there is one, because that is what a crew calls
+          a job), and tapping it switches job. Not offered when the camera was
+          opened for a checklist or workflow item, whose evidence has to land
+          on this job. Beside it, Quick capture (web's autoSave).
+        */}
+        <View style={styles.pillRow} pointerEvents="box-none">
+          {canSwitchJob ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Job: ${projectLabel}. Change job`}
+              accessibilityHint="Pick a different project for these photos"
+              onPress={switchJob}
+              hitSlop={4}
+              style={styles.smallPill}
+            >
+              <Icon icon={MapPin} size="xs" color={CHROME_FG} />
+              <Text style={styles.smallPillText} numberOfLines={1}>
+                {projectLabel}
+              </Text>
+              <Icon icon={ChevronDown} size="xs" color={CHROME_FG} />
+            </Pressable>
+          ) : (
+            <View style={styles.smallPill} accessibilityRole="text">
+              <Icon icon={MapPin} size="xs" color={CHROME_FG} />
+              <Text style={styles.smallPillText} numberOfLines={1}>
+                {projectLabel}
+              </Text>
+            </View>
+          )}
+          <Pressable
+            accessibilityRole="switch"
+            accessibilityState={{ checked: quick }}
+            accessibilityLabel="Quick capture"
+            accessibilityHint="Saves each photo as soon as it is taken"
+            onPress={() => {
+              if (quick) quickSession.current = null;
+              setQuick((on) => !on);
+            }}
+            hitSlop={4}
+            style={[styles.smallPill, quick && { backgroundColor: theme.colors.primary }]}
+          >
+            <Text style={styles.smallPillText}>QUICK</Text>
+          </Pressable>
+        </View>
+
+        {mode === "measure" ? (
+          <View
+            style={[styles.proMeasure, { backgroundColor: theme.colors.primary }]}
+            pointerEvents="none"
+            accessibilityRole="text"
+            accessibilityLabel="Pro measure"
+          >
+            <Icon icon={Ruler} size="sm" color={CHROME_FG} />
+            <Text style={styles.proMeasureText}>PRO MEASURE</Text>
+            <View style={styles.proMeasureDot} />
+          </View>
+        ) : null}
+      </View>
+
       {savedFlash ? (
-        <View style={[styles.savedFlash, { top: insets.top + 120 }]} pointerEvents="none">
+        <View style={[styles.savedFlash, { top: insets.top + 110 }]} pointerEvents="none">
           <Text style={styles.savedFlashText}>Saved</Text>
         </View>
       ) : null}
 
       {offscreenSurface}
 
-      {error ? (
-        <Text
-          style={[
-            styles.cameraError,
-            {
-              bottom: insets.bottom + (side ? 120 : mode === "before-after" ? 320 : 268),
-            },
-          ]}
-        >
-          {error}
-        </Text>
-      ) : null}
+      {/*
+        The bottom controls, top to bottom as web stacks them: the mode bar,
+        the Before/After toggle when that mode is on, then gallery, shutter
+        and level. Centred and capped in width, so a tablet or a phone on its
+        side gets the same controls rather than a bar stretched across it.
+      */}
+      <View
+        style={[
+          styles.bottomArea,
+          {
+            bottom: insets.bottom + spacing.lg,
+            left: insets.left + spacing.lg,
+            right: insets.right + spacing.lg,
+          },
+        ]}
+        pointerEvents="box-none"
+      >
+        {error || notice ? (
+          <Text style={[styles.cameraToast, error ? styles.cameraError : null]}>
+            {error ?? notice}
+          </Text>
+        ) : null}
 
-      {side ? (
-        <>
-          {/*
-            Recent shots float at the foot of the viewfinder, clear of the
-            control column.
-          */}
-          <View
-            style={[
-              styles.bottomArea,
-              { bottom: insets.bottom + spacing.lg, left: insets.left, right: viewRight },
-            ]}
-            pointerEvents="box-none"
-          >
-            {recentStrips}
+        {mode === "measure" ? (
+          <View style={styles.helperCard} accessibilityRole="text">
+            <Text style={styles.helperTitle}>MEASURE MODE</Text>
+            <Text style={styles.helperBody}>
+              Stand approximately <Text style={styles.helperStrong}>3-6 feet</Text> away. Keep phone{" "}
+              <Text style={styles.helperStrong}>steady and parallel</Text> to the surface for best
+              accuracy.
+            </Text>
           </View>
+        ) : null}
 
-          {/*
-            The control column, like a native tablet camera: modes beside the
-            shutter, the shutter at the height the right thumb rests, flip above
-            it and the batch (or the library) below.
-          */}
-          <View
-            style={[
-              styles.sidePanel,
-              {
-                paddingTop: insets.top + spacing.lg,
-                paddingBottom: insets.bottom + spacing.lg,
-                paddingRight: insets.right + spacing.lg,
-              },
-            ]}
-            onLayout={(event) => setSideWidth(event.nativeEvent.layout.width)}
-          >
-            <CameraModeRow
-              vertical
-              modes={cameraModes(canMeasure)}
-              value={mode}
-              onChange={changeMode}
-              disabled={busy}
-            />
-            <View style={styles.sideControls}>
-              {flipButton}
-              <View style={{ alignItems: "center", gap: spacing.md }}>
-                {phaseSelector}
-                {shutterButton}
-              </View>
-              {lastShotButton}
-            </View>
-          </View>
-        </>
-      ) : (
-        <View style={[styles.bottomArea, { bottom: insets.bottom + spacing.lg }]}>
-          {/*
-            Recent shots in this batch, newest last. The library tile rides at
-            the end of the strip once there is a batch, because the bottom-left
-            slot it had on an empty camera is now the last shot.
-          */}
-          {recentStrips}
+        <CameraModeRow
+          modes={cameraModes(canMeasure)}
+          value={mode}
+          onChange={changeMode}
+          disabled={busy}
+          labels={modeLabels}
+        />
 
-          {phaseSelector}
+        {phaseSelector}
 
-          <View style={styles.bottomBar}>
-            {lastShotButton}
-            {shutterButton}
-            {flipButton}
-          </View>
-
-          {/*
-            Modes under the shutter, as a native camera shows them. Photo and
-            Before/After and Scan change what the shutter does here; Video and
-            Walkthrough open the walkthrough recorder for this project.
-          */}
-          <CameraModeRow
-            modes={cameraModes(canMeasure)}
-            value={mode}
-            onChange={changeMode}
+        <View style={styles.bottomBar}>
+          {leftSlot}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={mode === "scan" ? "Scan document" : "Take photo"}
             disabled={busy}
-          />
+            accessibilityHint={
+              quick
+                ? "Saves the photo straight away"
+                : "Adds a photo to this batch without leaving the camera"
+            }
+            style={[styles.shutter, busy && { opacity: 0.6 }]}
+            onPress={() => void takeShot()}
+          >
+            <View style={styles.shutterInner} />
+          </Pressable>
+          <LevelIndicator size={SQUARE} />
         </View>
-      )}
+      </View>
 
       <TagPickerSheet
         visible={batchTagsOpen}
         title="Tag this batch"
         existing={existingTags}
-        selected={splitTags(tagText)}
+        selected={pickedTags}
         userId={user?.id ?? null}
         onChange={(next) => setTagText(next.join(", "))}
         onClose={() => setBatchTagsOpen(false)}
@@ -1524,8 +1484,8 @@ function FlashGlyph({ mode }: { mode: FlashMode }) {
   );
 }
 
-/** Tiles in the recent-shots strip before the rest collapse into "+N". */
-const STRIP_MAX = 4;
+/** Gallery and level: web's rounded squares either side of the shutter. */
+const SQUARE = 56;
 
 /*
  * Camera chrome is always dark, whatever the app's scheme: it sits on a live
@@ -1534,25 +1494,25 @@ const STRIP_MAX = 4;
  * one thing that is ours (the batch count).
  */
 const CHROME_FG = "#ffffff";
-const CHROME_FILL = "rgba(40, 36, 32, 0.72)";
-const CHROME_DEEP = "rgba(10, 8, 6, 0.82)";
+const CHROME_FILL = "rgba(24, 20, 16, 0.55)";
+const CHROME_DEEP = "rgba(10, 8, 6, 0.72)";
 const SELECTED_FILL = "#ece8e3";
 const SELECTED_FG = "#18130d";
 
 const styles = StyleSheet.create({
   centered: { flex: 1, alignItems: "center", justifyContent: "center" },
   cameraRoot: { flex: 1, backgroundColor: "#000" },
-  gridLine: { position: "absolute", backgroundColor: "rgba(255,255,255,0.22)" },
+  gridLine: { position: "absolute", backgroundColor: "rgba(255,255,255,0.28)" },
   gridV: { top: 0, bottom: 0, width: StyleSheet.hairlineWidth },
   gridH: { left: 0, right: 0, height: StyleSheet.hairlineWidth },
-  topArea: { position: "absolute", left: 0, right: 0, gap: spacing.md },
+  topArea: { position: "absolute", gap: spacing.sm },
   topBar: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: spacing.md,
-    paddingHorizontal: spacing.lg,
   },
+  topRight: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   roundButton: {
     width: HIT_TARGET,
     height: HIT_TARGET,
@@ -1561,33 +1521,56 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  locationPill: {
+  pillRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
+  smallPill: {
     flexShrink: 1,
+    maxWidth: 280,
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
-    backgroundColor: CHROME_DEEP,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    minHeight: 36,
-  },
-  locationText: { color: CHROME_FG, fontSize: 15, fontWeight: "700", flexShrink: 1 },
-  toolRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-  },
-  toolChip: {
+    gap: 6,
     backgroundColor: CHROME_FILL,
     borderRadius: radius.pill,
     paddingHorizontal: spacing.md,
-    minHeight: 36,
-    justifyContent: "center",
+    minHeight: 30,
   },
-  toolChipText: { color: CHROME_FG, fontSize: 12, fontWeight: "800", letterSpacing: 0.8 },
-  reticle: { width: 96, height: 96, borderRadius: 48, borderWidth: 2 },
+  smallPillText: {
+    color: CHROME_FG,
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.3,
+    flexShrink: 1,
+  },
+  proMeasure: {
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.lg,
+    minHeight: 34,
+  },
+  proMeasureText: { color: CHROME_FG, fontSize: 13, fontWeight: "800", letterSpacing: 1 },
+  proMeasureDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: "#34d399" },
+  helperCard: {
+    alignSelf: "stretch",
+    backgroundColor: CHROME_DEEP,
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.18)",
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    gap: 2,
+  },
+  helperTitle: {
+    color: CHROME_FG,
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 1,
+    textAlign: "center",
+  },
+  helperBody: { color: CHROME_FG, fontSize: 13, lineHeight: 18, textAlign: "center" },
+  helperStrong: { fontWeight: "800" },
+  reticle: { width: 110, height: 110, borderRadius: 55, borderWidth: 1.5 },
   savedFlash: {
     position: "absolute",
     alignSelf: "center",
@@ -1597,17 +1580,6 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   savedFlashText: { color: "#fff", fontSize: 13, fontWeight: "800" },
-  quickCount: {
-    color: CHROME_FG,
-    fontSize: 11,
-    fontWeight: "800",
-    alignSelf: "center",
-    backgroundColor: CHROME_DEEP,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-    overflow: "hidden",
-  },
   labelRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   tileMarks: {
     position: "absolute",
@@ -1628,11 +1600,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   scanOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    ...StyleSheet.absoluteFill,
     alignItems: "center",
     justifyContent: "center",
     gap: spacing.md,
@@ -1652,9 +1620,9 @@ const styles = StyleSheet.create({
   scanCornerBL: { left: -2, bottom: -2, borderLeftWidth: 4, borderBottomWidth: 4 },
   scanHint: {
     color: CHROME_FG,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "700",
-    backgroundColor: CHROME_DEEP,
+    backgroundColor: CHROME_FILL,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
     borderRadius: radius.pill,
@@ -1663,88 +1631,71 @@ const styles = StyleSheet.create({
   phaseRow: {
     flexDirection: "row",
     alignSelf: "center",
+    alignItems: "center",
     gap: spacing.xs,
     padding: 4,
     backgroundColor: CHROME_DEEP,
     borderRadius: radius.pill,
   },
-  phaseColumn: { flexDirection: "column", alignSelf: "stretch", borderRadius: radius.lg },
   phasePill: {
     borderRadius: radius.pill,
     paddingHorizontal: spacing.lg,
-    minHeight: 40,
+    minHeight: 34,
     alignItems: "center",
     justifyContent: "center",
   },
   phasePillActive: { backgroundColor: SELECTED_FILL },
-  phaseText: { color: CHROME_FG, fontSize: 15, fontWeight: "700" },
+  phaseNoneActive: { backgroundColor: "rgba(255,255,255,0.15)" },
+  phaseText: {
+    color: "rgba(255,255,255,0.85)",
+    fontSize: 14,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+  },
+  phaseNoneText: { color: "rgba(255,255,255,0.8)", fontSize: 13, fontWeight: "600" },
   phaseTextActive: { color: SELECTED_FG },
   flashAuto: { color: CHROME_FG, fontSize: 10, fontWeight: "800", marginLeft: -2 },
-  cameraError: {
-    position: "absolute",
+  cameraToast: {
     alignSelf: "center",
     color: "#fff",
-    backgroundColor: "rgba(180,35,24,0.9)",
+    fontSize: 13,
+    fontWeight: "600",
+    backgroundColor: CHROME_DEEP,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     borderRadius: radius.md,
     overflow: "hidden",
   },
-  bottomArea: { position: "absolute", left: 0, right: 0, gap: spacing.lg },
-  sidePanel: {
+  cameraError: { backgroundColor: "rgba(180,35,24,0.9)" },
+  bottomArea: {
     position: "absolute",
-    top: 0,
-    bottom: 0,
-    right: 0,
-    flexDirection: "row",
     alignItems: "center",
     gap: spacing.md,
-    paddingLeft: spacing.md,
-    backgroundColor: "#000",
   },
-  sideControls: {
-    alignSelf: "stretch",
-    width: 96,
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  strip: { flexDirection: "row", gap: spacing.sm, paddingHorizontal: spacing.xl },
-  stripThumb: {
-    width: 56,
-    height: 56,
-    borderRadius: radius.md,
-    borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.7)",
-    backgroundColor: "#222",
-  },
-  stripMore: {
-    borderStyle: "dashed",
-    borderColor: "rgba(255,255,255,0.45)",
-    backgroundColor: CHROME_FILL,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  stripMoreText: { color: "rgba(255,255,255,0.8)", fontSize: 15, fontWeight: "700" },
   bottomBar: {
+    alignSelf: "stretch",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: spacing.xl,
   },
-  lastShot: { width: 56, height: 56 },
+  squareButton: {
+    width: SQUARE,
+    height: SQUARE,
+    borderRadius: 16,
+    backgroundColor: CHROME_FILL,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   lastShotImage: {
     width: "100%",
     height: "100%",
-    borderRadius: radius.md,
+    borderRadius: 16,
     borderWidth: 2,
     borderColor: "rgba(255,255,255,0.85)",
     backgroundColor: "#222",
-  },
-  libraryButton: {
-    borderRadius: radius.md,
-    backgroundColor: CHROME_FILL,
-    alignItems: "center",
-    justifyContent: "center",
   },
   countBadge: {
     position: "absolute",
@@ -1757,25 +1708,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  savedBadge: { backgroundColor: "rgba(16, 150, 96, 0.95)" },
   countText: { fontSize: 12, fontWeight: "800" },
-  flipButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: CHROME_FILL,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   shutter: {
-    width: 82,
-    height: 82,
-    borderRadius: 41,
+    width: 78,
+    height: 78,
+    borderRadius: 39,
     borderWidth: 5,
     borderColor: "#fff",
+    backgroundColor: "rgba(255,255,255,0.1)",
     alignItems: "center",
     justifyContent: "center",
   },
-  shutterInner: { width: 62, height: 62, borderRadius: 31, backgroundColor: "#fff" },
+  shutterInner: { width: 58, height: 58, borderRadius: 29, backgroundColor: "#fff" },
   /*
    * Off-screen, not invisible. `opacity: 0` would still lay out, but a future
    * reader reaching for `display: none` would silently break the rasteriser,

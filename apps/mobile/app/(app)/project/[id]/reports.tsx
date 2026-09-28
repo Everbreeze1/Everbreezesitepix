@@ -1,26 +1,21 @@
-import { useCallback, useMemo, useState } from "react";
-import { Alert, Pressable, View } from "react-native";
+import { useMemo, useState } from "react";
+import { Pressable, View } from "react-native";
 import { router, Stack, useLocalSearchParams } from "expo-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { projectDisplayName, relativeTime, titleWithinProject } from "@everlumen/shared";
 import { getProject } from "@/api/projects";
-import { deleteReport, listProjectReports } from "@/api/reports";
-import { listProjectReportPages } from "@/api/report-index";
+import { listProjectReports } from "@/api/reports";
+import { listProjectReportPages, listReportCardExtras } from "@/api/report-index";
 import { builtReportStatus, reportExcerpt, reportIndexSubtitle } from "@/api/report-index-view";
-import {
-  ambiguousReportIds,
-  isReportShared,
-  reportClockTime,
-  reportSummaryLine,
-  type ReportRow,
-} from "@/api/report-view";
+import { ambiguousReportIds, reportClockTime, reportSummaryLine } from "@/api/report-view";
 import { GenerateReportSheet } from "@/components/GenerateReportSheet";
+import { useReportActions, type ReportMenuTarget } from "@/components/ReportActionsSheet";
 import { ReportCard } from "@/components/ReportCard";
 import { ReportEditor } from "@/components/ReportEditor";
 import { ReportsSplitView, useReportsTwoPane } from "@/components/ReportsSplitView";
 import { radius, spacing, useTheme } from "@/theme";
-import { FileText, Plus, Trash2 } from "@/ui/icons";
-import { EmptyState, ErrorState, Icon, IconButton, SkeletonList, Text } from "@/ui";
+import { FileText, Plus } from "@/ui/icons";
+import { EmptyState, ErrorState, Icon, SkeletonList, Text } from "@/ui";
 
 /**
  * A project's reports: every kind the web makes, and the ones already made.
@@ -31,14 +26,13 @@ import { EmptyState, ErrorState, Icon, IconButton, SkeletonList, Text } from "@/
  * report written on the web is never missing on the phone.
  *
  * The + opens the same menu the web's New report button does. On a tablet the
- * list stays on the left and a hand-built report opens beside it.
+ * list stays on the left and a hand-built report opens beside it. Each row's
+ * link, PDF and delete sit behind its kebab, as on the web's Reports list.
  */
 export default function ProjectReportsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const theme = useTheme();
-  const queryClient = useQueryClient();
   const twoPane = useReportsTwoPane();
-  const [failure, setFailure] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [openReport, setOpenReport] = useState<string | null>(null);
 
@@ -65,37 +59,29 @@ export default function ProjectReportsScreen() {
   const pages = useMemo(() => pagesQuery.data ?? [], [pagesQuery.data]);
   const ambiguous = useMemo(() => ambiguousReportIds(reports), [reports]);
 
-  const remove = useMutation({
-    mutationFn: (reportId: string) => deleteReport(reportId),
-    onSuccess: (_void, reportId) => {
-      if (openReport === reportId) setOpenReport(null);
-      void queryClient.invalidateQueries({ queryKey });
-      void queryClient.invalidateQueries({ queryKey: ["all-reports"] });
-    },
-    onError: (error: unknown) =>
-      setFailure(error instanceof Error ? error.message : "Could not delete that report."),
-  });
-
-  const confirmDelete = useCallback(
-    (report: ReportRow) => {
-      Alert.alert(
-        `Delete "${report.title}"?`,
-        isReportShared(report)
-          ? "The photos stay on the project. Anyone holding the public link will get a page saying the report is gone."
-          : "The photos stay on the project. Only the report goes.",
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Delete", style: "destructive", onPress: () => remove.mutate(report.id) },
-        ],
-      );
-    },
-    [remove],
-  );
-
   const openBuilt = (reportId: string) => {
     if (twoPane) setOpenReport(reportId);
     else router.push({ pathname: "/report/[reportId]", params: { reportId, projectId: id! } });
   };
+
+  const reportIds = useMemo(() => reports.map((report) => report.id), [reports]);
+  // Photos and blueprint chips fill in after the words, and never block them.
+  const extrasQuery = useQuery({
+    queryKey: ["project-reports-extras", reportIds.join(",")],
+    queryFn: () => listReportCardExtras(reportIds),
+    enabled: reportIds.length > 0,
+    staleTime: 30 * 60 * 1000,
+  });
+
+  const menu = useReportActions({
+    onOpen: (item: ReportMenuTarget) =>
+      item.kind === "page"
+        ? router.push({ pathname: "/page/[pageId]", params: { pageId: item.id } })
+        : openBuilt(item.id),
+    onDeleted: (item) => {
+      if (openReport === item.id) setOpenReport(null);
+    },
+  });
 
   const refetch = () => {
     void reportsQuery.refetch();
@@ -115,12 +101,6 @@ export default function ProjectReportsScreen() {
     />
   ) : (
     <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.lg, gap: spacing.md }}>
-      {failure ? (
-        <Text variant="caption" tone="destructive">
-          {failure}
-        </Text>
-      ) : null}
-
       {empty ? (
         <EmptyState
           icon={FileText}
@@ -141,9 +121,11 @@ export default function ProjectReportsScreen() {
               title={titleWithinProject(page.title, projectName)}
               subtitle={reportIndexSubtitle({ ...page, projectName: null })}
               status={page.status}
+              isPage
               onPress={() =>
                 router.push({ pathname: "/page/[pageId]", params: { pageId: page.id } })
               }
+              onMenu={() => menu.open(page)}
             />
           ))}
         </View>
@@ -169,17 +151,19 @@ export default function ProjectReportsScreen() {
               }`}
               status={builtReportStatus(report)}
               excerpt={reportExcerpt(report.summary)}
-              accessory={
-                <IconButton
-                  icon={Trash2}
-                  tone="destructive"
-                  surface={false}
-                  size="sm"
-                  accessibilityLabel={`Delete ${report.title}`}
-                  onPress={() => confirmDelete(report)}
-                />
-              }
+              thumbUri={extrasQuery.data?.thumbs[report.id]}
+              blueprint={extrasQuery.data?.blueprints[report.id]}
               onPress={() => openBuilt(report.id)}
+              onMenu={() =>
+                menu.open({
+                  kind: "report",
+                  id: report.id,
+                  projectId: report.project_id,
+                  title: report.title,
+                  shareToken: report.share_token,
+                  revokedAt: report.revoked_at,
+                })
+              }
             />
           ))}
         </View>
@@ -228,6 +212,8 @@ export default function ProjectReportsScreen() {
           ) : null
         }
       />
+
+      {menu.sheet}
 
       {generating && id ? (
         <GenerateReportSheet
