@@ -11,7 +11,7 @@ import {
   View,
 } from "react-native";
 import { supabase } from "@/lib/supabase";
-import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
+import { HIT_TARGET, radius, spacing, typography, useLayout, useTheme } from "@/theme";
 
 /**
  * A tag name the way web stores it: lower case, spaces to hyphens, 32 chars.
@@ -65,6 +65,8 @@ export function TagPickerSheet({
   onClose: () => void;
 }) {
   const theme = useTheme();
+  // Inner lists shrink on a phone held on its side, so they fit in the sheet.
+  const layout = useLayout();
   const [draft, setDraft] = useState("");
 
   // Tags just created or picked that the project has never used still show.
@@ -92,7 +94,10 @@ export function TagPickerSheet({
       >
         <View style={[styles.sheet, { backgroundColor: theme.colors.chrome }]}>
           <Text style={[typography.heading, styles.title]}>{title}</Text>
-          <ScrollView style={{ maxHeight: 260 }} contentContainerStyle={styles.chips}>
+          <ScrollView
+            style={{ maxHeight: layout.listMaxHeight(260) }}
+            contentContainerStyle={styles.chips}
+          >
             {all.length === 0 ? (
               <Text style={styles.empty}>No tags yet. Add one below.</Text>
             ) : (

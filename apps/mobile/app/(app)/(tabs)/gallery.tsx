@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, Images, Search, SlidersHorizontal } from "@/ui/icons";
-import { FlatList, Pressable, RefreshControl, useWindowDimensions, View } from "react-native";
+import { FlatList, Pressable, RefreshControl, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { randomUUID } from "expo-crypto";
@@ -14,7 +14,7 @@ import {
   type GalleryFilters,
 } from "@/api/gallery-filters";
 import { GalleryFilterSheet } from "@/components/GalleryFilterSheet";
-import { PhotoViewer, ThumbTagBadge } from "@/components/photo-viewer";
+import { PhotoViewer, ThumbTagBadge, TileCaption } from "@/components/photo-viewer";
 import { mergeTags, phasePatch, trashPhotos, type PhotoPatch } from "@/api/photo-edit";
 import { generateSummaryFromPhotos } from "@/api/summaries";
 import { photoSelectionError } from "@/api/summary-view";
@@ -23,7 +23,7 @@ import { GalleryFilterPills } from "@/components/GalleryFilterPills";
 import { photoPatchRowId, type PhotoPatchPayload } from "@/offline/handlers";
 import { enqueue } from "@/offline/outbox";
 import { refreshQueue, requestSync } from "@/offline/sync";
-import { gridColumns, HIT_TARGET, radius, spacing, useTheme } from "@/theme";
+import { gridColumns, HIT_TARGET, radius, spacing, useLayout, useTheme } from "@/theme";
 import {
   EmptyState,
   ErrorState,
@@ -82,7 +82,9 @@ const LIBRARY_TILE = 80;
 
 export default function GalleryScreen() {
   // Live width: a value read once never updates when an iPad rotates.
-  const { width } = useWindowDimensions();
+  const { width, safeSide } = useLayout();
+  // The grid's gutter, plus the notch of a phone held on its side (zero upright).
+  const side = spacing.lg + safeSide;
   const theme = useTheme();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
@@ -209,8 +211,8 @@ export default function GalleryScreen() {
    * showing nine photos where it could show twenty-five, and a width read once
    * never updates when an iPad rotates or is put into split screen.
    */
-  const columns = gridColumns(width - spacing.lg * 2, LIBRARY_TILE);
-  const tile = (width - spacing.lg * 2 - GAP * (columns - 1)) / columns;
+  const columns = gridColumns(width - side * 2, LIBRARY_TILE);
+  const tile = (width - side * 2 - GAP * (columns - 1)) / columns;
 
   const toggle = useCallback((photoId: string) => {
     setSelected((current) => {
@@ -466,7 +468,7 @@ export default function GalleryScreen() {
       </View>
 
       {query.isLoading ? (
-        <GallerySkeleton tile={tile} columns={columns} />
+        <GallerySkeleton tile={tile} columns={columns} side={side} />
       ) : query.error ? (
         <ErrorState
           message={query.error instanceof Error ? query.error.message : "Failed to load photos"}
@@ -477,7 +479,7 @@ export default function GalleryScreen() {
           data={sections}
           keyExtractor={(section) => section.key}
           contentContainerStyle={{
-            paddingHorizontal: spacing.lg,
+            paddingHorizontal: side,
             paddingBottom: 120,
             flexGrow: 1,
           }}
@@ -571,46 +573,50 @@ export default function GalleryScreen() {
                         toggle(photo.id);
                       }}
                       onPress={() => (selecting ? toggle(photo.id) : setLightboxId(photo.id))}
-                      style={{ width: tile, height: tile }}
+                      style={{ width: tile }}
                     >
-                      <PhotoThumb
-                        uri={urls[photo.id]}
-                        width="100%"
-                        height="100%"
-                        rounded={radius.md}
-                      />
-                      {/* The photo's tags on the photo, as the web grid shows them. */}
-                      {tile >= 72 ? <ThumbTagBadge tags={photo.tags} /> : null}
-                      {picked ? (
-                        <View
-                          pointerEvents="none"
-                          style={{
-                            position: "absolute",
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            borderRadius: radius.md,
-                            borderWidth: 3,
-                            borderColor: theme.colors.primary,
-                            alignItems: "flex-end",
-                            padding: spacing.xs,
-                          }}
-                        >
+                      <View style={{ width: tile, height: tile }}>
+                        <PhotoThumb
+                          uri={urls[photo.id]}
+                          width="100%"
+                          height="100%"
+                          rounded={radius.md}
+                        />
+                        {/* The photo's tags on the photo, as the web grid shows them. */}
+                        {tile >= 72 ? <ThumbTagBadge tags={photo.tags} /> : null}
+                        {picked ? (
                           <View
+                            pointerEvents="none"
                             style={{
-                              width: 22,
-                              height: 22,
-                              borderRadius: radius.pill,
-                              backgroundColor: theme.colors.primary,
-                              alignItems: "center",
-                              justifyContent: "center",
+                              position: "absolute",
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              bottom: 0,
+                              borderRadius: radius.md,
+                              borderWidth: 3,
+                              borderColor: theme.colors.primary,
+                              alignItems: "flex-end",
+                              padding: spacing.xs,
                             }}
                           >
-                            <Icon icon={Check} size="sm" tone="inverse" />
+                            <View
+                              style={{
+                                width: 22,
+                                height: 22,
+                                borderRadius: radius.pill,
+                                backgroundColor: theme.colors.primary,
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                            >
+                              <Icon icon={Check} size="sm" tone="inverse" />
+                            </View>
                           </View>
-                        </View>
-                      ) : null}
+                        ) : null}
+                      </View>
+                      {/* The photo's note, as a caption under it, as on the project grid. */}
+                      <TileCaption caption={photo.caption} tileWidth={tile} />
                     </Pressable>
                   );
                 })}
@@ -621,7 +627,7 @@ export default function GalleryScreen() {
       )}
 
       {selecting && bulkError ? (
-        <View style={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.xs }}>
+        <View style={{ paddingHorizontal: side, paddingBottom: spacing.xs }}>
           <Text variant="caption" tone="destructive">
             {bulkError}
           </Text>
@@ -743,9 +749,9 @@ function startOfWeek(now: Date): Date {
   return start;
 }
 
-function GallerySkeleton({ tile, columns }: { tile: number; columns: number }) {
+function GallerySkeleton({ tile, columns, side }: { tile: number; columns: number; side: number }) {
   return (
-    <View style={{ paddingHorizontal: spacing.lg, gap: spacing.lg, paddingTop: spacing.lg }}>
+    <View style={{ paddingHorizontal: side, gap: spacing.lg, paddingTop: spacing.lg }}>
       {[0, 1].map((section) => (
         <View key={section} style={{ gap: spacing.sm }}>
           <Skeleton width="30%" height={11} />

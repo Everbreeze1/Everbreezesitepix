@@ -41,6 +41,9 @@ export function PageHeader({
       style={{
         paddingTop: insets.top + spacing.sm,
         paddingBottom: spacing.sm,
+        // Clear of the notch when the phone is on its side; zero upright.
+        paddingLeft: insets.left,
+        paddingRight: insets.right,
         backgroundColor: theme.colors.background,
         gap: spacing.md,
       }}

@@ -39,7 +39,7 @@ import { SiteEditor } from "@/components/portfolio/SiteEditor";
 import { SwitchRow } from "@/components/portfolio/SwitchRow";
 import { webAppLink } from "@/lib/api";
 import { useAccountOwner } from "@/lib/use-access";
-import { radius, spacing, useRightRail, useTheme } from "@/theme";
+import { radius, spacing, useLayout, useRightRail, useTheme } from "@/theme";
 import {
   ChevronDown,
   ChevronUp,
@@ -130,6 +130,22 @@ function OwnerPortfolio() {
   // centred and capped rather than stretched edge to edge.
   const rail = useRightRail();
   const { inset } = useCardPage();
+  /*
+   * On its side the page spreads rather than sitting in a centred column (Jon,
+   * 2026-09-29: "when I turn the tablet horizontally it looks weird and too
+   * centered"). The projects become a grid of cards, and the Site and Embeds
+   * tabs lay their parts side by side. Upright is exactly as before.
+   */
+  const layout = useLayout();
+  const projectColumns = layout.spread ? layout.columns(300, 3) : 1;
+  // The Screen's own gutter (the notch, on its side) plus this page's.
+  const projectCell =
+    projectColumns > 1
+      ? Math.floor(
+          (layout.width - layout.inset(0) * 2 - inset * 2 - spacing.md * (projectColumns - 1)) /
+            projectColumns,
+        )
+      : undefined;
   const queryClient = useQueryClient();
 
   const [picking, setPicking] = useState(false);
@@ -390,6 +406,70 @@ function OwnerPortfolio() {
     setCreating(true);
   }, []);
 
+  /** One project in the list, or one card of the grid on a screen held on its side. */
+  const projectRow = (project: PortfolioProject) => (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={project.title}
+      accessibilityHint="Opens this project's settings"
+      onPress={() => setSelectedId(project.id)}
+      style={({ pressed }) => ({
+        flexDirection: "row",
+        alignItems: "center",
+        gap: spacing.md,
+        padding: spacing.md,
+        backgroundColor: pressed ? theme.colors.secondary : "transparent",
+      })}
+    >
+      {project.cover_image_url ? (
+        <Image
+          source={{ uri: project.cover_image_url }}
+          style={{
+            width: 64,
+            height: 48,
+            borderRadius: radius.sm,
+            backgroundColor: theme.colors.secondary,
+          }}
+          contentFit="cover"
+        />
+      ) : (
+        /*
+            A page with no cover is usually a page with no
+            photos, which is the state worth noticing before
+            publishing.
+          */
+        <View
+          accessibilityLabel="No photos yet"
+          style={{
+            width: 64,
+            height: 48,
+            borderRadius: radius.sm,
+            backgroundColor: theme.colors.secondary,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Icon icon={ImageOff} size="sm" tone="muted" />
+        </View>
+      )}
+      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+        <Text variant="bodyStrong" numberOfLines={2}>
+          {project.title}
+        </Text>
+        <Text variant="caption" tone="muted" numberOfLines={1}>
+          {portfolioSummary(project)}
+          {isPublished(project) && !project.on_site ? " · Hidden from site" : ""}
+        </Text>
+      </View>
+      {project.featured ? <Icon icon={Star} size="sm" tone="safety" /> : null}
+      <Badge
+        label={isPublished(project) ? "Live" : "Draft"}
+        tone={isPublished(project) ? "success" : "neutral"}
+        variant={isPublished(project) ? "soft" : "outline"}
+      />
+    </Pressable>
+  );
+
   const showRail = tab === "projects" && canManage && !portfolioQuery.isLoading;
 
   return (
@@ -573,73 +653,24 @@ function OwnerPortfolio() {
                   {live} of {pages.length} live. The order here is the order visitors see. Tap a
                   project to publish, feature or move it.
                 </Text>
-                <ListGroup>
-                  {pages.map((project, index) => (
-                    <View key={project.id}>
-                      {index > 0 ? <RowDivider /> : null}
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={project.title}
-                        accessibilityHint="Opens this project's settings"
-                        onPress={() => setSelectedId(project.id)}
-                        style={({ pressed }) => ({
-                          flexDirection: "row",
-                          alignItems: "center",
-                          gap: spacing.md,
-                          padding: spacing.md,
-                          backgroundColor: pressed ? theme.colors.secondary : "transparent",
-                        })}
-                      >
-                        {project.cover_image_url ? (
-                          <Image
-                            source={{ uri: project.cover_image_url }}
-                            style={{
-                              width: 64,
-                              height: 48,
-                              borderRadius: radius.sm,
-                              backgroundColor: theme.colors.secondary,
-                            }}
-                            contentFit="cover"
-                          />
-                        ) : (
-                          /*
-                            A page with no cover is usually a page with no
-                            photos, which is the state worth noticing before
-                            publishing.
-                          */
-                          <View
-                            accessibilityLabel="No photos yet"
-                            style={{
-                              width: 64,
-                              height: 48,
-                              borderRadius: radius.sm,
-                              backgroundColor: theme.colors.secondary,
-                              alignItems: "center",
-                              justifyContent: "center",
-                            }}
-                          >
-                            <Icon icon={ImageOff} size="sm" tone="muted" />
-                          </View>
-                        )}
-                        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                          <Text variant="bodyStrong" numberOfLines={2}>
-                            {project.title}
-                          </Text>
-                          <Text variant="caption" tone="muted" numberOfLines={1}>
-                            {portfolioSummary(project)}
-                            {isPublished(project) && !project.on_site ? " · Hidden from site" : ""}
-                          </Text>
-                        </View>
-                        {project.featured ? <Icon icon={Star} size="sm" tone="safety" /> : null}
-                        <Badge
-                          label={isPublished(project) ? "Live" : "Draft"}
-                          tone={isPublished(project) ? "success" : "neutral"}
-                          variant={isPublished(project) ? "soft" : "outline"}
-                        />
-                      </Pressable>
-                    </View>
-                  ))}
-                </ListGroup>
+                {projectColumns > 1 ? (
+                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.md }}>
+                    {pages.map((project) => (
+                      <View key={project.id} style={{ width: projectCell }}>
+                        <ListGroup>{projectRow(project)}</ListGroup>
+                      </View>
+                    ))}
+                  </View>
+                ) : (
+                  <ListGroup>
+                    {pages.map((project, index) => (
+                      <View key={project.id}>
+                        {index > 0 ? <RowDivider /> : null}
+                        {projectRow(project)}
+                      </View>
+                    ))}
+                  </ListGroup>
+                )}
                 <Text variant="caption" tone="muted">
                   Each page&apos;s photos, sections and long intro are edited in the page builder on
                   the website.

@@ -4,7 +4,8 @@ import { changeMyEmail, changeMyPassword, passwordProblem, MIN_PASSWORD } from "
 import { useAuth } from "@/lib/auth";
 import { spacing } from "@/theme";
 import { KeyRound, Lock, Mail } from "@/ui/icons";
-import { Button, Field, Screen, SectionHeader, Text } from "@/ui";
+import { View } from "react-native";
+import { Button, Columns, Field, Screen, SectionHeader, Text } from "@/ui";
 
 /**
  * Sign-in details: the web Settings page's Security section.
@@ -61,72 +62,79 @@ export default function SecurityScreen() {
 
   return (
     <Screen scroll bottomInset={spacing.xxl}>
-      <SectionHeader title="Email address" />
-      <Field
-        label="Email"
-        value={email}
-        onChangeText={(next) => {
-          setEmail(next);
-          setEmailNote(null);
-        }}
-        icon={Mail}
-        keyboardType="email-address"
-        autoCapitalize="none"
-        autoComplete="email"
-        hint="We confirm any change at the new address."
-        error={emailLooksWrong ? "That does not look like an email address" : undefined}
-      />
-      {emailNote ? (
-        <Text variant="caption" tone={emailNote.ok ? "success" : "destructive"}>
-          {emailNote.text}
-        </Text>
-      ) : null}
-      <Button
-        label="Change email"
-        variant="secondary"
-        fullWidth
-        disabled={!emailChanged || emailLooksWrong}
-        loading={emailMutation.isPending}
-        onPress={() => emailMutation.mutate()}
-      />
+      {/* Upright one form; on its side email and password sit side by side. */}
+      <Columns minColumn={320} max={2}>
+        <View style={{ gap: spacing.md }}>
+          <SectionHeader title="Email address" />
+          <Field
+            label="Email"
+            value={email}
+            onChangeText={(next) => {
+              setEmail(next);
+              setEmailNote(null);
+            }}
+            icon={Mail}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoComplete="email"
+            hint="We confirm any change at the new address."
+            error={emailLooksWrong ? "That does not look like an email address" : undefined}
+          />
+          {emailNote ? (
+            <Text variant="caption" tone={emailNote.ok ? "success" : "destructive"}>
+              {emailNote.text}
+            </Text>
+          ) : null}
+          <Button
+            label="Change email"
+            variant="secondary"
+            fullWidth
+            disabled={!emailChanged || emailLooksWrong}
+            loading={emailMutation.isPending}
+            onPress={() => emailMutation.mutate()}
+          />
+        </View>
 
-      <SectionHeader title="Password" />
-      <Field
-        label="New password"
-        value={password}
-        onChangeText={(next) => {
-          setPassword(next);
-          setPasswordNote(null);
-        }}
-        icon={Lock}
-        secureTextEntry
-        autoCapitalize="none"
-        hint={`At least ${MIN_PASSWORD} characters.`}
-      />
-      <Field
-        label="Confirm new password"
-        value={confirm}
-        onChangeText={(next) => {
-          setConfirm(next);
-          setPasswordNote(null);
-        }}
-        icon={KeyRound}
-        secureTextEntry
-        autoCapitalize="none"
-        error={confirm ? (problem ?? undefined) : undefined}
-      />
-      {passwordNote ? (
-        <Text variant="caption" tone={passwordNote.ok ? "success" : "destructive"}>
-          {passwordNote.text}
-        </Text>
-      ) : null}
-      <Button
-        label="Update password"
-        fullWidth
-        disabled={!password || Boolean(problem)}
-        loading={passwordMutation.isPending}
-        onPress={() => passwordMutation.mutate()}
-      />
+        <View style={{ gap: spacing.md }}>
+          <SectionHeader title="Password" />
+          <Field
+            label="New password"
+            value={password}
+            onChangeText={(next) => {
+              setPassword(next);
+              setPasswordNote(null);
+            }}
+            icon={Lock}
+            secureTextEntry
+            autoCapitalize="none"
+            hint={`At least ${MIN_PASSWORD} characters.`}
+          />
+          <Field
+            label="Confirm new password"
+            value={confirm}
+            onChangeText={(next) => {
+              setConfirm(next);
+              setPasswordNote(null);
+            }}
+            icon={KeyRound}
+            secureTextEntry
+            autoCapitalize="none"
+            error={confirm ? (problem ?? undefined) : undefined}
+          />
+          {passwordNote ? (
+            <Text variant="caption" tone={passwordNote.ok ? "success" : "destructive"}>
+              {passwordNote.text}
+            </Text>
+          ) : null}
+          <Button
+            label="Update password"
+            fullWidth
+            disabled={!password || Boolean(problem)}
+            loading={passwordMutation.isPending}
+            onPress={() => passwordMutation.mutate()}
+          />
+        </View>
+      </Columns>
     </Screen>
   );
 }

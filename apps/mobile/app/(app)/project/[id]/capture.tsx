@@ -29,7 +29,7 @@ import { LevelIndicator } from "@/components/LevelIndicator";
 import { ShotAnnotator } from "@/components/ShotAnnotator";
 import { ShotEditor, type ShotPatch } from "@/components/ShotEditor";
 import { TagPickerSheet } from "@/components/TagPickerSheet";
-import { CaptureNotePanel, type NotePanelAction } from "@/components/capture/CaptureNotePanel";
+import { PhotoNoteEditor, type NoteEditorAction } from "@/components/capture/PhotoNoteEditor";
 import { useTagLibrary } from "@/components/photo-viewer/TagPill";
 import { formatAddress, getProject, projectCoords } from "@/api/projects";
 import { projectDisplayName } from "@everlumen/shared";
@@ -73,7 +73,6 @@ import {
 import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
 import { Icon } from "@/ui";
 import {
-  Check,
   ChevronDown,
   Crop,
   Grid3x3,
@@ -123,8 +122,13 @@ type RecentShot = {
 /** The camera file work for one queued shot: its pill, or an edit's new picture. */
 type FileJob = { gen: number; running: boolean; edited: boolean };
 
-/** The note panel, for the shots still to come or for one saved shot. */
-type Panel = { kind: "next"; focus?: boolean } | { kind: "shot"; id: string; focus?: boolean };
+/**
+ * The note editor, for the shots still to come or for one saved shot.
+ * `start` opens it straight into dictation ("voice") or typing.
+ */
+type Panel =
+  | { kind: "next"; start?: "voice" | "type" }
+  | { kind: "shot"; id: string; start?: "voice" | "type" };
 
 /**
  * How long a queued Before/After photo waits for its pill before it uploads
@@ -1121,20 +1125,22 @@ export default function CaptureScreen() {
 
   /** The mic: a spoken note for the photo just taken, or for the next ones. */
   function openVoiceNote() {
-    if (lastShot) setPanel({ kind: "shot", id: lastShot.id, focus: true });
-    else setPanel({ kind: "next", focus: true });
+    if (lastShot) setPanel({ kind: "shot", id: lastShot.id, start: "voice" });
+    else setPanel({ kind: "next", start: "voice" });
   }
 
   /*
    * The bottom-left slot. On an empty camera it is web's gallery button. Once
    * this visit has saved something it shows the last shot with the count of
-   * what has been saved, and opens the recent shots, where each one can be
-   * retagged, captioned or annotated on its own.
+   * what has been saved, and opens that one photo's note editor: its
+   * Before/None/After, its voice note and caption, its tags. One photo, not a
+   * strip of this visit's photos: several photos side by side is the
+   * walkthrough's screen, where the AI reads them together (Jon, 2026-09-29).
    */
   const leftSlot = lastShot ? (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${savedCount} saved. Open recent photos to retag or add a note`}
+      accessibilityLabel={`${savedCount} saved. Open the last photo to add a voice note or retag it`}
       style={styles.squareButton}
       onPress={() => setPanel({ kind: "shot", id: lastShot.id })}
     >
@@ -1274,51 +1280,50 @@ export default function CaptureScreen() {
         : {};
 
   /*
-   * The note panel. For the next photos: the sticky caption and tags. For a
-   * saved photo: the strip of this visit's photos, and the picked one's own
-   * Before/None/After, note and tags. Each change is that photo's alone.
+   * The note editor. For the next photos: the sticky caption and tags. For a
+   * saved photo: that photo, its own Before/None/After, voice note, caption
+   * and tags. Each change is that photo's alone, and saves as it is made.
    */
-  const panelInsets = { bottom: insets.bottom, left: insets.left, right: insets.right };
+  const panelInsets = {
+    top: insets.top,
+    bottom: insets.bottom,
+    left: insets.left,
+    right: insets.right,
+  };
   const panelShot =
     panel?.kind === "shot" ? recent.find((shot) => shot.id === panel.id) : undefined;
-  const doneAction: NotePanelAction = {
-    id: "done",
-    label: "Done",
-    icon: Check,
-    primary: true,
-    onPress: () => setPanel(null),
-  };
+  const closePanel = () => setPanel(null);
   let panelView: React.ReactNode = null;
   if (panel?.kind === "next") {
     panelView = (
-      <CaptureNotePanel
+      <PhotoNoteEditor
         key="next"
         title="Note for the next photos"
         caption={note.caption}
         onCaptionChange={(caption) => setNote((current) => ({ ...current, caption }))}
-        captionPlaceholder="What these photos show. Stays on until cleared."
+        placeholder="What these photos show. Stays on until cleared."
         tags={note.tags}
         onEditTags={() => setTagsFor("next")}
-        actions={[
-          ...(noteActive
-            ? [{ id: "clear", label: "Clear", icon: X, onPress: () => setNote(EMPTY_NOTE) }]
-            : []),
-          doneAction,
-        ]}
-        focusCaption={panel.focus}
+        actions={
+          noteActive
+            ? [{ id: "clear", label: "Clear note", icon: X, onPress: () => setNote(EMPTY_NOTE) }]
+            : []
+        }
+        startWith={panel.start}
         wide={wide}
         insets={panelInsets}
-        onClose={() => setPanel(null)}
+        onDone={closePanel}
+        onClose={closePanel}
       />
     );
   } else if (panel?.kind === "shot" && panelShot) {
     const shotId = panelShot.id;
-    const actions: NotePanelAction[] = [
+    const actions: NoteEditorAction[] = [
       ...(panelShot.failed
         ? [
             {
               id: "retry",
-              label: "Try again",
+              label: "Try saving again",
               icon: RefreshCw,
               onPress: () => {
                 setError(null);
@@ -1336,45 +1341,26 @@ export default function CaptureScreen() {
           setEditingId(shotId);
         },
       },
-      {
-        id: "library",
-        label: "Library",
-        icon: ImageIcon,
-        onPress: () => {
-          setPanel(null);
-          void pickFromLibrary();
-        },
-      },
-      doneAction,
     ];
     panelView = (
-      <CaptureNotePanel
+      <PhotoNoteEditor
         key={`shot-${shotId}`}
-        title="Recent photos"
+        title="Last photo"
+        photoUri={panelShot.thumb ?? panelShot.source}
         caption={panelShot.caption}
         onCaptionChange={(caption) => editShot(shotId, { caption })}
-        captionPlaceholder="Note for this photo"
+        placeholder="Type a note, or tap Add voice note"
         tags={panelShot.tags}
         onEditTags={() => setTagsFor(shotId)}
         phase={panelShot.scan ? undefined : panelShot.phase}
         onPhaseChange={(next) => editShot(shotId, { phase: next })}
-        strip={{
-          shots: recent.map((shot) => ({
-            id: shot.id,
-            uri: shot.thumb ?? shot.source,
-            phase: shot.phase,
-            scan: shot.scan,
-            failed: shot.failed,
-          })),
-          selectedId: shotId,
-          onSelect: (id) => setPanel({ kind: "shot", id }),
-        }}
         actions={actions}
         message={panelShot.failed ? "Not saved on this device yet." : null}
-        focusCaption={panel.focus}
+        startWith={panel.start}
         wide={wide}
         insets={panelInsets}
-        onClose={() => setPanel(null)}
+        onDone={closePanel}
+        onClose={closePanel}
       />
     );
   }

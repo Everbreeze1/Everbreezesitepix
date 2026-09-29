@@ -7,7 +7,6 @@ import {
   RefreshControl,
   ScrollView,
   TextInput,
-  useWindowDimensions,
   View,
   type NativeSyntheticEvent,
   type TextInputSelectionChangeEventData,
@@ -62,7 +61,7 @@ import {
 } from "@/offline/handlers";
 import { enqueue } from "@/offline/outbox";
 import { refreshQueue, requestSync } from "@/offline/sync";
-import { contentInset, HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
+import { HIT_TARGET, radius, spacing, typography, useLayout, useTheme } from "@/theme";
 import {
   Calendar,
   CircleCheck,
@@ -99,8 +98,8 @@ export default function TaskDetailScreen() {
   const { id, projectId } = useLocalSearchParams<{ id: string; projectId?: string }>();
   const theme = useTheme();
   // A reading column, not a stretched phone layout, on a tablet.
-  const { width } = useWindowDimensions();
-  const inset = contentInset(width, spacing.lg);
+  // Centred upright on a tablet; spread and clear of the notch on its side.
+  const inset = useLayout().inset(spacing.lg);
   const { user } = useAuth();
   const queryClient = useQueryClient();
 

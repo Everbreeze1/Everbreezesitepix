@@ -12,6 +12,7 @@ import {
   ListRow,
   RowDivider,
   Screen,
+  Columns,
   SectionHeader,
   SkeletonList,
   Text,
@@ -95,45 +96,48 @@ function Usage() {
         )}
       </View>
 
-      {usage && usage.rows.length > 0 ? (
-        <>
-          <SectionHeader title="By team" />
-          <View style={{ paddingHorizontal: spacing.lg }}>
-            <ListGroup>
-              {usage.rows.slice(0, 50).map((row, index) => (
-                <View key={row.teamId ?? `none-${index}`}>
-                  {index > 0 ? <RowDivider inset={false} /> : null}
-                  <ListRow
-                    title={row.teamName}
-                    subtitle={`${row.photoAnalyses} analyses · ${row.walkthroughSummaries} summaries · ${row.autoReports} reports · ${formatBytes(row.storageBytes)}`}
-                    value={formatUsd(row.estimatedAiCostUsd)}
-                  />
-                </View>
-              ))}
-            </ListGroup>
+      {/* Upright one list; on its side the two tables sit side by side. */}
+      <Columns minColumn={340} max={2}>
+        {usage && usage.rows.length > 0 ? (
+          <View style={{ gap: spacing.md }}>
+            <SectionHeader title="By team" />
+            <View style={{ paddingHorizontal: spacing.lg }}>
+              <ListGroup>
+                {usage.rows.slice(0, 50).map((row, index) => (
+                  <View key={row.teamId ?? `none-${index}`}>
+                    {index > 0 ? <RowDivider inset={false} /> : null}
+                    <ListRow
+                      title={row.teamName}
+                      subtitle={`${row.photoAnalyses} analyses · ${row.walkthroughSummaries} summaries · ${row.autoReports} reports · ${formatBytes(row.storageBytes)}`}
+                      value={formatUsd(row.estimatedAiCostUsd)}
+                    />
+                  </View>
+                ))}
+              </ListGroup>
+            </View>
           </View>
-        </>
-      ) : null}
+        ) : null}
 
-      {(libraryQuery.data ?? []).length > 0 ? (
-        <>
-          <SectionHeader title="Content library" />
-          <View style={{ paddingHorizontal: spacing.lg }}>
-            <ListGroup>
-              {(libraryQuery.data ?? []).map((entry, index) => (
-                <View key={entry.kind}>
-                  {index > 0 ? <RowDivider inset={false} /> : null}
-                  <ListRow
-                    title={entry.kind}
-                    subtitle={entry.available ? `${entry.global} global` : "Not available"}
-                    value={String(entry.total)}
-                  />
-                </View>
-              ))}
-            </ListGroup>
+        {(libraryQuery.data ?? []).length > 0 ? (
+          <View style={{ gap: spacing.md }}>
+            <SectionHeader title="Content library" />
+            <View style={{ paddingHorizontal: spacing.lg }}>
+              <ListGroup>
+                {(libraryQuery.data ?? []).map((entry, index) => (
+                  <View key={entry.kind}>
+                    {index > 0 ? <RowDivider inset={false} /> : null}
+                    <ListRow
+                      title={entry.kind}
+                      subtitle={entry.available ? `${entry.global} global` : "Not available"}
+                      value={String(entry.total)}
+                    />
+                  </View>
+                ))}
+              </ListGroup>
+            </View>
           </View>
-        </>
-      ) : null}
+        ) : null}
+      </Columns>
     </Screen>
   );
 }

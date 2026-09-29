@@ -1,13 +1,6 @@
 import { useMemo, useState } from "react";
 import { FolderPlus, Plus, Search } from "@/ui/icons";
-import {
-  FlatList,
-  Pressable,
-  RefreshControl,
-  StyleSheet,
-  View,
-  useWindowDimensions,
-} from "react-native";
+import { FlatList, Pressable, RefreshControl, StyleSheet, View } from "react-native";
 import { router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { PROJECT_STATUS_LABELS, projectDisplayName } from "@everlumen/shared";
@@ -23,7 +16,7 @@ import { FilterGlyph } from "@/components/ProjectGlyphs";
 import { useProjectCrews } from "@/components/ProjectCrewAvatars";
 import { ProjectListCard } from "@/components/ProjectListCard";
 import { ProjectFilterPills, type ProjectFilterOption } from "@/components/ProjectStatusPill";
-import { HIT_TARGET, spacing, useTheme } from "@/theme";
+import { HIT_TARGET, spacing, useLayout, useTheme } from "@/theme";
 import {
   ActionSheet,
   EmptyState,
@@ -103,10 +96,12 @@ export default function ProjectsScreen() {
   const { colorOf } = useLabelCatalog();
 
   /* One column on a phone, a grid of cards on a tablet. */
-  const { width } = useWindowDimensions();
+  const { width, safeSide } = useLayout();
   const columns = cardColumns(width);
   const gap = spacing.md;
-  const pad = columns > 1 ? spacing.xl : spacing.lg;
+  // Plus the side safe area, so a phone on its side keeps the first column
+  // out from under the notch.
+  const pad = (columns > 1 ? spacing.xl : spacing.lg) + safeSide;
   const cellWidth = (width - pad * 2 - gap * (columns - 1)) / columns;
 
   /*

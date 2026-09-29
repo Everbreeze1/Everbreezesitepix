@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { RefreshControl, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
+import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { WORKFLOW_KIND_LABELS, type WorkflowItemKind } from "@everlumen/shared";
@@ -29,7 +29,7 @@ import {
 } from "@/offline/handlers";
 import { enqueue } from "@/offline/outbox";
 import { refreshQueue, requestSync } from "@/offline/sync";
-import { contentInset, spacing, useTheme } from "@/theme";
+import { spacing, useLayout, useTheme } from "@/theme";
 import { Camera, CircleCheck, PenLine, Share2 } from "@/ui/icons";
 import {
   Badge,
@@ -49,8 +49,8 @@ export default function WorkflowRunnerScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const theme = useTheme();
   // A form column, not a stretched phone layout, on a tablet.
-  const { width } = useWindowDimensions();
-  const inset = contentInset(width, spacing.lg);
+  // Centred upright on a tablet; spread and clear of the notch on its side.
+  const inset = useLayout().inset(spacing.lg);
   const { user } = useAuth();
   const queryClient = useQueryClient();
 

@@ -12,7 +12,7 @@ import {
 import { formatAddress, listProjects, type ProjectListItem } from "@/api/projects";
 import { distanceLabel, nearestJobsFirst, ON_SITE_METRES } from "@/api/map-view";
 import { useDeviceLocation } from "@/lib/use-device-location";
-import { radius, spacing, useTheme } from "@/theme";
+import { radius, spacing, useLayout, useTheme } from "@/theme";
 import {
   Badge,
   Button,
@@ -43,6 +43,8 @@ import {
  */
 export default function CaptureStartScreen() {
   const theme = useTheme();
+  // The notch of a phone held on its side; zero upright.
+  const { safeSide } = useLayout();
   const [search, setSearch] = useState("");
   const { here, noFix } = useDeviceLocation();
 
@@ -65,7 +67,9 @@ export default function CaptureStartScreen() {
   }, [data, search, here]);
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+    <View
+      style={{ flex: 1, paddingHorizontal: safeSide, backgroundColor: theme.colors.background }}
+    >
       <View style={{ paddingTop: spacing.lg, gap: spacing.md }}>
         <View style={{ paddingHorizontal: spacing.lg, gap: spacing.xs }}>
           <Text variant="title">Where do these go?</Text>

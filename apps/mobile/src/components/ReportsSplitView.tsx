@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { RefreshControl, ScrollView, useWindowDimensions, View } from "react-native";
 import { isTwoPane } from "@/api/report-builder-view";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { spacing, useTheme } from "@/theme";
 import { FileText } from "@/ui/icons";
 import { EmptyState, Screen } from "@/ui";
@@ -36,6 +37,7 @@ export function ReportsSplitView({
   const theme = useTheme();
   const twoPane = useReportsTwoPane();
   const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
 
   if (!twoPane) {
     return (
@@ -53,8 +55,21 @@ export function ReportsSplitView({
 
   const listWidth = Math.min(400, Math.max(300, Math.round(width * 0.32)));
 
+  /*
+   * A big phone on its side is two-pane too, and its notch sits over one edge.
+   * The list keeps clear of it on the left and the report on the right; both
+   * are zero on a tablet and upright.
+   */
   return (
-    <View style={{ flex: 1, flexDirection: "row", backgroundColor: theme.colors.background }}>
+    <View
+      style={{
+        flex: 1,
+        flexDirection: "row",
+        paddingLeft: insets.left,
+        paddingRight: insets.right,
+        backgroundColor: theme.colors.background,
+      }}
+    >
       <View
         style={{
           width: listWidth,

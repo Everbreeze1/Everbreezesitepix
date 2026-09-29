@@ -45,6 +45,7 @@ import {
   ListRow,
   RowDivider,
   Screen,
+  Columns,
   SectionHeader,
   Text,
 } from "@/ui";
@@ -198,264 +199,284 @@ export default function AccountScreen() {
         The web Settings page's personal sections, native: they are four
         screens of switches and fields, and none of them needs a browser.
       */}
-      <SectionHeader title="You" />
-      <View style={{ paddingHorizontal: spacing.lg }}>
-        <ListGroup>
-          <ListRow
-            icon={UserRound}
-            title="Profile"
-            subtitle="Name, job title and picture"
-            onPress={() => router.push("/settings/profile")}
-          />
-          <RowDivider />
-          <ListRow
-            icon={Mail}
-            title="Email notifications"
-            subtitle="Assignments, mentions, copied in, work done"
-            onPress={() => router.push("/settings/notification-preferences")}
-          />
-          <RowDivider />
-          <ListRow
-            icon={KeyRound}
-            title="Email and password"
-            subtitle="How you sign in"
-            onPress={() => router.push("/settings/security")}
-          />
-          <RowDivider />
-          <ListRow
-            icon={Palette}
-            title="Appearance"
-            subtitle="Light, dark or match the phone"
-            onPress={() => router.push("/settings/appearance")}
-          />
-        </ListGroup>
-      </View>
-
-      <SectionHeader title="Inbox" />
-      <View style={{ paddingHorizontal: spacing.lg }}>
-        <ListGroup>
-          <ListRow
-            icon={Bell}
-            title="Notifications"
-            subtitle={unread === 0 ? "Assignments, mentions and completions" : `${unread} unread`}
-            right={unread > 0 ? <CountBadge count={unread} tone="primary" /> : undefined}
-            unread={unread > 0}
-            onPress={() => router.push("/notifications")}
-          />
-        </ListGroup>
-      </View>
-
-      <SectionHeader title="On this phone" />
-      <View style={{ paddingHorizontal: spacing.lg }}>
-        <ListGroup>
-          <ListRow
-            icon={BellRing}
-            iconTone={push.blocked ? "muted" : "primary"}
-            title="Push notifications"
-            /*
+      {/*
+        Upright, one scroll of sections as before. On its side the
+        sections sit in columns, so the screen is not one long list with
+        empty margins either side.
+      */}
+      <Columns minColumn={340} gap={spacing.md} base={spacing.lg}>
+        <View style={{ gap: spacing.md }}>
+          <SectionHeader title="You" />
+          <View style={{ paddingHorizontal: spacing.lg }}>
+            <ListGroup>
+              <ListRow
+                icon={UserRound}
+                title="Profile"
+                subtitle="Name, job title and picture"
+                onPress={() => router.push("/settings/profile")}
+              />
+              <RowDivider />
+              <ListRow
+                icon={Mail}
+                title="Email notifications"
+                subtitle="Assignments, mentions, copied in, work done"
+                onPress={() => router.push("/settings/notification-preferences")}
+              />
+              <RowDivider />
+              <ListRow
+                icon={KeyRound}
+                title="Email and password"
+                subtitle="How you sign in"
+                onPress={() => router.push("/settings/security")}
+              />
+              <RowDivider />
+              <ListRow
+                icon={Palette}
+                title="Appearance"
+                subtitle="Light, dark or match the phone"
+                onPress={() => router.push("/settings/appearance")}
+              />
+            </ListGroup>
+          </View>
+        </View>
+        <View style={{ gap: spacing.md }}>
+          <SectionHeader title="Inbox" />
+          <View style={{ paddingHorizontal: spacing.lg }}>
+            <ListGroup>
+              <ListRow
+                icon={Bell}
+                title="Notifications"
+                subtitle={
+                  unread === 0 ? "Assignments, mentions and completions" : `${unread} unread`
+                }
+                right={unread > 0 ? <CountBadge count={unread} tone="primary" /> : undefined}
+                unread={unread > 0}
+                onPress={() => router.push("/notifications")}
+              />
+            </ListGroup>
+          </View>
+        </View>
+        <View style={{ gap: spacing.md }}>
+          <SectionHeader title="On this phone" />
+          <View style={{ paddingHorizontal: spacing.lg }}>
+            <ListGroup>
+              <ListRow
+                icon={BellRing}
+                iconTone={push.blocked ? "muted" : "primary"}
+                title="Push notifications"
+                /*
               Named honestly rather than reduced to on/off. "Not available on a
               simulator" and "turned off in your phone settings" send somebody
               to two different places, and collapsing them into "off" sends them
               to the wrong one.
             */
-            subtitle={pushStatusLabel(push.blocked, Boolean(push.token))}
-            right={
-              push.blocked ? (
-                <Badge label="Off" tone="neutral" variant="outline" />
-              ) : push.token ? (
-                <Badge label="On" tone="success" />
-              ) : undefined
-            }
-          />
-          <RowDivider />
-          <ListRow
-            icon={CloudUpload}
-            iconTone={queue.failed > 0 ? "destructive" : "primary"}
-            title="Upload queue"
-            subtitle={
-              pending === 0
-                ? "Everything is uploaded"
-                : queue.failed > 0
-                  ? `${queue.failed} need attention`
-                  : `${queue.pending} waiting to send`
-            }
-            right={<CountBadge count={pending} tone={queue.failed > 0 ? "danger" : "primary"} />}
-            onPress={() => router.push("/queue")}
-          />
-          <RowDivider />
-          {/*
+                subtitle={pushStatusLabel(push.blocked, Boolean(push.token))}
+                right={
+                  push.blocked ? (
+                    <Badge label="Off" tone="neutral" variant="outline" />
+                  ) : push.token ? (
+                    <Badge label="On" tone="success" />
+                  ) : undefined
+                }
+              />
+              <RowDivider />
+              <ListRow
+                icon={CloudUpload}
+                iconTone={queue.failed > 0 ? "destructive" : "primary"}
+                title="Upload queue"
+                subtitle={
+                  pending === 0
+                    ? "Everything is uploaded"
+                    : queue.failed > 0
+                      ? `${queue.failed} need attention`
+                      : `${queue.pending} waiting to send`
+                }
+                right={
+                  <CountBadge count={pending} tone={queue.failed > 0 ? "danger" : "primary"} />
+                }
+                onPress={() => router.push("/queue")}
+              />
+              <RowDivider />
+              {/*
             Next to the upload queue, because both answer "where did my work
             go". A job deleted on the web could not be found from the phone at
             all until now, let alone put back.
           */}
-          <ListRow
-            icon={Trash2}
-            title="Trash"
-            subtitle={
-              trashCounts.data
-                ? trashCounts.data.projects === 0
-                  ? "Nothing deleted"
-                  : `${trashCounts.data.projects} project${trashCounts.data.projects === 1 ? "" : "s"}, recoverable for 60 days`
-                : "Deleted projects, recoverable for 60 days"
-            }
-            right={
-              trashCounts.data?.projects ? (
-                <CountBadge count={trashCounts.data.projects} tone="neutral" />
-              ) : undefined
-            }
-            onPress={() => router.push("/trash")}
-          />
-        </ListGroup>
-      </View>
-
-      <SectionHeader title="Workspace" />
-      <View style={{ paddingHorizontal: spacing.lg }}>
-        <ListGroup>
-          <ListRow
-            icon={Users}
-            title="Team"
-            subtitle="Invite people, set roles"
-            onPress={() => router.push("/team")}
-          />
-          <RowDivider />
-          <ListRow
-            icon={UserPlus}
-            title="Collaborators"
-            subtitle="Outside firms, scoped to named jobs"
-            onPress={() => router.push("/collaborators")}
-          />
-          <RowDivider />
-          <ListRow
-            icon={Building2}
-            title="Workspace settings"
-            subtitle="Business profile, labels"
-            onPress={() => router.push("/workspace")}
-          />
-          <RowDivider />
-          <ListRow
-            icon={LayoutTemplate}
-            title="Templates"
-            subtitle="The checklists your crews start from"
-            onPress={() => router.push("/templates")}
-          />
-          {isOwner ? (
-            <>
-              <RowDivider />
               <ListRow
-                icon={Sparkles}
-                title="Portfolio"
-                subtitle="Your public mini-site of finished work"
-                onPress={() => router.push("/portfolio")}
-              />
-            </>
-          ) : null}
-        </ListGroup>
-      </View>
-
-      <SectionHeader title="Open on the web" />
-      <View style={{ paddingHorizontal: spacing.lg }}>
-        <ListGroup>
-          <ListRow
-            icon={CreditCard}
-            title="Plan and billing"
-            right={<ExternalLinkMark />}
-            disabled={!canOpenWeb}
-            onPress={() => void openOnWeb("/pricing")}
-          />
-        </ListGroup>
-      </View>
-
-      {isAdmin ? (
-        <>
-          <SectionHeader title="Everlumen staff" />
-          <View style={{ paddingHorizontal: spacing.lg }}>
-            <ListGroup>
-              <ListRow
-                icon={Server}
-                title="Admin console"
-                subtitle="Users, teams, feedback, health and security"
-                onPress={() => router.push("/admin")}
+                icon={Trash2}
+                title="Trash"
+                subtitle={
+                  trashCounts.data
+                    ? trashCounts.data.projects === 0
+                      ? "Nothing deleted"
+                      : `${trashCounts.data.projects} project${trashCounts.data.projects === 1 ? "" : "s"}, recoverable for 60 days`
+                    : "Deleted projects, recoverable for 60 days"
+                }
+                right={
+                  trashCounts.data?.projects ? (
+                    <CountBadge count={trashCounts.data.projects} tone="neutral" />
+                  ) : undefined
+                }
+                onPress={() => router.push("/trash")}
               />
             </ListGroup>
           </View>
-        </>
-      ) : null}
-
-      <SectionHeader title="Help" />
-      <View style={{ paddingHorizontal: spacing.lg }}>
-        <ListGroup>
-          <ListRow
-            icon={CircleQuestionMark}
-            title="Knowledge base"
-            right={<ExternalLinkMark />}
-            disabled={!canOpenWeb}
-            onPress={() => void openOnWeb("/help")}
-          />
-          <RowDivider />
-          <ListRow
-            icon={LifeBuoy}
-            title="Report a problem"
-            subtitle="Send it from here, with the recent errors attached"
-            onPress={() => router.push("/report-issue")}
-          />
-          <RowDivider />
+        </View>
+        <View style={{ gap: spacing.md }}>
+          <SectionHeader title="Workspace" />
+          <View style={{ paddingHorizontal: spacing.lg }}>
+            <ListGroup>
+              <ListRow
+                icon={Users}
+                title="Team"
+                subtitle="Invite people, set roles"
+                onPress={() => router.push("/team")}
+              />
+              <RowDivider />
+              <ListRow
+                icon={UserPlus}
+                title="Collaborators"
+                subtitle="Outside firms, scoped to named jobs"
+                onPress={() => router.push("/collaborators")}
+              />
+              <RowDivider />
+              <ListRow
+                icon={Building2}
+                title="Workspace settings"
+                subtitle="Business profile, labels"
+                onPress={() => router.push("/workspace")}
+              />
+              <RowDivider />
+              <ListRow
+                icon={LayoutTemplate}
+                title="Templates"
+                subtitle="The checklists your crews start from"
+                onPress={() => router.push("/templates")}
+              />
+              {isOwner ? (
+                <>
+                  <RowDivider />
+                  <ListRow
+                    icon={Sparkles}
+                    title="Portfolio"
+                    subtitle="Your public mini-site of finished work"
+                    onPress={() => router.push("/portfolio")}
+                  />
+                </>
+              ) : null}
+            </ListGroup>
+          </View>
+        </View>
+        <View style={{ gap: spacing.md }}>
+          <SectionHeader title="Open on the web" />
+          <View style={{ paddingHorizontal: spacing.lg }}>
+            <ListGroup>
+              <ListRow
+                icon={CreditCard}
+                title="Plan and billing"
+                right={<ExternalLinkMark />}
+                disabled={!canOpenWeb}
+                onPress={() => void openOnWeb("/pricing")}
+              />
+            </ListGroup>
+          </View>
+        </View>
+        <View style={{ gap: spacing.md }}>
+          {isAdmin ? (
+            <>
+              <SectionHeader title="Everlumen staff" />
+              <View style={{ paddingHorizontal: spacing.lg }}>
+                <ListGroup>
+                  <ListRow
+                    icon={Server}
+                    title="Admin console"
+                    subtitle="Users, teams, feedback, health and security"
+                    onPress={() => router.push("/admin")}
+                  />
+                </ListGroup>
+              </View>
+            </>
+          ) : null}
+        </View>
+        <View style={{ gap: spacing.md }}>
+          <SectionHeader title="Help" />
+          <View style={{ paddingHorizontal: spacing.lg }}>
+            <ListGroup>
+              <ListRow
+                icon={CircleQuestionMark}
+                title="Knowledge base"
+                right={<ExternalLinkMark />}
+                disabled={!canOpenWeb}
+                onPress={() => void openOnWeb("/help")}
+              />
+              <RowDivider />
+              <ListRow
+                icon={LifeBuoy}
+                title="Report a problem"
+                subtitle="Send it from here, with the recent errors attached"
+                onPress={() => router.push("/report-issue")}
+              />
+              <RowDivider />
+              {/*
+               * The health probe stays. It is the fastest way to tell "the app is
+               * broken" apart from "this phone has no route to the API", which is
+               * the question support actually has to answer first.
+               */}
+              <ListRow
+                icon={Server}
+                title="API status"
+                subtitle={health ?? "Checking"}
+                right={
+                  healthy === null ? null : (
+                    <Badge label={healthy ? "OK" : "Down"} tone={healthy ? "success" : "danger"} />
+                  )
+                }
+              />
+            </ListGroup>
+          </View>
+        </View>
+        <View style={{ gap: spacing.md }}>
           {/*
-           * The health probe stays. It is the fastest way to tell "the app is
-           * broken" apart from "this phone has no route to the API", which is
-           * the question support actually has to answer first.
-           */}
-          <ListRow
-            icon={Server}
-            title="API status"
-            subtitle={health ?? "Checking"}
-            right={
-              healthy === null ? null : (
-                <Badge label={healthy ? "OK" : "Down"} tone={healthy ? "success" : "danger"} />
-              )
-            }
-          />
-        </ListGroup>
-      </View>
-
-      {/*
         Below sign-out, and visually quieter than it. Google requires this route
         to exist and be reachable; it does not require it to be the first thing
         somebody meets on the account screen.
       */}
-      <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.xl }}>
-        <ListGroup>
-          <ListRow
-            icon={UserX}
-            iconTone="destructive"
-            title="Close my account"
-            subtitle="Deletes your account and the work you made"
-            destructive
-            onPress={() => router.push("/close-account")}
-          />
-        </ListGroup>
-      </View>
+          <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.xl }}>
+            <ListGroup>
+              <ListRow
+                icon={UserX}
+                iconTone="destructive"
+                title="Close my account"
+                subtitle="Deletes your account and the work you made"
+                destructive
+                onPress={() => router.push("/close-account")}
+              />
+            </ListGroup>
+          </View>
 
-      <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.xl }}>
-        <Button
-          label="Sign out"
-          variant="destructive"
-          icon={LogOut}
-          fullWidth
-          onPress={() => {
-            void (async () => {
-              /*
+          <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.xl }}>
+            <Button
+              label="Sign out"
+              variant="destructive"
+              icon={LogOut}
+              fullWidth
+              onPress={() => {
+                void (async () => {
+                  /*
                 Unregister before signing out, not after. After, the session is
                 already gone and the RLS delete would be refused, leaving the
                 phone receiving notifications for somebody who is no longer
                 signed in on it.
               */
-              await push.unregister();
-              await signOut();
-              router.replace("/login");
-            })();
-          }}
-        />
-      </View>
+                  await push.unregister();
+                  await signOut();
+                  router.replace("/login");
+                })();
+              }}
+            />
+          </View>
+        </View>
+      </Columns>
     </Screen>
   );
 }

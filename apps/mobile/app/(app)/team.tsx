@@ -47,7 +47,7 @@ import {
   toggledProject,
 } from "@/api/member-projects-view";
 import { listProjects } from "@/api/projects";
-import { radius, spacing, useTheme } from "@/theme";
+import { radius, spacing, useLayout, useTheme } from "@/theme";
 import {
   Check,
   FolderKanban,
@@ -108,6 +108,8 @@ export default function TeamScreen() {
   const [inviteError, setInviteError] = useState<string | null>(null);
 
   const theme = useTheme();
+  // Inner lists shrink on a phone held on its side, so they fit in the sheet.
+  const layout = useLayout();
   const [actionsFor, setActionsFor] = useState<TeamMember | null>(null);
   const [roleFor, setRoleFor] = useState<TeamMember | null>(null);
   /** The Restricted member whose jobs are being chosen, and the picked set. */
@@ -515,7 +517,7 @@ export default function TeamScreen() {
             Could not load the jobs list. Close this and try again.
           </Text>
         ) : (
-          <ScrollView style={{ maxHeight: 380 }}>
+          <ScrollView style={{ maxHeight: layout.listMaxHeight(380) }}>
             <View style={{ gap: spacing.xs }}>
               {sortedProjects(projectsQuery.data ?? [], scopePicked).map((project) => {
                 const on = scopePicked.includes(project.id);

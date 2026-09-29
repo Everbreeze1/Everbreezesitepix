@@ -35,7 +35,9 @@ import {
 export default function ProjectWalkthroughsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const theme = useTheme();
-  const { inset } = useCardPage();
+  // Cards two or three across on a tablet and on a phone held on its side.
+  const { inset, columns, width } = useCardPage();
+  const cell = columns > 1 ? (width - inset * 2 - spacing.lg * (columns - 1)) / columns : undefined;
   const { session } = useAuth();
 
   /*
@@ -126,8 +128,11 @@ export default function ProjectWalkthroughsScreen() {
           />
         ) : (
           <FlatList
+            key={`cols-${columns}`}
             data={walkthroughs}
             keyExtractor={(item) => item.id}
+            numColumns={columns}
+            columnWrapperStyle={columns > 1 ? { gap: spacing.lg } : undefined}
             contentContainerStyle={{
               paddingHorizontal: inset,
               paddingTop: spacing.lg,
@@ -195,18 +200,20 @@ export default function ProjectWalkthroughsScreen() {
               const summary = pairs.get(item.id) ?? null;
               const status = aiSummaryStatus(item, summary);
               return (
-                <WalkthroughCard
-                  walkthrough={item}
-                  status={status}
-                  firstLine={summaryFirstLine(summary?.markdown ?? null)}
-                  author={recordedBy(
-                    authorsQuery.data?.get(item.id),
-                    session?.user?.id ?? null,
-                    names,
-                  )}
-                  onWatch={() => openDetail(item.id, item.video_path ? { play: "1" } : {})}
-                  onRead={() => openDetail(item.id, { tab: "summary" })}
-                />
+                <View style={cell ? { width: cell } : undefined}>
+                  <WalkthroughCard
+                    walkthrough={item}
+                    status={status}
+                    firstLine={summaryFirstLine(summary?.markdown ?? null)}
+                    author={recordedBy(
+                      authorsQuery.data?.get(item.id),
+                      session?.user?.id ?? null,
+                      names,
+                    )}
+                    onWatch={() => openDetail(item.id, item.video_path ? { play: "1" } : {})}
+                    onRead={() => openDetail(item.id, { tab: "summary" })}
+                  />
+                </View>
               );
             }}
           />

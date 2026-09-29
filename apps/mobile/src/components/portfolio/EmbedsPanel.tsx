@@ -9,9 +9,9 @@ import {
   type PortfolioSite,
 } from "@/api/portfolio-view";
 import { openShareSheet } from "@/api/sharing";
-import { radius, spacing, useRightRail, useTheme } from "@/theme";
+import { radius, spacing, useLayout, useRightRail, useTheme } from "@/theme";
 import { Code, Grid3x3, MapPin, RefreshCw, Share2 } from "@/ui/icons";
-import { Button, Chip, EmptyState, ListGroup, ListRow, RowDivider, Sheet, Text } from "@/ui";
+import { Button, Card, Chip, EmptyState, ListGroup, ListRow, RowDivider, Sheet, Text } from "@/ui";
 import { SwitchRow } from "./SwitchRow";
 
 /**
@@ -23,6 +23,10 @@ import { SwitchRow } from "./SwitchRow";
  * the options for one never sit in the way of the other. A phone has no clipboard
  * dependency here, so the snippet goes through the share sheet, which offers
  * Copy on both platforms and also reaches whoever maintains the website.
+ *
+ * On a screen held on its side the two embeds sit next to each other, each
+ * with its options and snippet open, since there is room for both and neither
+ * is then in the way of the other.
  */
 export function EmbedsPanel({
   site,
@@ -35,6 +39,8 @@ export function EmbedsPanel({
 }) {
   const theme = useTheme();
   const rail = useRightRail();
+  const layout = useLayout();
+  const sideBySide = layout.spread && layout.columns(300, 2) > 1;
   const [options, setOptions] = useState<EmbedOptions>(DEFAULT_EMBED_OPTIONS);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -103,12 +109,134 @@ export function EmbedsPanel({
     </View>
   );
 
+  const embedOptions = (kind: "gallery" | "map") =>
+    kind === "map" ? (
+      <>
+        {choices(
+          "Height",
+          ["360", "460", "600"] as const,
+          options.mapHeight,
+          (n) => `${n} px`,
+          (n) => set("mapHeight", n),
+        )}
+        <SwitchRow
+          label="Pins in your accent colour"
+          value={options.pinColor}
+          onChange={(next) => set("pinColor", next)}
+        />
+      </>
+    ) : (
+      <>
+        {choices(
+          "Columns",
+          ["2", "3", "4"] as const,
+          options.columns,
+          (n) => `${n} across`,
+          (n) => set("columns", n),
+        )}
+        {choices(
+          "Show at most",
+          ["12", "24", "60"] as const,
+          options.limit,
+          (n) => `${n} projects`,
+          (n) => set("limit", n),
+        )}
+        <SwitchRow
+          label="Service filters"
+          value={options.filters}
+          onChange={(next) => set("filters", next)}
+        />
+      </>
+    );
+
+  const snippetBox = (text: string) => (
+    <View
+      style={{
+        padding: spacing.md,
+        borderRadius: radius.md,
+        backgroundColor: theme.colors.secondary,
+      }}
+    >
+      <Text variant="caption" selectable style={{ fontFamily: "monospace" }}>
+        {text}
+      </Text>
+    </View>
+  );
+
+  const shareButton = (kind: "gallery" | "map", fullWidth: boolean) => (
+    <Button
+      label="Share the snippet"
+      icon={Share2}
+      fullWidth={fullWidth}
+      onPress={() =>
+        void openShareSheet(
+          kind === "map" ? map : gallery,
+          kind === "map" ? "Everlumen map embed" : "Everlumen gallery embed",
+        )
+      }
+    />
+  );
+
+  const intro = (
+    <Text variant="caption" tone="muted">
+      Put your work on the website you already have. Pick one, then share the snippet with whoever
+      looks after your website.
+    </Text>
+  );
+
+  const rotateRow = (
+    <>
+      {note ? <Text variant="caption">{note}</Text> : null}
+      <View style={{ alignItems: rail ? "flex-end" : "flex-start" }}>
+        <Button
+          label="Rotate embed key"
+          icon={RefreshCw}
+          size="sm"
+          variant="ghost"
+          disabled={busy}
+          onPress={rotate}
+        />
+      </View>
+    </>
+  );
+
+  if (sideBySide) {
+    const panel = (kind: "gallery" | "map") => (
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Card>
+          <View style={{ gap: spacing.md }}>
+            <View style={{ gap: 2 }}>
+              <Text variant="bodyStrong" accessibilityRole="header">
+                {kind === "map" ? "Project map" : "Website gallery"}
+              </Text>
+              <Text variant="caption" tone="muted">
+                {kind === "map"
+                  ? "A map of where you have worked."
+                  : "Best on an Our work or Gallery page."}
+              </Text>
+            </View>
+            {embedOptions(kind)}
+            {snippetBox(kind === "map" ? map : gallery)}
+            <View style={{ alignItems: "flex-end" }}>{shareButton(kind, false)}</View>
+          </View>
+        </Card>
+      </View>
+    );
+    return (
+      <View style={{ gap: spacing.md }}>
+        {intro}
+        <View style={{ flexDirection: "row", alignItems: "flex-start", gap: spacing.md }}>
+          {panel("gallery")}
+          {panel("map")}
+        </View>
+        {rotateRow}
+      </View>
+    );
+  }
+
   return (
     <View style={{ gap: spacing.md }}>
-      <Text variant="caption" tone="muted">
-        Put your work on the website you already have. Pick one, then share the snippet with whoever
-        looks after your website.
-      </Text>
+      {intro}
       <ListGroup>
         <ListRow
           icon={Grid3x3}
@@ -125,17 +253,7 @@ export function EmbedsPanel({
         />
       </ListGroup>
 
-      {note ? <Text variant="caption">{note}</Text> : null}
-      <View style={{ alignItems: rail ? "flex-end" : "flex-start" }}>
-        <Button
-          label="Rotate embed key"
-          icon={RefreshCw}
-          size="sm"
-          variant="ghost"
-          disabled={busy}
-          onPress={rotate}
-        />
-      </View>
+      {rotateRow}
 
       <Sheet
         visible={open !== null}
@@ -148,69 +266,12 @@ export function EmbedsPanel({
         }
         footer={
           <View style={{ alignItems: rail ? "flex-end" : "stretch" }}>
-            <Button
-              label="Share the snippet"
-              icon={Share2}
-              fullWidth={!rail}
-              onPress={() =>
-                void openShareSheet(
-                  snippet,
-                  open === "map" ? "Everlumen map embed" : "Everlumen gallery embed",
-                )
-              }
-            />
+            {shareButton(open === "map" ? "map" : "gallery", !rail)}
           </View>
         }
       >
-        {open === "map" ? (
-          <>
-            {choices(
-              "Height",
-              ["360", "460", "600"] as const,
-              options.mapHeight,
-              (n) => `${n} px`,
-              (n) => set("mapHeight", n),
-            )}
-            <SwitchRow
-              label="Pins in your accent colour"
-              value={options.pinColor}
-              onChange={(next) => set("pinColor", next)}
-            />
-          </>
-        ) : (
-          <>
-            {choices(
-              "Columns",
-              ["2", "3", "4"] as const,
-              options.columns,
-              (n) => `${n} across`,
-              (n) => set("columns", n),
-            )}
-            {choices(
-              "Show at most",
-              ["12", "24", "60"] as const,
-              options.limit,
-              (n) => `${n} projects`,
-              (n) => set("limit", n),
-            )}
-            <SwitchRow
-              label="Service filters"
-              value={options.filters}
-              onChange={(next) => set("filters", next)}
-            />
-          </>
-        )}
-        <View
-          style={{
-            padding: spacing.md,
-            borderRadius: radius.md,
-            backgroundColor: theme.colors.secondary,
-          }}
-        >
-          <Text variant="caption" selectable style={{ fontFamily: "monospace" }}>
-            {snippet}
-          </Text>
-        </View>
+        {embedOptions(open === "map" ? "map" : "gallery")}
+        {snippetBox(snippet)}
       </Sheet>
     </View>
   );

@@ -1,7 +1,7 @@
 import { Children, isValidElement, type ReactNode } from "react";
-import { Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { cardColumns, cardPageInset, radius, spacing, useTheme } from "@/theme";
+import { radius, spacing, useLayout, useTheme } from "@/theme";
 import { ChevronLeft, EllipsisVertical } from "./icons";
 import { Card } from "./Card";
 import { IconButton } from "./Button";
@@ -28,10 +28,18 @@ import { Text } from "./Text";
  *   centred and capped so nothing stretches edge to edge.
  */
 
-/** Page gutter and column count for the current window. Re-read on rotation. */
+/**
+ * Page gutter and column count for the current window. Re-read on rotation.
+ * Upright: capped at 960pt, two across from 768pt. On its side: spread to the
+ * window, clear of the notch, three across once there is room.
+ */
 export function useCardPage(): { inset: number; columns: number; width: number } {
-  const { width } = useWindowDimensions();
-  return { inset: cardPageInset(width, spacing.lg), columns: cardColumns(width), width };
+  const layout = useLayout();
+  return {
+    inset: layout.cardInset(spacing.lg),
+    columns: layout.cardColumns(spacing.lg),
+    width: layout.width,
+  };
 }
 
 export function SubPageHeader({

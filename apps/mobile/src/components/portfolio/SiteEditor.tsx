@@ -30,7 +30,7 @@ import {
   type SiteDraft,
   type SiteSectionId,
 } from "@/api/portfolio-view";
-import { spacing, useRightRail } from "@/theme";
+import { spacing, useLayout, useRightRail } from "@/theme";
 import {
   Building2,
   ChevronRight,
@@ -60,6 +60,7 @@ import {
   RowDivider,
   SectionHeader,
   Sheet,
+  SplitPane,
   Text,
   type LucideIcon,
 } from "@/ui";
@@ -88,6 +89,10 @@ const SECTION_ICONS: Record<SiteSectionId, LucideIcon> = {
  *
  * One draft covers every section and one Save sends only what changed
  * (`sitePatch`), so formatting made on the web survives a phone save.
+ *
+ * On a screen held on its side there is room for both at once, so the list
+ * sits on the left and the chosen section's fields on the right, the way a
+ * tablet's own Settings app works, instead of a sheet covering the list.
  */
 export function SiteEditor({ site, onSaved }: { site: PortfolioSite; onSaved: () => void }) {
   const rail = useRightRail();
@@ -97,6 +102,7 @@ export function SiteEditor({ site, onSaved }: { site: PortfolioSite; onSaved: ()
   const [message, setMessage] = useState<string | null>(null);
   const [slugIssue, setSlugIssue] = useState<string | null>(null);
   const [open, setOpen] = useState<SiteSectionId | null>(null);
+  const split = useLayout().split();
 
   useEffect(() => setDraft(original), [original]);
 
@@ -137,7 +143,8 @@ export function SiteEditor({ site, onSaved }: { site: PortfolioSite; onSaved: ()
     try {
       await updatePortfolio(patch);
       setMessage("Site saved.");
-      setOpen(null);
+      // Side by side the section stays on screen; a sheet closes.
+      if (!split) setOpen(null);
       onSaved();
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "The site was not saved.");
@@ -268,7 +275,9 @@ export function SiteEditor({ site, onSaved }: { site: PortfolioSite; onSaved: ()
     }
   };
 
-  const index = open ? SITE_SECTIONS.findIndex((s) => s.id === open) : -1;
+  // Side by side there is always a section showing: the first, until another is picked.
+  const shown = open ?? (split ? (SITE_SECTIONS[0]?.id ?? null) : null);
+  const index = shown ? SITE_SECTIONS.findIndex((s) => s.id === shown) : -1;
   const section = index >= 0 ? SITE_SECTIONS[index] : null;
   const next = index >= 0 ? SITE_SECTIONS[index + 1] : undefined;
 
@@ -283,8 +292,44 @@ export function SiteEditor({ site, onSaved }: { site: PortfolioSite; onSaved: ()
     />
   );
 
-  return (
-    <View style={{ gap: spacing.md }}>
+  const sectionFooter = (
+    <View
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        gap: spacing.sm,
+        justifyContent: rail ? "flex-end" : "space-between",
+      }}
+    >
+      {next ? (
+        <Button
+          label={next.label}
+          icon={ChevronRight}
+          size="sm"
+          variant="ghost"
+          onPress={() => setOpen(next.id)}
+        />
+      ) : (
+        <Text variant="caption" tone="muted">
+          That is every section
+        </Text>
+      )}
+      {saveButton}
+    </View>
+  );
+
+  const sectionBody = section ? (
+    <>
+      <Text variant="caption" tone="muted">
+        {section.hint}
+      </Text>
+      {message ? <Text variant="caption">{message}</Text> : null}
+      {fieldsFor(section.id)}
+    </>
+  ) : null;
+
+  const overview = (
+    <>
       <Card>
         <View style={{ gap: spacing.sm }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
@@ -332,47 +377,46 @@ export function SiteEditor({ site, onSaved }: { site: PortfolioSite; onSaved: ()
           );
         })}
       </ListGroup>
+    </>
+  );
 
+  if (split) {
+    return (
+      <SplitPane
+        list={overview}
+        detail={
+          section ? (
+            <Card>
+              <View style={{ gap: spacing.md }}>
+                <View style={{ gap: 2 }}>
+                  <Text variant="title" accessibilityRole="header">
+                    {section.label}
+                  </Text>
+                  <Text variant="caption" tone="muted">
+                    {section.question}
+                  </Text>
+                </View>
+                {sectionBody}
+                {sectionFooter}
+              </View>
+            </Card>
+          ) : null
+        }
+      />
+    );
+  }
+
+  return (
+    <View style={{ gap: spacing.md }}>
+      {overview}
       <Sheet
         visible={section !== null}
         onClose={() => setOpen(null)}
         title={section?.label}
         subtitle={section?.question}
-        footer={
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: spacing.sm,
-              justifyContent: rail ? "flex-end" : "space-between",
-            }}
-          >
-            {next ? (
-              <Button
-                label={next.label}
-                icon={ChevronRight}
-                size="sm"
-                variant="ghost"
-                onPress={() => setOpen(next.id)}
-              />
-            ) : (
-              <Text variant="caption" tone="muted">
-                That is every section
-              </Text>
-            )}
-            {saveButton}
-          </View>
-        }
+        footer={sectionFooter}
       >
-        {section ? (
-          <>
-            <Text variant="caption" tone="muted">
-              {section.hint}
-            </Text>
-            {message ? <Text variant="caption">{message}</Text> : null}
-            {fieldsFor(section.id)}
-          </>
-        ) : null}
+        {sectionBody}
       </Sheet>
     </View>
   );

@@ -58,3 +58,4 @@ export {
   useCardPage,
   type StatusTone,
 } from "./SubPage";
+export { Columns, SplitPane } from "./Columns";

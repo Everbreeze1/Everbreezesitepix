@@ -14,6 +14,7 @@ import {
   ListRow,
   RowDivider,
   Screen,
+  Columns,
   SectionHeader,
   SkeletonList,
   Text,
@@ -90,77 +91,82 @@ function Health() {
         )}
       </View>
 
-      {health && !health.unavailable && health.ops.length > 0 ? (
-        <>
-          <SectionHeader title="Busiest ops" />
-          <View style={{ paddingHorizontal: spacing.lg }}>
-            <ListGroup>
-              {health.ops.slice(0, 20).map((op, index) => (
-                <View key={op.op}>
-                  {index > 0 ? <RowDivider inset={false} /> : null}
-                  <ListRow
-                    title={op.op}
-                    subtitle={`${op.requests} requests · ${op.errors} errors (${formatRate(op.errorRate)}) · p95 ${op.p95Ms ?? 0} ms`}
-                  />
-                </View>
-              ))}
-            </ListGroup>
+      {/* Upright one list; on its side the sections sit in columns. */}
+      <Columns minColumn={340}>
+        {health && !health.unavailable && health.ops.length > 0 ? (
+          <View style={{ gap: spacing.md }}>
+            <SectionHeader title="Busiest ops" />
+            <View style={{ paddingHorizontal: spacing.lg }}>
+              <ListGroup>
+                {health.ops.slice(0, 20).map((op, index) => (
+                  <View key={op.op}>
+                    {index > 0 ? <RowDivider inset={false} /> : null}
+                    <ListRow
+                      title={op.op}
+                      subtitle={`${op.requests} requests · ${op.errors} errors (${formatRate(op.errorRate)}) · p95 ${op.p95Ms ?? 0} ms`}
+                    />
+                  </View>
+                ))}
+              </ListGroup>
+            </View>
           </View>
-        </>
-      ) : null}
+        ) : null}
 
-      {health && !health.unavailable && health.recentFailures.length > 0 ? (
-        <>
-          <SectionHeader title="Recent failures" />
-          <View style={{ paddingHorizontal: spacing.lg, gap: spacing.sm }}>
-            {health.recentFailures.slice(0, 30).map((failure) => (
-              <Card key={failure.id}>
-                <View style={{ gap: 2 }}>
-                  <Text variant="bodyStrong">
-                    {failure.httpStatus} {failure.op ?? failure.route}
-                  </Text>
-                  {failure.message ? (
-                    <Text variant="caption" numberOfLines={3}>
-                      {failure.message}
+        {health && !health.unavailable && health.recentFailures.length > 0 ? (
+          <View style={{ gap: spacing.md }}>
+            <SectionHeader title="Recent failures" />
+            <View style={{ paddingHorizontal: spacing.lg, gap: spacing.sm }}>
+              {health.recentFailures.slice(0, 30).map((failure) => (
+                <Card key={failure.id}>
+                  <View style={{ gap: 2 }}>
+                    <Text variant="bodyStrong">
+                      {failure.httpStatus} {failure.op ?? failure.route}
                     </Text>
-                  ) : null}
-                  <Text variant="caption" tone="muted">
-                    {failure.errorCode ?? "error"} · {relativeTime(failure.createdAt)}
-                  </Text>
-                </View>
-              </Card>
-            ))}
+                    {failure.message ? (
+                      <Text variant="caption" numberOfLines={3}>
+                        {failure.message}
+                      </Text>
+                    ) : null}
+                    <Text variant="caption" tone="muted">
+                      {failure.errorCode ?? "error"} · {relativeTime(failure.createdAt)}
+                    </Text>
+                  </View>
+                </Card>
+              ))}
+            </View>
           </View>
-        </>
-      ) : null}
+        ) : null}
 
-      <SectionHeader title="Scheduled jobs" />
-      <View style={{ paddingHorizontal: spacing.lg, gap: spacing.sm }}>
-        {jobsQuery.data?.unavailable ? (
-          <Text variant="caption" tone="muted">
-            {jobsQuery.data.unavailable}
-          </Text>
-        ) : (
-          <ListGroup>
-            {(jobsQuery.data?.jobs ?? []).map((job, index) => (
-              <View key={job.job}>
-                {index > 0 ? <RowDivider inset={false} /> : null}
-                <ListRow
-                  title={job.job}
-                  subtitle={[
-                    job.lastRunAt ? `Last ran ${relativeTime(job.lastRunAt)}` : "Never ran",
-                    `${job.runs24h} runs, ${job.failures24h} failed in 24h`,
-                    job.lastError,
-                  ]
-                    .filter(Boolean)
-                    .join("\n")}
-                  value={job.lastOk === false ? "Failing" : job.lastOk ? "OK" : undefined}
-                />
-              </View>
-            ))}
-          </ListGroup>
-        )}
-      </View>
+        <View style={{ gap: spacing.md }}>
+          <SectionHeader title="Scheduled jobs" />
+          <View style={{ paddingHorizontal: spacing.lg, gap: spacing.sm }}>
+            {jobsQuery.data?.unavailable ? (
+              <Text variant="caption" tone="muted">
+                {jobsQuery.data.unavailable}
+              </Text>
+            ) : (
+              <ListGroup>
+                {(jobsQuery.data?.jobs ?? []).map((job, index) => (
+                  <View key={job.job}>
+                    {index > 0 ? <RowDivider inset={false} /> : null}
+                    <ListRow
+                      title={job.job}
+                      subtitle={[
+                        job.lastRunAt ? `Last ran ${relativeTime(job.lastRunAt)}` : "Never ran",
+                        `${job.runs24h} runs, ${job.failures24h} failed in 24h`,
+                        job.lastError,
+                      ]
+                        .filter(Boolean)
+                        .join("\n")}
+                      value={job.lastOk === false ? "Failing" : job.lastOk ? "OK" : undefined}
+                    />
+                  </View>
+                ))}
+              </ListGroup>
+            )}
+          </View>
+        </View>
+      </Columns>
     </Screen>
   );
 }

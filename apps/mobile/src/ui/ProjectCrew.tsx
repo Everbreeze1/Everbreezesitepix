@@ -16,7 +16,7 @@ import {
   sortedRoster,
   toggled,
 } from "@/api/project-assignees-view";
-import { radius, spacing, useTheme } from "@/theme";
+import { radius, spacing, useLayout, useTheme } from "@/theme";
 import { Check, HardHat, Users } from "./icons";
 import { Avatar, AvatarStack } from "./Avatar";
 import { Button } from "./Button";
@@ -51,6 +51,8 @@ export function ProjectCrew({
   compact?: boolean;
 }) {
   const theme = useTheme();
+  // Inner lists shrink on a phone held on its side, so they fit in the sheet.
+  const layout = useLayout();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
@@ -244,7 +246,7 @@ export function ProjectCrew({
             body="Invite people to your team and you can put them on a job."
           />
         ) : (
-          <ScrollView style={{ maxHeight: 400 }}>
+          <ScrollView style={{ maxHeight: layout.listMaxHeight(400) }}>
             <View style={{ gap: spacing.xs }}>
               {roster.map((person) => (
                 <CrewRow

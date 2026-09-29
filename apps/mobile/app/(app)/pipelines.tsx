@@ -225,8 +225,14 @@ export default function PipelinesScreen() {
 
   const columnWidth = boardColumnWidth(width);
   const columnGap = spacing.md;
+  /*
+   * The columns fill the board's height. The floor used to be 240pt, which on
+   * a phone held on its side (about 180pt of board under the search and the
+   * summary) pushed the bottom of every column off the screen where it could
+   * not be scrolled to. 160 still shows two cards.
+   */
   const columnHeight = Math.max(
-    240,
+    160,
     boardHeight - spacing.md - Math.max(insets.bottom, spacing.md),
   );
 
@@ -265,7 +271,15 @@ export default function PipelinesScreen() {
     <>
       <Stack.Screen options={{ title: board?.name ?? "Pipelines" }} />
 
-      <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+      <View
+        style={{
+          flex: 1,
+          // Clear of the notch of a phone on its side; zero upright.
+          paddingLeft: insets.left,
+          paddingRight: insets.right,
+          backgroundColor: theme.colors.background,
+        }}
+      >
         <View style={{ paddingTop: spacing.md, gap: spacing.sm }}>
           {/*
             The board picker only appears when there is more than one. A single

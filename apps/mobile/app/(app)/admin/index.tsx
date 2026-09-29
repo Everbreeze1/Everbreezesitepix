@@ -23,6 +23,7 @@ import {
   ListRow,
   RowDivider,
   Screen,
+  Columns,
   SectionHeader,
   SkeletonList,
   Text,
@@ -123,55 +124,62 @@ function AdminHome() {
         )}
       </View>
 
-      <SectionHeader title="Sections" />
-      <View style={{ paddingHorizontal: spacing.lg }}>
-        <ListGroup>
-          {ADMIN_SECTIONS.map((section, index) => (
-            <View key={section.id}>
-              {index > 0 ? <RowDivider /> : null}
-              <ListRow
-                icon={SECTION_ICONS[section.id]}
-                title={section.label}
-                subtitle={section.hint}
-                onPress={() => router.push(`/admin/${section.id}`)}
-              />
-            </View>
-          ))}
-        </ListGroup>
-      </View>
-
-      {m && m.recentTeams.length > 0 ? (
-        <>
-          <SectionHeader title="Recent teams" />
+      {/* Upright one list; on its side the sections sit in columns. */}
+      <Columns minColumn={340}>
+        <View style={{ gap: spacing.md }}>
+          <SectionHeader title="Sections" />
           <View style={{ paddingHorizontal: spacing.lg }}>
             <ListGroup>
-              {m.recentTeams.map((team, index) => (
-                <View key={team.id}>
+              {ADMIN_SECTIONS.map((section, index) => (
+                <View key={section.id}>
                   {index > 0 ? <RowDivider /> : null}
                   <ListRow
-                    icon={Building2}
-                    title={team.name}
-                    subtitle={`${team.plan} · ${team.subscriptionStatus} · ${relativeTime(team.createdAt)}`}
-                    onPress={() => router.push(`/admin/team/${team.id}`)}
+                    icon={SECTION_ICONS[section.id]}
+                    title={section.label}
+                    subtitle={section.hint}
+                    onPress={() => router.push(`/admin/${section.id}`)}
                   />
                 </View>
               ))}
             </ListGroup>
           </View>
-        </>
-      ) : null}
+        </View>
 
-      <SectionHeader title="Still on the web" />
-      <View style={{ paddingHorizontal: spacing.lg, gap: spacing.sm }}>
-        <ListGroup>
-          {WEB_ONLY_ADMIN.map((item, index) => (
-            <View key={item}>
-              {index > 0 ? <RowDivider inset={false} /> : null}
-              <ListRow title={item} />
+        {m && m.recentTeams.length > 0 ? (
+          <View style={{ gap: spacing.md }}>
+            <SectionHeader title="Recent teams" />
+            <View style={{ paddingHorizontal: spacing.lg }}>
+              <ListGroup>
+                {m.recentTeams.map((team, index) => (
+                  <View key={team.id}>
+                    {index > 0 ? <RowDivider /> : null}
+                    <ListRow
+                      icon={Building2}
+                      title={team.name}
+                      subtitle={`${team.plan} · ${team.subscriptionStatus} · ${relativeTime(team.createdAt)}`}
+                      onPress={() => router.push(`/admin/team/${team.id}`)}
+                    />
+                  </View>
+                ))}
+              </ListGroup>
             </View>
-          ))}
-        </ListGroup>
-      </View>
+          </View>
+        ) : null}
+
+        <View style={{ gap: spacing.md }}>
+          <SectionHeader title="Still on the web" />
+          <View style={{ paddingHorizontal: spacing.lg, gap: spacing.sm }}>
+            <ListGroup>
+              {WEB_ONLY_ADMIN.map((item, index) => (
+                <View key={item}>
+                  {index > 0 ? <RowDivider inset={false} /> : null}
+                  <ListRow title={item} />
+                </View>
+              ))}
+            </ListGroup>
+          </View>
+        </View>
+      </Columns>
     </Screen>
   );
 }

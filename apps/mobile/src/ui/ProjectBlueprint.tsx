@@ -18,7 +18,7 @@ import {
   sortedBlueprints,
 } from "@/api/blueprints-view";
 import { getMyTeam } from "@/api/team";
-import { radius, spacing, useTheme } from "@/theme";
+import { radius, spacing, useLayout, useTheme } from "@/theme";
 import { LayoutTemplate, Star, TriangleAlert } from "./icons";
 import { Badge } from "./Badge";
 import { Button } from "./Button";
@@ -61,6 +61,8 @@ export function ProjectBlueprint({
   compact?: boolean;
 }) {
   const theme = useTheme();
+  // Inner lists shrink on a phone held on its side, so they fit in the sheet.
+  const layout = useLayout();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -301,7 +303,10 @@ export function ProjectBlueprint({
                 }
               />
             ) : (
-              <ScrollView style={{ maxHeight: 380 }} keyboardShouldPersistTaps="handled">
+              <ScrollView
+                style={{ maxHeight: layout.listMaxHeight(380) }}
+                keyboardShouldPersistTaps="handled"
+              >
                 <View style={{ gap: spacing.sm }}>
                   {options.map((option) => (
                     <BlueprintRow

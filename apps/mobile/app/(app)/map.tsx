@@ -255,7 +255,13 @@ export default function MapScreen() {
   );
 
   const mapPadding = rail
-    ? { top: spacing.lg, right: spacing.lg, bottom: selected ? 300 : spacing.lg, left: spacing.lg }
+    ? {
+        top: spacing.lg,
+        right: spacing.lg,
+        bottom: selected ? 300 : spacing.lg,
+        // Clear of the notch of a phone on its side; zero on a tablet.
+        left: spacing.lg + insets.left,
+      }
     : {
         top: CHIPS_HEIGHT,
         right: spacing.md,
@@ -363,7 +369,7 @@ export default function MapScreen() {
               <View
                 style={{
                   position: "absolute",
-                  left: spacing.lg,
+                  left: spacing.lg + insets.left,
                   bottom: spacing.lg + insets.bottom,
                   width: 340,
                 }}
@@ -383,6 +389,7 @@ export default function MapScreen() {
             <ScrollView
               contentContainerStyle={{
                 padding: spacing.lg,
+                paddingRight: spacing.lg + insets.right,
                 paddingBottom: spacing.xxl + insets.bottom,
                 gap: spacing.md,
               }}

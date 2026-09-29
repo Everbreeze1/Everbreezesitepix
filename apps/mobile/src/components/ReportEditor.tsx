@@ -39,7 +39,7 @@ import {
   shareTogglePatch,
 } from "@/api/report-view";
 import { openShareSheet, publicUrl } from "@/api/sharing";
-import { radius, spacing, useTheme } from "@/theme";
+import { radius, spacing, useLayout, useTheme } from "@/theme";
 import {
   Check,
   ChevronDown,
@@ -116,6 +116,8 @@ export function ReportEditor({
   onDeleted?: () => void;
 }) {
   const theme = useTheme();
+  // The side safe area: the notch of a phone on its side, zero upright.
+  const { safeSide } = useLayout();
   const queryClient = useQueryClient();
   const { width } = useWindowDimensions();
   const queryKey = useMemo(() => ["report", reportId], [reportId]);
@@ -359,6 +361,7 @@ export function ReportEditor({
         style={{ flex: 1, backgroundColor: theme.colors.background }}
         contentContainerStyle={{
           padding: spacing.lg,
+          paddingHorizontal: spacing.lg + safeSide,
           paddingBottom: spacing.xxl * 2,
           gap: spacing.md,
           width: "100%",

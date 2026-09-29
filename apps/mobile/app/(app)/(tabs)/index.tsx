@@ -38,10 +38,11 @@ import { QueueBanner } from "@/components/QueueBanner";
 import { useAuth } from "@/lib/auth";
 import { useQuickCapture } from "@/lib/use-quick-capture";
 import { useQueue } from "@/offline/use-queue";
-import { radius, spacing, useRightRail, useTheme } from "@/theme";
+import { radius, spacing, useLayout, useRightRail, useTheme } from "@/theme";
 import { Bell, Camera, CloudUpload, Plus, TriangleAlert } from "@/ui/icons";
 import {
   Badge,
+  Columns,
   Icon,
   PhotoThumb,
   Screen,
@@ -132,6 +133,7 @@ export default function HomeScreen() {
   const theme = useTheme();
   const openCamera = useQuickCapture();
   const rail = useRightRail();
+  const layout = useLayout();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const queue = useQueue();
@@ -321,6 +323,55 @@ export default function HomeScreen() {
   };
   const calm = !pressing.overdue && !pressing.dueToday && !pressing.unread && !pressing.queued;
 
+  const statTiles = [
+    <StatTile
+      key="active"
+      label="Active projects"
+      value={projectCount(counts.active)}
+      onPress={() => router.push("/projects")}
+    />,
+    <StatTile
+      key="photos"
+      label="Photos today"
+      value={photosToday}
+      spoken={photosToday === null ? undefined : capturedTodayLabel(photosToday)}
+      onPress={() => router.push("/gallery")}
+    />,
+    <StatTile
+      key="health"
+      label="Documentation health"
+      value={docHealth}
+      format={(value) => `${value}%`}
+      spoken={
+        docHealth === null
+          ? "Documentation health: no active projects"
+          : `Documentation health: ${docHealth} percent of active projects photographed this week`
+      }
+      onPress={() => router.push("/projects")}
+    />,
+    <StatTile
+      key="review"
+      label="Needs review"
+      value={needsReview}
+      warn
+      spoken={needsReview === null ? undefined : `Needs review: ${needsReview} untagged photos`}
+      onPress={() =>
+        router.push({
+          pathname: "/gallery",
+          params: { review: "1", nonce: String(Date.now()) },
+        })
+      }
+    />,
+    <StatTile
+      key="on-hold"
+      label="On hold"
+      value={projectCount(counts.onHold)}
+      warn
+      onPress={() => router.push("/projects")}
+    />,
+    <StatTile key="tasks-due" label="Tasks due" value={tasksDue} warn />,
+  ];
+
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
       {/*
@@ -335,7 +386,8 @@ export default function HomeScreen() {
           gap: spacing.sm,
           paddingTop: insets.top + spacing.sm,
           paddingBottom: spacing.sm,
-          paddingHorizontal: spacing.lg,
+          // Clear of the notch on a phone held on its side.
+          paddingHorizontal: spacing.lg + layout.safeSide,
           backgroundColor: theme.colors.card,
           borderBottomWidth: 1,
           borderBottomColor: theme.colors.border,
@@ -414,7 +466,17 @@ export default function HomeScreen() {
         </Pressable>
       </View>
 
-      <Screen scroll padded={false} refreshing={refreshing} onRefresh={refresh} bottomInset={96}>
+      {/*
+        Room under the last section for what floats over it: the app menu on a
+        phone, and on the rail the two stacked actions, which stand taller.
+      */}
+      <Screen
+        scroll
+        padded={false}
+        refreshing={refreshing}
+        onRefresh={refresh}
+        bottomInset={rail ? 176 : 96}
+      >
         <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.xl, gap: spacing.xs }}>
           <Text variant="display">
             {firstName ? `${greeting()}, ${firstName}.` : `${greeting()}.`}
@@ -443,63 +505,20 @@ export default function HomeScreen() {
           The board in six numbers. Rows of two rather than a wrapped grid, so
           each tile is exactly half the row whatever the gap. The web's two
           office numbers sit in the middle row, between the jobs and the work.
+          On its side the screen has the width for three a row, which keeps
+          all six above the fold on a landscape phone.
+
+          "Tasks due" is overdue and due today, assigned to you: the same list
+          "Needs attention" draws below. The mockup has "Reports due" there,
+          and nothing in the data has a due date for a report, so this is the
+          closest thing that does.
         */}
         <View style={{ paddingHorizontal: spacing.lg, gap: spacing.md }}>
-          <View style={{ flexDirection: "row", gap: spacing.md }}>
-            <StatTile
-              label="Active projects"
-              value={projectCount(counts.active)}
-              onPress={() => router.push("/projects")}
-            />
-            <StatTile
-              label="Photos today"
-              value={photosToday}
-              spoken={photosToday === null ? undefined : capturedTodayLabel(photosToday)}
-              onPress={() => router.push("/gallery")}
-            />
-          </View>
-          <View style={{ flexDirection: "row", gap: spacing.md }}>
-            <StatTile
-              label="Documentation health"
-              value={docHealth}
-              format={(value) => `${value}%`}
-              spoken={
-                docHealth === null
-                  ? "Documentation health: no active projects"
-                  : `Documentation health: ${docHealth} percent of active projects photographed this week`
-              }
-              onPress={() => router.push("/projects")}
-            />
-            <StatTile
-              label="Needs review"
-              value={needsReview}
-              warn
-              spoken={
-                needsReview === null ? undefined : `Needs review: ${needsReview} untagged photos`
-              }
-              onPress={() =>
-                router.push({
-                  pathname: "/gallery",
-                  params: { review: "1", nonce: String(Date.now()) },
-                })
-              }
-            />
-          </View>
-          <View style={{ flexDirection: "row", gap: spacing.md }}>
-            <StatTile
-              label="On hold"
-              value={projectCount(counts.onHold)}
-              warn
-              onPress={() => router.push("/projects")}
-            />
-            {/*
-              Overdue and due today, assigned to you: the same list "Needs
-              attention" draws below. The mockup has "Reports due" here, and
-              nothing in the data has a due date for a report, so this is the
-              closest thing that does.
-            */}
-            <StatTile label="Tasks due" value={tasksDue} warn />
-          </View>
+          {chunk(statTiles, layout.spread ? 3 : 2).map((row, index) => (
+            <View key={index} style={{ flexDirection: "row", gap: spacing.md }}>
+              {row}
+            </View>
+          ))}
         </View>
 
         {/*
@@ -538,66 +557,72 @@ export default function HomeScreen() {
           <SkeletonList rows={4} />
         ) : (
           <>
-            {recent.length > 0 ? (
-              <>
-                <SectionTitle
-                  title="Recent jobs"
-                  action={{ label: "See all", onPress: () => router.push("/projects") }}
-                />
-                <View style={{ paddingHorizontal: spacing.lg, gap: spacing.md }}>
-                  {recent.map((project) => (
-                    <JobCard
-                      key={project.id}
-                      project={project}
-                      coverUrl={covers[project.id]}
-                      stats={stats[project.id]}
-                    />
-                  ))}
+            {/*
+              Side by side on a screen held on its side, one above the other
+              upright, as before.
+            */}
+            <Columns minColumn={360} max={2}>
+              {recent.length > 0 ? (
+                <View style={{ gap: spacing.md }}>
+                  <SectionTitle
+                    title="Recent jobs"
+                    action={{ label: "See all", onPress: () => router.push("/projects") }}
+                  />
+                  <View style={{ paddingHorizontal: spacing.lg, gap: spacing.md }}>
+                    {recent.map((project) => (
+                      <JobCard
+                        key={project.id}
+                        project={project}
+                        coverUrl={covers[project.id]}
+                        stats={stats[project.id]}
+                      />
+                    ))}
+                  </View>
                 </View>
-              </>
-            ) : null}
+              ) : null}
 
-            {urgent.length > 0 || queue.failed > 0 ? (
-              <>
-                <SectionTitle title="Needs attention" />
-                <View style={{ paddingHorizontal: spacing.lg, gap: spacing.md }}>
-                  {queue.failed > 0 ? (
-                    <AttentionCard
-                      icon={CloudUpload}
-                      late
-                      title="Some changes did not send"
-                      subtitle={`${queue.failed} need attention`}
-                      onPress={() => router.push("/queue")}
-                    />
-                  ) : null}
-                  {urgent.slice(0, ATTENTION_CAP).map((task) => (
-                    <AttentionCard
-                      key={task.id}
-                      icon={TriangleAlert}
-                      late={bucketOf(task) === "overdue"}
-                      title={`${task.title}: ${dueLabel(task.due_date) ?? "Due"}`}
-                      subtitle={projectName.get(task.project_id) ?? "A project"}
-                      onPress={() =>
-                        router.push({
-                          pathname: "/task/[id]",
-                          params: { id: task.id, projectId: task.project_id },
-                        })
-                      }
-                    />
-                  ))}
-                  {/*
+              {urgent.length > 0 || queue.failed > 0 ? (
+                <View style={{ gap: spacing.md }}>
+                  <SectionTitle title="Needs attention" />
+                  <View style={{ paddingHorizontal: spacing.lg, gap: spacing.md }}>
+                    {queue.failed > 0 ? (
+                      <AttentionCard
+                        icon={CloudUpload}
+                        late
+                        title="Some changes did not send"
+                        subtitle={`${queue.failed} need attention`}
+                        onPress={() => router.push("/queue")}
+                      />
+                    ) : null}
+                    {urgent.slice(0, ATTENTION_CAP).map((task) => (
+                      <AttentionCard
+                        key={task.id}
+                        icon={TriangleAlert}
+                        late={bucketOf(task) === "overdue"}
+                        title={`${task.title}: ${dueLabel(task.due_date) ?? "Due"}`}
+                        subtitle={projectName.get(task.project_id) ?? "A project"}
+                        onPress={() =>
+                          router.push({
+                            pathname: "/task/[id]",
+                            params: { id: task.id, projectId: task.project_id },
+                          })
+                        }
+                      />
+                    ))}
+                    {/*
                     Capped. A home screen longer than a screenful is a task
                     list with a greeting on top, and the task list already
                     exists.
                   */}
-                  {urgent.length > ATTENTION_CAP ? (
-                    <Text variant="caption" tone="muted">
-                      {urgent.length - ATTENTION_CAP} more overdue or due today.
-                    </Text>
-                  ) : null}
+                    {urgent.length > ATTENTION_CAP ? (
+                      <Text variant="caption" tone="muted">
+                        {urgent.length - ATTENTION_CAP} more overdue or due today.
+                      </Text>
+                    ) : null}
+                  </View>
                 </View>
-              </>
-            ) : null}
+              ) : null}
+            </Columns>
 
             {/*
               The photographs, below the things that can actually be lost and
@@ -961,4 +986,11 @@ function RecentPhoto({ photo, uri }: { photo: GalleryPhotoItem; uri?: string }) 
       </Text>
     </Pressable>
   );
+}
+
+/** Split a list into rows of `size`. */
+function chunk<T>(items: T[], size: number): T[][] {
+  const rows: T[][] = [];
+  for (let i = 0; i < items.length; i += size) rows.push(items.slice(i, i + size));
+  return rows;
 }

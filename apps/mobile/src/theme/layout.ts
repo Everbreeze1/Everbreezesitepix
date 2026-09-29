@@ -157,3 +157,139 @@ export function cardPageInset(width: number, base: number): number {
   if (width <= CARD_PAGE_MAX_WIDTH) return base;
   return Math.max(base, Math.floor((width - CARD_PAGE_MAX_WIDTH) / 2));
 }
+
+/*
+ * Landscape.
+ *
+ * Everything above treats a wide screen as a page to be centred. That is right
+ * for a tablet held upright, where 640pt of column is most of the glass, and
+ * wrong on its side: Jon, 2026-09-29, on the Portfolio in landscape, "it looks
+ * weird and too centered. it doesnt spread out." A 1024pt iPad on its side was
+ * showing a 640pt column with 190pt of empty margin either side, and a phone on
+ * its side was doing the same thing in miniature.
+ *
+ * So a screen held on its side SPREADS: the column grows to
+ * `WIDE_PAGE_MAX_WIDTH`, and screens that have more than one thing to show lay
+ * those things out side by side (`pageColumns`) or as a list with its detail
+ * beside it (`splitsPane`) rather than stretching one line of prose across it.
+ * Portrait is untouched by all of this, on purpose: it was approved as it is.
+ */
+
+/**
+ * The widest a page gets when it spreads. Wide enough that no tablet in
+ * service shows a centred island in landscape (a 12.9 inch iPad Pro is 1366pt
+ * and keeps a gutter of about 40pt), narrow enough that an external display
+ * or a desktop-sized Android window does not run a card a metre wide.
+ */
+export const WIDE_PAGE_MAX_WIDTH = 1280;
+
+/** Held on its side: wider than tall. */
+export function isLandscape(width: number, height: number): boolean {
+  return width > height;
+}
+
+/**
+ * Whether a page should use the width rather than sit in a centred column.
+ *
+ * Landscape and wider than the reading column. A split-screen iPad window
+ * narrower than that stays a single column, which is what it looks like.
+ */
+export function spreads(width: number, height: number): boolean {
+  return isLandscape(width, height) && width > CONTENT_MAX_WIDTH;
+}
+
+/**
+ * Horizontal padding for a page, by orientation.
+ *
+ * Portrait: exactly `contentInset`, so nothing upright moves by a point.
+ * Landscape: the gutter it was given, growing only once the window passes
+ * `WIDE_PAGE_MAX_WIDTH`, and never less than the side safe area (the notch of
+ * an iPhone on its side is 47pt, and content under it is content cut off).
+ *
+ * @param safeSide The larger of the left and right safe-area insets.
+ */
+export function pageInset(width: number, height: number, base: number, safeSide = 0): number {
+  const floor = base + Math.max(0, safeSide);
+  if (!spreads(width, height)) return Math.max(contentInset(width, base), floor);
+  return Math.max(floor, Math.floor((width - WIDE_PAGE_MAX_WIDTH) / 2));
+}
+
+/** The width left for content once `pageInset` is taken off both sides. */
+export function pageWidth(width: number, height: number, base: number, safeSide = 0): number {
+  return Math.max(0, width - pageInset(width, height, base, safeSide) * 2);
+}
+
+/**
+ * How many columns of sections or cards a page lays out.
+ *
+ * One whenever the page does not spread, so portrait layouts are exactly what
+ * they were. In landscape, as many columns of at least `minColumn` as fit,
+ * capped at `max`: two on a phone on its side and a 10 inch iPad, three on a
+ * 12.9 inch.
+ *
+ * @param usable Width available, padding already taken off (`pageWidth`).
+ */
+export function pageColumns(
+  width: number,
+  height: number,
+  usable: number,
+  minColumn = 320,
+  max = 3,
+  gap = 16,
+): number {
+  if (!spreads(width, height)) return 1;
+  const fitted = Math.floor((Math.max(0, usable) + gap) / (Math.max(1, minColumn) + gap));
+  return Math.max(1, Math.min(max, fitted));
+}
+
+/**
+ * Whether a list-and-detail screen shows both at once.
+ *
+ * The master-detail layout every tablet settings screen uses: the list on the
+ * left, the selected item's fields on the right, instead of a sheet sliding up
+ * over the list. Only when spreading and there is room for a readable detail
+ * pane beside a list (about 300pt + 400pt), which excludes the smallest phones
+ * on their side, where a sheet is still the better use of 320pt of height.
+ */
+export function splitsPane(width: number, height: number, usable: number): boolean {
+  return spreads(width, height) && usable >= 720;
+}
+
+/**
+ * `cardPageInset` for the current orientation: unchanged upright, spread on
+ * its side. The project sub-pages capped their board at 960pt, which on a
+ * 12.9 inch iPad in landscape was a 200pt margin either side.
+ */
+export function cardPageInsetFor(
+  width: number,
+  height: number,
+  base: number,
+  safeSide = 0,
+): number {
+  if (!spreads(width, height)) return Math.max(cardPageInset(width, base), base + safeSide);
+  return pageInset(width, height, base, safeSide);
+}
+
+/**
+ * Columns of cards for the current orientation. Never fewer than
+ * `cardColumns` gives, so a tablet upright keeps its two.
+ */
+export function cardPageColumns(width: number, height: number, base: number, safeSide = 0): number {
+  const usable = width - cardPageInsetFor(width, height, base, safeSide) * 2;
+  return Math.max(cardColumns(width), pageColumns(width, height, usable, 300, 3));
+}
+
+/**
+ * The tallest a scrolling list inside a sheet should be.
+ *
+ * Several sheets cap an inner list at a fixed 360 to 400pt, chosen on a phone
+ * held upright. A phone on its side is about 390pt tall, and the sheet itself
+ * stops at 85% of that, so a 380pt inner list is taller than the sheet it sits
+ * in and its last rows can only be reached by fighting two scroll views. On its
+ * side the cap is 40% of the window, never below 160pt (three rows). Upright it
+ * is the number the sheet asked for, unchanged.
+ */
+export function listMaxHeight(width: number, height: number, preferred: number): number {
+  if (!isLandscape(width, height)) return preferred;
+  return Math.min(preferred, Math.max(160, Math.floor(height * 0.4)));
+}

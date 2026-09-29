@@ -40,6 +40,7 @@ import {
 } from "@/api/photo-viewer-view";
 import type { PhotoListItem } from "@/api/photos";
 import { formatAddress, getProject } from "@/api/projects";
+import { PhotoNoteEditor } from "@/components/capture/PhotoNoteEditor";
 import { useAuth } from "@/lib/auth";
 import { HIT_TARGET, radius, spacing, typography } from "@/theme";
 import {
@@ -57,6 +58,8 @@ import {
   ZoomOut,
 } from "@/ui/icons";
 import type { LucideIcon } from "@/ui";
+import { captionText } from "./caption-line";
+import { ViewerCaption } from "./PhotoCaption";
 import { PhotoCommentsThread, photoCommentsKey } from "./PhotoCommentsThread";
 import { PhotoDetailsTab } from "./PhotoDetailsTab";
 import { PanelBody, PanelHeader, type PanelTab } from "./PhotoPanel";
@@ -137,6 +140,11 @@ export function PhotoViewer({
   const [chromeHidden, setChromeHidden] = useState(false);
   const [panelOpen, setPanelOpen] = useState(true);
   const [overrides, setOverrides] = useState<Record<string, PhotoPatch>>({});
+  /*
+   * Android's Back inside a Modal reaches only `onRequestClose`, so the body
+   * registers here to close its caption editor first, keeping the caption.
+   */
+  const backFirst = useRef<(() => boolean) | null>(null);
 
   useEffect(() => {
     if (photoId) setCurrentId(photoId);
@@ -156,6 +164,7 @@ export function PhotoViewer({
       transparent
       animationType="fade"
       onRequestClose={() => {
+        if (backFirst.current?.()) return;
         if (snap !== "peek") setSnap("peek");
         else close();
       }}
@@ -185,6 +194,7 @@ export function PhotoViewer({
           setPanelOpen={setPanelOpen}
           overrides={overrides}
           setOverrides={setOverrides}
+          backFirst={backFirst}
         />
       ) : null}
     </Modal>
@@ -210,6 +220,7 @@ function ViewerBody({
   setPanelOpen,
   overrides,
   setOverrides,
+  backFirst,
 }: {
   photos: ViewerPhoto[];
   urls: Record<string, string | null | undefined>;
@@ -229,8 +240,9 @@ function ViewerBody({
   setPanelOpen: (next: boolean | ((prev: boolean) => boolean)) => void;
   overrides: Record<string, PhotoPatch>;
   setOverrides: (next: (prev: Record<string, PhotoPatch>) => Record<string, PhotoPatch>) => void;
+  backFirst: { current: (() => boolean) | null };
 }) {
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const tablet = isTabletWidth(windowWidth);
@@ -244,6 +256,9 @@ function ViewerBody({
   const [seed, setSeed] = useState<{ text: string; nonce: number } | null>(null);
   const [topBarHeight, setTopBarHeight] = useState(0);
   const [sheetHandle, setSheetHandle] = useState(0);
+  const [captionHeight, setCaptionHeight] = useState(0);
+  /** The caption being written in the note editor, for one photo. */
+  const [note, setNote] = useState<{ id: string; draft: string; start?: "voice" } | null>(null);
   const listRef = useRef<FlatList<ViewerPhoto>>(null);
   const controls = useRef<Record<string, ZoomControls | null>>({});
 
@@ -347,6 +362,32 @@ function ViewerBody({
     void edit(photo.id, projectId, "tags", { tags: toggleTagName(photo.tags, name) });
   };
 
+  /*
+   * The caption under the photo opens the same note editor as the camera,
+   * which stays clear of the keyboard. Its draft is saved when it closes, by
+   * Done, the backdrop or Back, through the same queued patch as the
+   * description field in Details.
+   */
+  const openNote = (start?: "voice") => {
+    if (!photo) return;
+    setNote({ id: photo.id, draft: captionText(photo.caption) ?? "", start });
+  };
+  const closeNote = () => {
+    if (note && photo && note.id === photo.id) {
+      const next = note.draft.trim() || null;
+      if (next !== captionText(photo.caption)) {
+        void edit(photo.id, projectId, "caption", { caption: next });
+      }
+    }
+    setNote(null);
+  };
+  backFirst.current = note
+    ? () => {
+        closeNote();
+        return true;
+      }
+    : null;
+
   /* ------------------------------------------------------------- paging */
 
   const go = (delta: number) => {
@@ -399,6 +440,8 @@ function ViewerBody({
   const maps = mapsLink(photo?.latitude, photo?.longitude, address);
   const panelWidth = sidePanelWidth(windowWidth);
   const bottomInset = Math.max(insets.bottom, spacing.md);
+  /* A long caption scrolls in its box rather than covering the photo. */
+  const captionMax = Math.max(44, Math.round(windowHeight * (tablet ? 0.16 : 0.2)));
 
   const header = (
     <PanelHeader
@@ -658,6 +701,19 @@ function ViewerBody({
                 </View>
               ) : null}
             </View>
+            {/* The caption, under the photo, as on a printed page. */}
+            {tablet && !chromeHidden && photo ? (
+              <View
+                style={{
+                  paddingTop: spacing.sm,
+                  paddingHorizontal: spacing.lg,
+                  paddingLeft: Math.max(insets.left, spacing.lg),
+                  paddingBottom: Math.max(insets.bottom, spacing.sm),
+                }}
+              >
+                <ViewerCaption caption={photo.caption} onEdit={openNote} maxHeight={captionMax} />
+              </View>
+            ) : null}
           </View>
 
           {tablet && showPanel ? (
@@ -739,10 +795,29 @@ function ViewerBody({
         {!tablet && !chromeHidden && !zoomed && snap === "peek" && sheetHandle > 0 ? (
           <PhotoTagOverlay
             tags={tags}
-            bottom={sheetHandle + insets.bottom}
+            bottom={sheetHandle + insets.bottom + (photo ? captionHeight : 0)}
             left={Math.max(insets.left, spacing.lg)}
             right={Math.max(insets.right, spacing.lg)}
           />
+        ) : null}
+
+        {/*
+          The caption, under the photo and just above the lowered sheet: the
+          photo's note, typed or spoken. Tapping it opens the note editor.
+        */}
+        {!tablet && !chromeHidden && !zoomed && snap === "peek" && sheetHandle > 0 && photo ? (
+          <View
+            onLayout={(e) => setCaptionHeight(e.nativeEvent.layout.height)}
+            style={{
+              position: "absolute",
+              left: Math.max(insets.left, spacing.md),
+              right: Math.max(insets.right, spacing.md),
+              bottom: sheetHandle + insets.bottom,
+              paddingBottom: spacing.sm,
+            }}
+          >
+            <ViewerCaption caption={photo.caption} onEdit={openNote} maxHeight={captionMax} />
+          </View>
         ) : null}
 
         {!tablet && area > 0 ? (
@@ -760,6 +835,27 @@ function ViewerBody({
           </ViewerSheet>
         ) : null}
       </KeyboardAvoidingView>
+
+      {note && photo && note.id === photo.id ? (
+        <PhotoNoteEditor
+          key={note.id}
+          title="Photo caption"
+          photoUri={imageUrl}
+          caption={note.draft}
+          onCaptionChange={(draft) => setNote((prev) => (prev ? { ...prev, draft } : prev))}
+          placeholder="Type a caption, or tap Add voice note"
+          startWith={note.start}
+          wide={Math.min(windowWidth, windowHeight) >= 600}
+          insets={{
+            top: insets.top,
+            bottom: insets.bottom,
+            left: insets.left,
+            right: insets.right,
+          }}
+          onDone={closeNote}
+          onClose={closeNote}
+        />
+      ) : null}
 
       {photo ? (
         <>

@@ -39,7 +39,7 @@ import {
 import { openShareSheet } from "@/api/sharing";
 import { SegmentTabs } from "@/components/walkthrough/SegmentTabs";
 import { SummaryReport } from "@/components/walkthrough/SummaryReport";
-import { radius, spacing, useTheme } from "@/theme";
+import { radius, spacing, useLayout, useTheme } from "@/theme";
 import {
   FileText,
   Link2,
@@ -84,6 +84,13 @@ function timecode(seconds: number): string {
 export default function WalkthroughDetailScreen() {
   const { id, tab, play } = useLocalSearchParams<{ id: string; tab?: string; play?: string }>();
   const theme = useTheme();
+  /*
+   * On its side the recording and its title sit on the left and the summary
+   * and transcript on the right, instead of a full-width video taller than the
+   * screen with everything else below it. Upright is one column, as before.
+   */
+  const layout = useLayout();
+  const sideBySide = layout.spread;
   const queryClient = useQueryClient();
   const scrollRef = useRef<ScrollView>(null);
   const [segment, setSegment] = useState<Tab>(tab === "transcript" ? "transcript" : "summary");
@@ -377,6 +384,7 @@ export default function WalkthroughDetailScreen() {
             ref={scrollRef}
             contentContainerStyle={{
               padding: spacing.lg,
+              paddingHorizontal: spacing.lg + layout.safeSide,
               paddingBottom: spacing.xxxl,
               gap: spacing.lg,
             }}
@@ -389,276 +397,295 @@ export default function WalkthroughDetailScreen() {
               />
             }
           >
-            {/* The recording. */}
-            {detail.video_path ? (
-              videoQuery.data ? (
-                <VideoView player={player} style={videoBox} nativeControls contentFit="contain" />
-              ) : (
-                <View style={[videoBox, { alignItems: "center", justifyContent: "center" }]}>
-                  <ActivityIndicator color={theme.colors.primaryGlow} />
-                </View>
-              )
-            ) : (
-              <View
-                style={[
-                  videoBox,
-                  { alignItems: "center", justifyContent: "center", gap: spacing.sm },
-                ]}
-              >
-                <Icon icon={VideoOff} size="xl" color={theme.colors.chromeForeground} />
-                <Text variant="caption" style={{ color: theme.colors.chromeForeground }}>
-                  No video on this walkthrough
-                </Text>
-              </View>
-            )}
-
-            <View style={{ gap: spacing.xs }}>
-              <Text variant="title">{detail.title}</Text>
-              <Text variant="caption" tone="muted">
-                {[
-                  relativeTime(detail.created_at),
-                  clockDuration(detail.duration_seconds) || null,
-                  detail.shots.length > 0
-                    ? `${detail.shots.length} photo${detail.shots.length === 1 ? "" : "s"}`
-                    : null,
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </Text>
-            </View>
-
-            <SegmentTabs<Tab>
-              segments={[
-                { id: "summary", label: "Summary", icon: Sparkles },
-                { id: "transcript", label: "Transcript", icon: ScrollText },
-              ]}
-              value={segment}
-              onChange={setSegment}
-            />
-
-            {notice ? (
-              <Text variant="caption" tone="muted">
-                {notice}
-              </Text>
-            ) : null}
-
-            {segment === "summary" ? (
-              <View style={{ gap: spacing.md }}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
-                  <Icon icon={Sparkles} size="md" tone="primary" />
-                  <Text variant="heading" style={{ flex: 1 }}>
-                    AI Summary
-                  </Text>
-                  <Badge label={aiSummaryLabel(status)} tone={aiSummaryTone(status)} />
-                </View>
-
-                {status === "ready" && summaryQuery.data ? (
-                  <>
-                    <Text variant="caption" tone="muted">
-                      {`${summaryQuery.data.summary.title} · written ${relativeTime(
-                        summaryQuery.data.summary.updatedAt,
-                      )}`}
-                    </Text>
-                    <View style={{ flexDirection: "row", gap: spacing.sm }}>
-                      <View style={{ flex: 1 }}>
-                        <Button
-                          label="Share summary"
-                          icon={Share2}
-                          size="sm"
-                          fullWidth
-                          loading={busy === "shareSummary"}
-                          disabled={Boolean(busy)}
-                          onPress={() => void onShareSummary()}
-                        />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Button
-                          label="Open report"
-                          icon={FileText}
-                          variant="secondary"
-                          size="sm"
-                          fullWidth
-                          accessibilityHint="Opens the write-up to edit, rename or delete it"
-                          onPress={() => openSummary(summaryQuery.data!.summary.id)}
-                        />
-                      </View>
-                    </View>
-                    <SummaryReport
-                      summary={summaryQuery.data.summary}
-                      photos={summaryQuery.data.photos}
-                      onSeek={videoQuery.data ? seekTo : undefined}
+            <View
+              style={
+                sideBySide
+                  ? { flexDirection: "row", alignItems: "flex-start", gap: spacing.xl }
+                  : { gap: spacing.lg }
+              }
+            >
+              <View style={sideBySide ? { flex: 1, gap: spacing.lg } : { gap: spacing.lg }}>
+                {/* The recording. */}
+                {detail.video_path ? (
+                  videoQuery.data ? (
+                    <VideoView
+                      player={player}
+                      style={videoBox}
+                      nativeControls
+                      contentFit="contain"
                     />
-                    <Button
-                      label="Regenerate summary"
-                      icon={RefreshCw}
-                      variant="outline"
-                      fullWidth
-                      loading={busy === "summary"}
-                      disabled={Boolean(busy)}
-                      onPress={confirmRegenerate}
-                    />
-                  </>
-                ) : status === "ready" || (current && summaryQuery.isLoading) ? (
-                  <SkeletonList rows={2} />
-                ) : status === "generating" ? (
-                  <Card>
-                    <View style={{ flexDirection: "row", gap: spacing.md, alignItems: "center" }}>
-                      <ActivityIndicator color={theme.colors.primary} />
-                      <Text variant="body" tone="muted" style={{ flex: 1 }}>
-                        {stateMessage("pending")}
-                      </Text>
+                  ) : (
+                    <View style={[videoBox, { alignItems: "center", justifyContent: "center" }]}>
+                      <ActivityIndicator color={theme.colors.primaryGlow} />
                     </View>
-                  </Card>
+                  )
                 ) : (
-                  <Card style={{ gap: spacing.md }}>
-                    {status === "failed" ? (
-                      <View style={{ flexDirection: "row", gap: spacing.sm }}>
-                        <Icon icon={TriangleAlert} size="md" tone="safety" />
-                        <Text variant="body" tone="muted" style={{ flex: 1 }}>
-                          {stateMessage("failed")}
-                        </Text>
-                      </View>
-                    ) : (
-                      <Text variant="body" tone="muted">
-                        Write this walk up as a report: an overview, the findings, and every photo
-                        you took with a note from what you said at that moment.
-                      </Text>
-                    )}
-                    {!detail.transcript ? (
-                      <Text variant="caption" tone="muted">
-                        There is no transcript yet, so the summary will lean on the photos.
-                      </Text>
-                    ) : null}
-                    <Button
-                      label={status === "failed" ? "Try again" : "Generate summary"}
-                      icon={Sparkles}
-                      fullWidth
-                      loading={busy === "summary"}
-                      disabled={Boolean(busy)}
-                      onPress={() => void makeSummary(false)}
-                    />
-                  </Card>
+                  <View
+                    style={[
+                      videoBox,
+                      { alignItems: "center", justifyContent: "center", gap: spacing.sm },
+                    ]}
+                  >
+                    <Icon icon={VideoOff} size="xl" color={theme.colors.chromeForeground} />
+                    <Text variant="caption" style={{ color: theme.colors.chromeForeground }}>
+                      No video on this walkthrough
+                    </Text>
+                  </View>
                 )}
 
-                {ownSummaries.length > 1 ? (
-                  <>
-                    <SectionHeader title="Earlier summaries" count={ownSummaries.length - 1} />
-                    {ownSummaries.slice(1).map((earlier) => (
-                      <ListRow
-                        key={earlier.id}
-                        icon={FileText}
-                        title={earlier.title}
-                        subtitle={`Written ${relativeTime(earlier.createdAt)}`}
-                        onPress={() => openSummary(earlier.id)}
-                      />
-                    ))}
-                  </>
+                <View style={{ gap: spacing.xs }}>
+                  <Text variant="title">{detail.title}</Text>
+                  <Text variant="caption" tone="muted">
+                    {[
+                      relativeTime(detail.created_at),
+                      clockDuration(detail.duration_seconds) || null,
+                      detail.shots.length > 0
+                        ? `${detail.shots.length} photo${detail.shots.length === 1 ? "" : "s"}`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={sideBySide ? { flex: 1, gap: spacing.lg } : { gap: spacing.lg }}>
+                <SegmentTabs<Tab>
+                  segments={[
+                    { id: "summary", label: "Summary", icon: Sparkles },
+                    { id: "transcript", label: "Transcript", icon: ScrollText },
+                  ]}
+                  value={segment}
+                  onChange={setSegment}
+                />
+
+                {notice ? (
+                  <Text variant="caption" tone="muted">
+                    {notice}
+                  </Text>
                 ) : null}
 
-                {/*
+                {segment === "summary" ? (
+                  <View style={{ gap: spacing.md }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
+                      <Icon icon={Sparkles} size="md" tone="primary" />
+                      <Text variant="heading" style={{ flex: 1 }}>
+                        AI Summary
+                      </Text>
+                      <Badge label={aiSummaryLabel(status)} tone={aiSummaryTone(status)} />
+                    </View>
+
+                    {status === "ready" && summaryQuery.data ? (
+                      <>
+                        <Text variant="caption" tone="muted">
+                          {`${summaryQuery.data.summary.title} · written ${relativeTime(
+                            summaryQuery.data.summary.updatedAt,
+                          )}`}
+                        </Text>
+                        <View style={{ flexDirection: "row", gap: spacing.sm }}>
+                          <View style={{ flex: 1 }}>
+                            <Button
+                              label="Share summary"
+                              icon={Share2}
+                              size="sm"
+                              fullWidth
+                              loading={busy === "shareSummary"}
+                              disabled={Boolean(busy)}
+                              onPress={() => void onShareSummary()}
+                            />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Button
+                              label="Open report"
+                              icon={FileText}
+                              variant="secondary"
+                              size="sm"
+                              fullWidth
+                              accessibilityHint="Opens the write-up to edit, rename or delete it"
+                              onPress={() => openSummary(summaryQuery.data!.summary.id)}
+                            />
+                          </View>
+                        </View>
+                        <SummaryReport
+                          summary={summaryQuery.data.summary}
+                          photos={summaryQuery.data.photos}
+                          onSeek={videoQuery.data ? seekTo : undefined}
+                        />
+                        <Button
+                          label="Regenerate summary"
+                          icon={RefreshCw}
+                          variant="outline"
+                          fullWidth
+                          loading={busy === "summary"}
+                          disabled={Boolean(busy)}
+                          onPress={confirmRegenerate}
+                        />
+                      </>
+                    ) : status === "ready" || (current && summaryQuery.isLoading) ? (
+                      <SkeletonList rows={2} />
+                    ) : status === "generating" ? (
+                      <Card>
+                        <View
+                          style={{ flexDirection: "row", gap: spacing.md, alignItems: "center" }}
+                        >
+                          <ActivityIndicator color={theme.colors.primary} />
+                          <Text variant="body" tone="muted" style={{ flex: 1 }}>
+                            {stateMessage("pending")}
+                          </Text>
+                        </View>
+                      </Card>
+                    ) : (
+                      <Card style={{ gap: spacing.md }}>
+                        {status === "failed" ? (
+                          <View style={{ flexDirection: "row", gap: spacing.sm }}>
+                            <Icon icon={TriangleAlert} size="md" tone="safety" />
+                            <Text variant="body" tone="muted" style={{ flex: 1 }}>
+                              {stateMessage("failed")}
+                            </Text>
+                          </View>
+                        ) : (
+                          <Text variant="body" tone="muted">
+                            Write this walk up as a report: an overview, the findings, and every
+                            photo you took with a note from what you said at that moment.
+                          </Text>
+                        )}
+                        {!detail.transcript ? (
+                          <Text variant="caption" tone="muted">
+                            There is no transcript yet, so the summary will lean on the photos.
+                          </Text>
+                        ) : null}
+                        <Button
+                          label={status === "failed" ? "Try again" : "Generate summary"}
+                          icon={Sparkles}
+                          fullWidth
+                          loading={busy === "summary"}
+                          disabled={Boolean(busy)}
+                          onPress={() => void makeSummary(false)}
+                        />
+                      </Card>
+                    )}
+
+                    {ownSummaries.length > 1 ? (
+                      <>
+                        <SectionHeader title="Earlier summaries" count={ownSummaries.length - 1} />
+                        {ownSummaries.slice(1).map((earlier) => (
+                          <ListRow
+                            key={earlier.id}
+                            icon={FileText}
+                            title={earlier.title}
+                            subtitle={`Written ${relativeTime(earlier.createdAt)}`}
+                            onPress={() => openSummary(earlier.id)}
+                          />
+                        ))}
+                      </>
+                    ) : null}
+
+                    {/*
                   A walkthrough from before summaries had their own table
                   carries its write-up on the row itself. Shown only when there
                   is no summary, so nothing old is lost and nothing is doubled.
                 */}
-                {!current && legacyReport ? (
-                  <>
-                    <SectionHeader title="Earlier report" />
-                    <Card>
-                      <Text variant="body">{plainBody(legacyReport)}</Text>
-                    </Card>
-                  </>
-                ) : null}
-              </View>
-            ) : (
-              <View style={{ gap: spacing.md }}>
-                {detail.shots.length > 0 ? (
-                  <View style={{ gap: spacing.sm }}>
-                    <Text variant="overline" tone="muted">
-                      {`PHOTOS ALONG THE WAY · ${detail.shots.length}`}
-                    </Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                      <View style={{ flexDirection: "row", gap: spacing.sm }}>
-                        {detail.shots.map((shot: WalkthroughShot) => (
-                          <Pressable
-                            key={shot.id}
-                            accessibilityRole="button"
-                            accessibilityLabel={`Photo at ${timecode(shot.offset_seconds)}`}
-                            accessibilityHint="Jumps the recording to this moment"
-                            onPress={() => seekTo(shot.offset_seconds)}
-                            style={({ pressed }) => ({
-                              width: 96,
-                              gap: spacing.xs,
-                              opacity: pressed ? 0.7 : 1,
-                            })}
-                          >
-                            <PhotoThumb uri={shotUrls[shot.photo_id]} width={96} height={96} />
-                            <Text variant="caption" tone="muted" align="center">
-                              {timecode(shot.offset_seconds)}
-                            </Text>
-                          </Pressable>
-                        ))}
-                      </View>
-                    </ScrollView>
+                    {!current && legacyReport ? (
+                      <>
+                        <SectionHeader title="Earlier report" />
+                        <Card>
+                          <Text variant="body">{plainBody(legacyReport)}</Text>
+                        </Card>
+                      </>
+                    ) : null}
                   </View>
-                ) : null}
+                ) : (
+                  <View style={{ gap: spacing.md }}>
+                    {detail.shots.length > 0 ? (
+                      <View style={{ gap: spacing.sm }}>
+                        <Text variant="overline" tone="muted">
+                          {`PHOTOS ALONG THE WAY · ${detail.shots.length}`}
+                        </Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                          <View style={{ flexDirection: "row", gap: spacing.sm }}>
+                            {detail.shots.map((shot: WalkthroughShot) => (
+                              <Pressable
+                                key={shot.id}
+                                accessibilityRole="button"
+                                accessibilityLabel={`Photo at ${timecode(shot.offset_seconds)}`}
+                                accessibilityHint="Jumps the recording to this moment"
+                                onPress={() => seekTo(shot.offset_seconds)}
+                                style={({ pressed }) => ({
+                                  width: 96,
+                                  gap: spacing.xs,
+                                  opacity: pressed ? 0.7 : 1,
+                                })}
+                              >
+                                <PhotoThumb uri={shotUrls[shot.photo_id]} width={96} height={96} />
+                                <Text variant="caption" tone="muted" align="center">
+                                  {timecode(shot.offset_seconds)}
+                                </Text>
+                              </Pressable>
+                            ))}
+                          </View>
+                        </ScrollView>
+                      </View>
+                    ) : null}
 
-                <Card>
-                  {detail.transcript ? (
-                    <Text variant="body" selectable>
-                      {detail.transcript}
-                    </Text>
-                  ) : (
-                    <>
-                      <Badge label="Not transcribed" tone="warning" />
-                      <Text variant="body" tone="muted" style={{ marginTop: spacing.sm }}>
-                        Recordings made on the phone are transcribed from the web app.
-                      </Text>
-                    </>
-                  )}
-                </Card>
-              </View>
-            )}
+                    <Card>
+                      {detail.transcript ? (
+                        <Text variant="body" selectable>
+                          {detail.transcript}
+                        </Text>
+                      ) : (
+                        <>
+                          <Badge label="Not transcribed" tone="warning" />
+                          <Text variant="body" tone="muted" style={{ marginTop: spacing.sm }}>
+                            Recordings made on the phone are transcribed from the web app.
+                          </Text>
+                        </>
+                      )}
+                    </Card>
+                  </View>
+                )}
 
-            <SectionHeader title="More" />
-            <View style={{ gap: spacing.sm }}>
-              <Button
-                label={detail.share_token ? "Share video link" : "Get video link"}
-                icon={Link2}
-                variant="outline"
-                fullWidth
-                loading={busy === "share"}
-                disabled={Boolean(busy)}
-                onPress={() => void onShareVideo()}
-              />
+                <SectionHeader title="More" />
+                <View style={{ gap: spacing.sm }}>
+                  <Button
+                    label={detail.share_token ? "Share video link" : "Get video link"}
+                    icon={Link2}
+                    variant="outline"
+                    fullWidth
+                    loading={busy === "share"}
+                    disabled={Boolean(busy)}
+                    onPress={() => void onShareVideo()}
+                  />
 
-              {/*
+                  {/*
                 The end of the chain: this makes the `project_reports` row
                 anybody outside the company ever sees.
               */}
-              <Button
-                label="Make a client report"
-                icon={FileText}
-                variant="outline"
-                fullWidth
-                loading={busy === "clientReport"}
-                disabled={Boolean(busy) || Boolean(reportRefusal(Boolean(detail.transcript)))}
-                onPress={() => void onCreateClientReport()}
-              />
-              <Button
-                label="Reprocess recording"
-                icon={RefreshCw}
-                variant="ghost"
-                fullWidth
-                loading={busy === "report"}
-                disabled={Boolean(busy) || !detail.transcript}
-                onPress={() => void onReprocess()}
-              />
-              {reportRefusal(Boolean(detail.transcript)) ? (
-                // Says why the buttons are dead rather than failing after the tap.
-                <Text variant="caption" tone="muted">
-                  {reportRefusal(Boolean(detail.transcript))}
-                </Text>
-              ) : null}
+                  <Button
+                    label="Make a client report"
+                    icon={FileText}
+                    variant="outline"
+                    fullWidth
+                    loading={busy === "clientReport"}
+                    disabled={Boolean(busy) || Boolean(reportRefusal(Boolean(detail.transcript)))}
+                    onPress={() => void onCreateClientReport()}
+                  />
+                  <Button
+                    label="Reprocess recording"
+                    icon={RefreshCw}
+                    variant="ghost"
+                    fullWidth
+                    loading={busy === "report"}
+                    disabled={Boolean(busy) || !detail.transcript}
+                    onPress={() => void onReprocess()}
+                  />
+                  {reportRefusal(Boolean(detail.transcript)) ? (
+                    // Says why the buttons are dead rather than failing after the tap.
+                    <Text variant="caption" tone="muted">
+                      {reportRefusal(Boolean(detail.transcript))}
+                    </Text>
+                  ) : null}
+                </View>
+              </View>
             </View>
           </ScrollView>
         )}

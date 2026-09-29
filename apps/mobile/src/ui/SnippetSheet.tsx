@@ -18,7 +18,7 @@ import {
   suggestedTitle,
 } from "@/api/snippets-view";
 import type { Block } from "@/api/doc-blocks";
-import { radius, spacing, useTheme } from "@/theme";
+import { radius, spacing, useLayout, useTheme } from "@/theme";
 import { Library, PenLine, Plus, Trash2, TriangleAlert } from "./icons";
 import { Badge } from "./Badge";
 import { Button, IconButton } from "./Button";
@@ -59,6 +59,8 @@ export function SnippetSheet({
   saveableHtml?: string;
 }) {
   const theme = useTheme();
+  // Inner lists shrink on a phone held on its side, so they fit in the sheet.
+  const layout = useLayout();
   const queryClient = useQueryClient();
 
   const [search, setSearch] = useState("");
@@ -276,7 +278,10 @@ export function SnippetSheet({
         ) : shown.length === 0 ? (
           <EmptyState icon={Library} title="Nothing matches" body="Try a different word." />
         ) : (
-          <ScrollView style={{ maxHeight: 360 }} keyboardShouldPersistTaps="handled">
+          <ScrollView
+            style={{ maxHeight: layout.listMaxHeight(360) }}
+            keyboardShouldPersistTaps="handled"
+          >
             <View style={{ gap: spacing.sm }}>
               {shown.map((snippet) => {
                 const plan = insertPlan(snippet);

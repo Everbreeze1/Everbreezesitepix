@@ -8,7 +8,6 @@ import {
   SectionList,
   StyleSheet,
   View,
-  useWindowDimensions,
 } from "react-native";
 import {
   Archive,
@@ -77,7 +76,7 @@ import { ProjectStatusChip } from "@/components/ProjectStatusChip";
 import { ProjectWorkflowStrip } from "@/components/ProjectWorkflowStrip";
 import { ProjectLabels } from "@/components/ProjectLabels";
 import { ProjectPhotoCalendar } from "@/components/ProjectPhotoCalendar";
-import { PhotoViewer, ThumbTagBadge } from "@/components/photo-viewer";
+import { PhotoViewer, ThumbTagBadge, TileCaption } from "@/components/photo-viewer";
 import { ProjectVideos } from "@/components/ProjectVideos";
 import { PhotoFilterSheet } from "@/components/PhotoFilterSheet";
 import { listProjectVideos } from "@/api/project-videos";
@@ -119,7 +118,7 @@ import {
 import { useQueue } from "@/offline/use-queue";
 import { enqueue } from "@/offline/outbox";
 import { refreshQueue, requestSync } from "@/offline/sync";
-import { cardPageInset, HIT_TARGET, radius, spacing, useTheme } from "@/theme";
+import { HIT_TARGET, radius, spacing, useLayout, useTheme } from "@/theme";
 import {
   DailyLogCard,
   ProjectBlueprint,
@@ -216,13 +215,16 @@ export default function ProjectDetailScreen() {
    * Computed here rather than beside `tileSize` below because the section memo
    * chunks photos into fixed rows, so the count has to exist before it runs.
    */
-  const { width: screenWidth } = useWindowDimensions();
+  const layout = useLayout();
+  const screenWidth = layout.width;
+  // The photo grid's gutter, plus the notch of a phone on its side (zero upright).
+  const gridSide = spacing.lg + layout.safeSide;
   // Photos still in the outbox: the Daily Log for them has not been written
   // yet, because on a phone a capture session finishes when the queue does.
   const { outstanding: queued } = useQueue();
   /* The web Filters popover's Photo size. Medium is the grid phones always drew. */
   const [photoSize, setPhotoSize] = useState<PhotoSize>("md");
-  const columns = photoGridColumns(screenWidth - spacing.lg * 2, photoSize);
+  const columns = photoGridColumns(screenWidth - gridSide * 2, photoSize);
   /*
    * `photo` is a deep link, not something this screen ever sets.
    *
@@ -428,14 +430,15 @@ export default function ProjectDetailScreen() {
   const loading = projectQuery.isLoading || photosQuery.isLoading;
   const error = projectQuery.error ?? photosQuery.error;
 
-  const tileSize = (screenWidth - spacing.lg * 2 - GRID_GAP * (columns - 1)) / columns;
+  const tileSize = (screenWidth - gridSide * 2 - GRID_GAP * (columns - 1)) / columns;
   /*
    * The header card and the calendar centre on a tablet rather than running
    * a line of status and labels a metre across. The photo grid stays full
-   * width: it is a contact sheet, and wider means more photographs.
+   * width: it is a contact sheet, and wider means more photographs. On its
+   * side the page spreads instead of centring (see `cardPageInsetFor`).
    */
-  const headerInset = cardPageInset(screenWidth, spacing.xl);
-  const calendarInset = cardPageInset(screenWidth, spacing.lg);
+  const headerInset = layout.cardInset(spacing.xl);
+  const calendarInset = layout.cardInset(spacing.lg);
 
   /*
    * What the photo viewer pages through: the day picked on the Calendar tab,
@@ -976,7 +979,7 @@ export default function ProjectDetailScreen() {
                 ) : null}
 
                 {tab === "photos" ? (
-                  <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.lg }}>
+                  <View style={{ paddingHorizontal: gridSide, paddingTop: spacing.lg }}>
                     <View
                       style={{
                         flexDirection: "row",
@@ -1181,14 +1184,16 @@ export default function ProjectDetailScreen() {
                 style={{
                   marginBottom: spacing.sm,
                   marginTop: spacing.md,
-                  paddingHorizontal: spacing.lg,
+                  paddingHorizontal: gridSide,
                 }}
               >
                 {section.title.toUpperCase()}
               </UIText>
             )}
             renderItem={({ item }) => (
-              <View style={[styles.gridRow, { marginBottom: GRID_GAP }]}>
+              <View
+                style={[styles.gridRow, { marginBottom: GRID_GAP, paddingHorizontal: gridSide }]}
+              >
                 {item.photos.map((photo) => {
                   const picked = selected.has(photo.id);
                   return (
@@ -1210,41 +1215,45 @@ export default function ProjectDetailScreen() {
                           : "Opens the photo full screen"
                       }
                       accessibilityState={{ selected: picked }}
-                      style={{ width: tileSize, height: tileSize }}
+                      style={{ width: tileSize }}
                     >
-                      <PhotoThumb
-                        uri={urls[photo.id]}
-                        width="100%"
-                        height="100%"
-                        rounded={radius.lg}
-                      />
-                      {/*
+                      <View style={{ width: tileSize, height: tileSize }}>
+                        <PhotoThumb
+                          uri={urls[photo.id]}
+                          width="100%"
+                          height="100%"
+                          rounded={radius.lg}
+                        />
+                        {/*
                         The web grid's corner pill: Before, After, Walkthrough
                         or Needs review. Left off the smallest tiles, where it
                         would cover most of the photo.
                       */}
-                      {tileSize >= 90 ? <PhasePill phase={photo.phase} /> : null}
-                      {/* The photo's tags on the photo, as the web grid shows them. */}
-                      {tileSize >= 72 ? <ThumbTagBadge tags={photo.tags} /> : null}
-                      {selecting ? (
-                        <View
-                          style={[
-                            styles.tileOverlay,
-                            {
-                              borderColor: picked ? theme.colors.primary : "transparent",
-                              // Unpicked tiles dim so the chosen ones read at a
-                              // glance across a three-column grid.
-                              backgroundColor: picked ? "transparent" : "rgba(0,0,0,0.35)",
-                            },
-                          ]}
-                        >
-                          {picked ? (
-                            <View style={styles.tileCheck}>
-                              <Icon icon={CircleCheck} size="lg" tone="inverse" />
-                            </View>
-                          ) : null}
-                        </View>
-                      ) : null}
+                        {tileSize >= 90 ? <PhasePill phase={photo.phase} /> : null}
+                        {/* The photo's tags on the photo, as the web grid shows them. */}
+                        {tileSize >= 72 ? <ThumbTagBadge tags={photo.tags} /> : null}
+                        {selecting ? (
+                          <View
+                            style={[
+                              styles.tileOverlay,
+                              {
+                                borderColor: picked ? theme.colors.primary : "transparent",
+                                // Unpicked tiles dim so the chosen ones read at a
+                                // glance across a three-column grid.
+                                backgroundColor: picked ? "transparent" : "rgba(0,0,0,0.35)",
+                              },
+                            ]}
+                          >
+                            {picked ? (
+                              <View style={styles.tileCheck}>
+                                <Icon icon={CircleCheck} size="lg" tone="inverse" />
+                              </View>
+                            ) : null}
+                          </View>
+                        ) : null}
+                      </View>
+                      {/* The photo's note, as a caption under it (Jon, 2026-09-29). */}
+                      <TileCaption caption={photo.caption} tileWidth={tileSize} />
                     </Pressable>
                   );
                 })}

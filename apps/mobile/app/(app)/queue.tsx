@@ -5,7 +5,7 @@ import { relativeTime } from "@everlumen/shared";
 import { discard, listRows, retryFailed, type OutboxRow } from "@/offline/outbox";
 import { refreshQueue, requestSync } from "@/offline/sync";
 import { useQueue } from "@/offline/use-queue";
-import { radius, spacing, useTheme } from "@/theme";
+import { radius, spacing, useLayout, useTheme } from "@/theme";
 import { CircleCheck, RefreshCw, Trash2 } from "@/ui/icons";
 import { Badge, Button, Card, EmptyState, Text, type BadgeTone } from "@/ui";
 
@@ -39,6 +39,8 @@ const STATE_TONE: Record<OutboxRow["state"], BadgeTone> = {
 
 export default function QueueScreen() {
   const theme = useTheme();
+  // The notch of a phone held on its side; zero upright.
+  const { safeSide } = useLayout();
   const counts = useQueue();
   const [rows, setRows] = useState<OutboxRow[]>([]);
 
@@ -66,7 +68,9 @@ export default function QueueScreen() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+    <View
+      style={{ flex: 1, paddingHorizontal: safeSide, backgroundColor: theme.colors.background }}
+    >
       <FlatList
         data={rows}
         keyExtractor={(row) => row.id}

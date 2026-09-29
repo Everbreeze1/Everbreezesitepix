@@ -182,8 +182,15 @@ describe("the camera saves as it shoots", () => {
 
   it("keeps the library, the note and the mic on the camera", () => {
     expect(camera).toContain('accessibilityLabel="Add from library"');
-    expect(camera).toContain("<CaptureNotePanel");
+    expect(camera).toContain("<PhotoNoteEditor");
     expect(camera).toContain("openVoiceNote");
+  });
+
+  it("opens one photo's editor from the last shot, with no strip of photos", () => {
+    // Several photos side by side is the walkthrough's screen only (Jon, 2026-09-29).
+    expect(camera).not.toMatch(/strip=\{/);
+    expect(camera).toMatch(/photoUri=\{panelShot\.thumb \?\? panelShot\.source\}/);
+    expect(camera).toContain('setPanel({ kind: "shot", id: lastShot.id, start: "voice" })');
   });
 
   it("retags a photo that has already gone by its own row, not the batch", () => {

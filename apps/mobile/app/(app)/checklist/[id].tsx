@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { Pressable, RefreshControl, ScrollView, useWindowDimensions, View } from "react-native";
+import { Pressable, RefreshControl, ScrollView, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CHECKLIST_TYPE_LABELS, type ChecklistItemType } from "@everlumen/shared";
@@ -20,7 +20,7 @@ import { useAuth } from "@/lib/auth";
 import { checklistItemRowId, type ChecklistItemPatchPayload } from "@/offline/handlers";
 import { enqueue } from "@/offline/outbox";
 import { refreshQueue, requestSync } from "@/offline/sync";
-import { contentInset, HIT_TARGET, radius, spacing, useTheme } from "@/theme";
+import { HIT_TARGET, radius, spacing, useLayout, useTheme } from "@/theme";
 import { Camera, CircleCheck, Share2, Star } from "@/ui/icons";
 import { Badge, Button, Card, ErrorState, Field, Icon, IconButton, SkeletonList, Text } from "@/ui";
 
@@ -39,8 +39,8 @@ export default function ChecklistRunnerScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const theme = useTheme();
   // A form column, not a stretched phone layout, on a tablet.
-  const { width } = useWindowDimensions();
-  const inset = contentInset(width, spacing.lg);
+  // Centred upright on a tablet; spread and clear of the notch on its side.
+  const inset = useLayout().inset(spacing.lg);
   const { user } = useAuth();
   const queryClient = useQueryClient();
 

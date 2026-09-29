@@ -14,7 +14,7 @@ import {
 import { buildReportDocument } from "@/api/report-document";
 import { isReportShared, shareTogglePatch } from "@/api/report-view";
 import { openShareSheet, publicUrl } from "@/api/sharing";
-import { spacing, useTheme } from "@/theme";
+import { spacing, useLayout, useTheme } from "@/theme";
 import { Download, EllipsisVertical, Link2, PenLine, Share2 } from "@/ui/icons";
 import { Button, ErrorState, Icon, IconButton, SkeletonList, Text } from "@/ui";
 import { useReportActions } from "./ReportActionsSheet";
@@ -45,6 +45,8 @@ export function ReportReader({
   onDeleted?: () => void;
 }) {
   const theme = useTheme();
+  // The side safe area: the notch of a phone on its side, zero upright.
+  const { safeSide } = useLayout();
   const queryClient = useQueryClient();
   const queryKey = useMemo(() => ["report", reportId], [reportId]);
 
@@ -198,7 +200,7 @@ export function ReportReader({
           flexWrap: "wrap",
           alignItems: "center",
           gap: spacing.sm,
-          paddingHorizontal: spacing.lg,
+          paddingHorizontal: spacing.lg + safeSide,
           paddingVertical: spacing.sm,
           borderBottomWidth: 1,
           borderBottomColor: theme.colors.border,
@@ -262,6 +264,7 @@ export function ReportReader({
         style={{ flex: 1, backgroundColor: theme.colors.background }}
         contentContainerStyle={{
           padding: spacing.lg,
+          paddingHorizontal: spacing.lg + safeSide,
           paddingBottom: spacing.xxl * 2,
           width: "100%",
           maxWidth: 820,

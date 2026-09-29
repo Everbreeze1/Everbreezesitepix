@@ -16,6 +16,7 @@ import {
   weekdayLabels,
   type Month,
 } from "@/api/timeline-view";
+import { TileCaption } from "@/components/photo-viewer/PhotoCaption";
 import { ThumbTagBadge } from "@/components/photo-viewer/TagPill";
 import { withAlpha } from "@/components/ProjectStatusPill";
 import { radius, spacing, useTheme } from "@/theme";
@@ -214,15 +215,19 @@ export function ProjectPhotoCalendar({
                     dayPhotos.data ?? undefined,
                   )
                 }
-                style={{ width: thumb, height: thumb }}
+                style={{ width: thumb }}
               >
-                <PhotoThumb
-                  uri={dayPhotos.data?.urls[photo.id]}
-                  width="100%"
-                  height="100%"
-                  rounded={radius.md}
-                />
-                {thumb >= 72 ? <ThumbTagBadge tags={photo.tags} /> : null}
+                <View style={{ width: thumb, height: thumb }}>
+                  <PhotoThumb
+                    uri={dayPhotos.data?.urls[photo.id]}
+                    width="100%"
+                    height="100%"
+                    rounded={radius.md}
+                  />
+                  {thumb >= 72 ? <ThumbTagBadge tags={photo.tags} /> : null}
+                </View>
+                {/* The photo's note, as a caption under it. */}
+                <TileCaption caption={photo.caption} tileWidth={thumb} />
               </Pressable>
             ))}
           </View>
