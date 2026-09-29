@@ -25,6 +25,7 @@ import {
 import { View } from "react-native";
 import { router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
+import Constants from "expo-constants";
 import { useQuery } from "@tanstack/react-query";
 import { ApiClientError } from "@everlumen/api-client";
 import { getMyProfile } from "@/api/profile";
@@ -488,6 +489,17 @@ export default function AccountScreen() {
               }}
             />
           </View>
+          <View
+            style={{
+              paddingHorizontal: spacing.lg,
+              paddingTop: spacing.lg,
+              paddingBottom: spacing.xl,
+            }}
+          >
+            <Text variant="caption" tone="muted" style={{ textAlign: "center" }}>
+              {buildLabel()}
+            </Text>
+          </View>
         </View>
       </Columns>
     </Screen>
@@ -497,4 +509,15 @@ export default function AccountScreen() {
 /** The glyph every web-bound row carries, so the boundary is visible at a glance. */
 function ExternalLinkMark() {
   return <Badge label="Web" icon={ExternalLink} tone="neutral" variant="outline" />;
+}
+
+/** "Version 0.1.0 (build 7) · 2026-09-29 21:40 UTC · a42bf8a", so testers can confirm the installed build. */
+function buildLabel(): string {
+  const extra = (Constants.expoConfig?.extra ?? {}) as { buildCommit?: string; builtAt?: string };
+  const parts = [`Version ${Constants.expoConfig?.version ?? "?"}`];
+  const code = Constants.expoConfig?.android?.versionCode ?? Constants.expoConfig?.ios?.buildNumber;
+  if (code) parts[0] += ` (build ${code})`;
+  if (extra.builtAt) parts.push(`${extra.builtAt} UTC`);
+  if (extra.buildCommit) parts.push(extra.buildCommit);
+  return parts.join(" · ");
 }
