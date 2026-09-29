@@ -20,7 +20,8 @@ describe("a site video after Stop", () => {
   const siteBranch = () => {
     const s = screen();
     const at = s.indexOf("    if (siteVideo) {");
-    return s.slice(at, s.indexOf("    const shots = shotsRef.current;", at));
+    // Ends where the walkthrough's own save takes over.
+    return s.slice(at, s.indexOf("    await saveWalkthrough(", at));
   };
 
   it("is moved into app storage and queued as a video_upload", () => {
@@ -28,8 +29,32 @@ describe("a site video after Stop", () => {
     expect(branch).toContain("persistRecording(videoUri, id)");
     expect(branch).toContain('kind: "video_upload"');
     expect(branch).toContain("requestSync()");
+    // Back first; the move and the queue write run after, off the way out.
+    expect(branch.indexOf("leaveForCamera();")).toBeLessThan(branch.indexOf("setTimeout("));
+    expect(branch.indexOf("setTimeout(")).toBeLessThan(branch.indexOf("persistRecording("));
     // Back to the project even when the recorder was the first screen open.
-    expect(branch).toContain("goBack(`/project/${projectId}`)");
+    expect(screen()).toContain("goBack(`/project/${projectId}`)");
+  });
+
+  it("goes back to the camera on Stop with nothing drawn over the live view", () => {
+    // Jon (2026-09-29): "The circling thing is still happening when i save a video."
+    const s = screen();
+    expect(s).not.toContain("Saving video</Text>");
+    expect(s).toContain('stage === "saving" && !siteVideo && { opacity: 0.5 }');
+    const stop = s.slice(
+      s.indexOf("  function stop() {"),
+      s.indexOf("  function leaveForCamera()"),
+    );
+    expect(stop).toContain('siteVideo && Platform.OS === "android"');
+    expect(stop).toContain("setTimeout(leaveForCamera, SITE_VIDEO_LEAVE_MS)");
+    // Leaving is once only, however many paths ask for it.
+    expect(s).toMatch(/function leaveForCamera\(\) \{\s*if \(left\.current\) return;/);
+  });
+
+  it("says a failed save on the camera, since the recorder has already gone", () => {
+    const branch = siteBranch();
+    expect(branch).toContain("leaveCaptureNotice(");
+    expect(branch).not.toContain("setError(");
   });
 
   it("does not upload, count up a percentage or raise an alert on the way out", () => {

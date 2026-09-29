@@ -523,9 +523,23 @@ export async function saveWalkthroughNarration(
   walkthroughId: string,
   narration: WalkthroughNarration,
 ): Promise<boolean> {
+  /*
+   * The transcript's timing lives in the same column (`transcriptSegments`,
+   * written by transcription) so photos that land late can still be captioned
+   * by time. Narration replaces the rest, never that.
+   */
+  const { data: existing } = await getSupabaseAdmin()
+    .from("walkthroughs" as any)
+    .select("narration_json")
+    .eq("id", walkthroughId)
+    .maybeSingle();
+  const segments = (existing as any)?.narration_json?.transcriptSegments;
+  const payload = Array.isArray(segments)
+    ? { ...narration, transcriptSegments: segments }
+    : narration;
   const { error } = await getSupabaseAdmin()
     .from("walkthroughs" as any)
-    .update({ narration_json: narration as any })
+    .update({ narration_json: payload as any })
     .eq("id", walkthroughId);
   if (error) {
     console.warn("[walkthrough] could not save narration", {

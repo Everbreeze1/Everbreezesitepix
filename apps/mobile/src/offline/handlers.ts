@@ -7,6 +7,7 @@ import { queuedSiteVideoPath, saveSiteVideo } from "@/api/project-videos";
 import { queryClient } from "@/lib/query";
 import { saveSiteLog } from "@/api/site-logs";
 import { setTaskPhotoStatus } from "@/api/task-photos";
+import { saveWalkthroughPhoto } from "@/api/walkthroughs";
 import type { ProjectPatch } from "@/api/project-patch";
 import {
   applyTaskEdit,
@@ -317,6 +318,27 @@ export function workflowItemRowId(itemId: string): string {
 export function workflowPhaseRowId(phaseId: string, field: "signoff" | "notes"): string {
   return `workflow_phase_patch:${phaseId}:${field}`;
 }
+/**
+ * A photo snapped during a walkthrough recording, queued.
+ *
+ * Linked to its walkthrough at its offset into the recording, which is what
+ * the transcript captions it from. Queued rather than sent inline at Stop,
+ * where one failed upload used to lose every snap of the walk.
+ */
+export type WalkthroughPhotoPayload = {
+  userId: string;
+  projectId: string;
+  walkthroughId: string;
+  offsetSeconds: number;
+  position: number;
+  width?: number | null;
+  height?: number | null;
+  exif?: Record<string, unknown> | null;
+  /** When the snap was pressed (ISO). */
+  capturedAt?: string;
+  deviceCoords?: Coords | null;
+  projectCoords?: Coords | null;
+};
 
 type Handler = (row: OutboxRow) => Promise<void>;
 
@@ -389,6 +411,36 @@ const handlers: Record<OutboxKind, Handler> = {
       storagePath: queuedSiteVideoPath(payload.userId, payload.projectId, row.id),
     });
     void queryClient.invalidateQueries({ queryKey: ["project-videos", payload.projectId] });
+  },
+
+  walkthrough_photo: async (row) => {
+    const payload = JSON.parse(row.payload) as WalkthroughPhotoPayload;
+
+    if (!row.local_uri) {
+      throw new PermanentError("Queued walkthrough photo has no file on this device");
+    }
+
+    await saveWalkthroughPhoto({
+      userId: payload.userId,
+      projectId: payload.projectId,
+      walkthroughId: payload.walkthroughId,
+      asset: {
+        uri: row.local_uri,
+        width: payload.width,
+        height: payload.height,
+        exif: payload.exif,
+      },
+      offsetSeconds: payload.offsetSeconds,
+      position: payload.position,
+      deviceCoords: payload.deviceCoords,
+      projectCoords: payload.projectCoords,
+      capturedAt: payload.capturedAt,
+      // Same row, same storage path and idempotency key: a retry converges.
+      uploadId: row.id,
+    });
+    void queryClient.invalidateQueries({ queryKey: ["walkthrough", payload.walkthroughId] });
+    void queryClient.invalidateQueries({ queryKey: ["project-walkthroughs", payload.projectId] });
+    void queryClient.invalidateQueries({ queryKey: ["project-photos", payload.projectId] });
   },
 
   checklist_item_patch: async (row) => {

@@ -102,8 +102,17 @@ export async function saveWalkthroughPhoto(options: {
   position: number;
   deviceCoords?: Coords | null;
   projectCoords?: Coords | null;
+  /**
+   * Stable id for this save, from the offline outbox row. The same id gives
+   * the same storage path and the same idempotency key, so a retry after a
+   * lost response converges on one photo instead of writing two.
+   */
+  uploadId?: string;
+  /** When the snap was taken (ISO): the photo's time when it carries no EXIF. */
+  capturedAt?: string;
 }): Promise<void> {
-  const storagePath = `${options.userId}/${options.projectId}/${randomUUID()}.jpg`;
+  const uploadId = options.uploadId ?? randomUUID();
+  const storagePath = `${options.userId}/${options.projectId}/${uploadId}.jpg`;
   const { sizeBytes, thumbPath } = await uploadPhotoObject(options.asset, storagePath);
 
   const meta = resolvePhotoMeta(
@@ -111,6 +120,7 @@ export async function saveWalkthroughPhoto(options: {
     options.deviceCoords ?? null,
     options.projectCoords ?? null,
   );
+  const takenAt = readExifMeta(options.asset.exif).takenAt ?? options.capturedAt ?? meta.taken_at;
 
   await api.rpc(
     "saveWalkthroughPhoto",
@@ -123,11 +133,11 @@ export async function saveWalkthroughPhoto(options: {
       caption: `Walkthrough +${Math.round(options.offsetSeconds)}s`,
       offsetSeconds: Math.max(0, Math.round(options.offsetSeconds)),
       position: options.position,
-      takenAt: meta.taken_at,
+      takenAt,
       latitude: meta.latitude,
       longitude: meta.longitude,
     },
-    { idempotencyKey: randomUUID() },
+    { idempotencyKey: uploadId },
   );
 }
 

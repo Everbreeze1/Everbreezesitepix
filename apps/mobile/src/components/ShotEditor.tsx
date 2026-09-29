@@ -1,18 +1,17 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
+  BackHandler,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import * as WebBrowser from "expo-web-browser";
+import type { PhotoPhase } from "@/api/photos";
 import { fileGeneratedPdf } from "@/api/pdf-export";
 import { ShotAnnotator, type ShotAnnotatorTool } from "@/components/ShotAnnotator";
 import { ShotCropper } from "@/components/ShotCropper";
@@ -21,7 +20,19 @@ import { TagPickerSheet } from "@/components/TagPickerSheet";
 import { jpegFileToPdfBase64 } from "@/components/scan-pdf";
 import { HIT_TARGET, radius, spacing, useTheme } from "@/theme";
 import { Icon, type LucideIcon } from "@/ui";
-import { Check, Crop, FileText, Pencil, RotateCcw, Ruler, StickyNote, Tag, X } from "@/ui/icons";
+import {
+  Camera,
+  Crop,
+  FileText,
+  Mic,
+  Pencil,
+  RotateCcw,
+  Ruler,
+  Share2,
+  StickyNote,
+  Tag,
+  Trash2,
+} from "@/ui/icons";
 
 export type EditableShot = {
   uri: string;
@@ -30,23 +41,41 @@ export type EditableShot = {
   scan?: boolean;
   caption?: string;
   tags?: string[];
+  /** Before/None/After. Left out for a scan, which never takes one. */
+  phase?: PhotoPhase;
 };
 
 export type ShotPatch = Partial<
   Pick<EditableShot, "uri" | "width" | "height" | "caption" | "tags">
 >;
 
+/** The Before/None/After toggle, worded as the camera's. */
+const PHASES: { id: PhotoPhase; label: string }[] = [
+  { id: "before", label: "BEFORE" },
+  { id: "untagged", label: "None" },
+  { id: "after", label: "AFTER" },
+];
+
 /**
- * One shot the camera has just saved: web's post-capture preview.
+ * The photo just taken, opened the moment the shutter fires: everything that
+ * can be done to that one photo, over the photo itself.
  *
- * Retake, Annotate, Measure (Pro/Team, on a supported iPhone), Crop, Tags and
- * a description, and for a scan, Save as PDF. Every edit goes back to the
- * camera through `onChange`, which applies it to that shot's queued photo;
- * Retake takes the shot back.
+ * Jon (2026-09-29): "Once i snap a photo the edit window should open with all
+ * edit and sharing capabilities for that photo i just took." The photo is
+ * already saved (queued) when this opens, so nothing here is a Save step:
+ * every change goes back to the camera through `onChange` and lands on that
+ * shot's queued photo, and "Back to camera" is one tap to the next shot.
  *
- * A full-screen view rather than a Modal, so the annotator, cropper and tag
- * sheet it opens are the only modals on screen: iOS will not stack a modal on
- * a modal that is already presenting.
+ * Before/None/After, voice note and caption (the keyboard-safe note editor,
+ * opened by `onNote`), tags, annotate, measure (Pro/Team, supported iPhone),
+ * crop, share, retake, delete, and for a scan, Save as PDF.
+ *
+ * An overlay drawn over the live camera rather than a screen of its own, so
+ * the camera underneath stays running and is ready the instant this closes.
+ * Not a Modal either, so the annotator, cropper and tag sheet it opens are the
+ * only modals on screen: iOS will not stack a modal on a modal that is already
+ * presenting. On a tablet the tools sit in a column on the right, where the
+ * hand holding it reaches.
  */
 export function ShotEditor({
   shot,
@@ -54,8 +83,14 @@ export function ShotEditor({
   userId,
   existingTags,
   canMeasure,
+  wide = false,
+  status,
   onChange,
+  onPhaseChange,
+  onNote,
+  onShare,
   onRetake,
+  onDelete,
   onClose,
 }: {
   shot: EditableShot;
@@ -63,8 +98,17 @@ export function ShotEditor({
   userId: string | null;
   existingTags: string[];
   canMeasure: boolean;
+  /** A tablet: tools in a column on the right. */
+  wide?: boolean;
+  /** A short line over the photo, such as "Saved" or a failed save. */
+  status?: { text: string; error?: boolean } | null;
   onChange: (patch: ShotPatch) => void;
+  onPhaseChange?: (phase: PhotoPhase) => void;
+  /** Opens the note editor: "voice" straight into dictation, "type" for the keyboard. */
+  onNote: (start: "voice" | "type") => void;
+  onShare?: () => void;
   onRetake: () => void;
+  onDelete?: () => void;
   onClose: () => void;
 }) {
   const theme = useTheme();
@@ -74,10 +118,23 @@ export function ShotEditor({
   const [tagsOpen, setTagsOpen] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
-  /** The description field, folded away until asked for so the photo keeps the screen. */
-  const [noteOpen, setNoteOpen] = useState(Boolean(shot.caption?.trim()));
 
   const tags = shot.tags ?? [];
+  const caption = shot.caption?.trim() ?? "";
+
+  /*
+   * Android's Back is "back to camera", never out of the camera. The note
+   * editor, when it is open over this, registers after it and so answers
+   * first; the annotator, cropper and tag sheet are Modals and take Back
+   * themselves.
+   */
+  useEffect(() => {
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      onClose();
+      return true;
+    });
+    return () => sub.remove();
+  }, [onClose]);
 
   /*
    * Filed into the project's Documents, which is how every PDF the phone makes
@@ -118,8 +175,23 @@ export function ShotEditor({
     onPress: () => void;
     badge?: number;
     active?: boolean;
+    danger?: boolean;
   }[] = [
-    { id: "retake", label: "Retake", icon: RotateCcw, onPress: onRetake },
+    { id: "voice", label: "Voice", icon: Mic, onPress: () => onNote("voice") },
+    {
+      id: "note",
+      label: "Note",
+      icon: StickyNote,
+      onPress: () => onNote("type"),
+      active: caption.length > 0,
+    },
+    {
+      id: "tags",
+      label: "Tags",
+      icon: Tag,
+      onPress: () => setTagsOpen(true),
+      badge: tags.length,
+    },
     { id: "annotate", label: "Annotate", icon: Pencil, onPress: () => setAnnotating("pen") },
     ...(canMeasure
       ? [
@@ -132,34 +204,128 @@ export function ShotEditor({
         ]
       : []),
     { id: "crop", label: "Crop", icon: Crop, onPress: () => setCropping(true) },
-    {
-      id: "tags",
-      label: "Tags",
-      icon: Tag,
-      onPress: () => setTagsOpen(true),
-      badge: tags.length,
-    },
-    {
-      id: "note",
-      label: "Note",
-      icon: StickyNote,
-      onPress: () => setNoteOpen((open) => !open),
-      active: noteOpen,
-    },
+    ...(onShare ? [{ id: "share", label: "Share", icon: Share2, onPress: onShare }] : []),
     ...(shot.scan
       ? [{ id: "pdf", label: "PDF", icon: FileText, onPress: () => void saveAsPdf() }]
       : []),
+    { id: "retake", label: "Retake", icon: RotateCcw, onPress: onRetake },
+    ...(onDelete
+      ? [{ id: "delete", label: "Delete", icon: Trash2, onPress: onDelete, danger: true }]
+      : []),
   ];
 
-  return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      style={styles.root}
+  const toolButtons = actions.map((action) => (
+    <Pressable
+      key={action.id}
+      accessibilityRole="button"
+      accessibilityLabel={
+        action.id === "retake" ? "Retake: delete this photo and shoot again" : action.label
+      }
+      accessibilityState={action.active !== undefined ? { selected: action.active } : undefined}
+      onPress={action.onPress}
+      disabled={pdfBusy && action.id === "pdf"}
+      style={[styles.toolButton, action.active && styles.toolButtonActive]}
     >
+      {action.id === "pdf" && pdfBusy ? (
+        <ActivityIndicator color="#fff" />
+      ) : (
+        <Icon icon={action.icon} size="md" color={action.danger ? DANGER_FG : "#fff"} />
+      )}
+      <Text style={[styles.toolText, action.danger && { color: DANGER_FG }]}>{action.label}</Text>
+      {action.badge ? (
+        <View style={[styles.badge, { backgroundColor: theme.colors.primary }]}>
+          <Text style={[styles.badgeText, { color: theme.colors.primaryForeground }]}>
+            {action.badge}
+          </Text>
+        </View>
+      ) : null}
+    </Pressable>
+  ));
+
+  const shownMessage =
+    message ?? (status ? { text: status.text, error: Boolean(status.error) } : null);
+
+  const phaseRow =
+    onPhaseChange && !shot.scan ? (
+      <View style={styles.phaseRow} accessibilityRole="radiogroup">
+        {PHASES.map((option) => {
+          const active = (shot.phase ?? "untagged") === option.id;
+          const isNone = option.id === "untagged";
+          return (
+            <Pressable
+              key={option.id}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: active }}
+              accessibilityLabel={isNone ? "No before or after tag" : `Tag as ${option.label}`}
+              onPress={() => onPhaseChange(active && !isNone ? "untagged" : option.id)}
+              hitSlop={4}
+              style={[
+                styles.phasePill,
+                active &&
+                  (isNone
+                    ? styles.phaseNoneActive
+                    : option.id === "after"
+                      ? { backgroundColor: theme.colors.primary }
+                      : styles.phasePillActive),
+              ]}
+            >
+              <Text
+                style={[
+                  isNone ? styles.phaseNoneText : styles.phaseText,
+                  active &&
+                    !isNone &&
+                    (option.id === "after"
+                      ? { color: theme.colors.primaryForeground }
+                      : styles.phaseTextActive),
+                ]}
+              >
+                {option.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    ) : null;
+
+  return (
+    <View style={styles.root}>
       <View style={styles.imageWrap}>
         <Image source={{ uri: shot.uri }} style={StyleSheet.absoluteFill} contentFit="contain" />
+      </View>
+
+      <View
+        style={[
+          styles.topArea,
+          {
+            top: insets.top + spacing.sm,
+            left: insets.left + spacing.lg,
+            right: insets.right + spacing.lg + (wide ? RAIL_WIDTH + spacing.sm : 0),
+          },
+        ]}
+        pointerEvents="box-none"
+      >
+        <View style={styles.topBar} pointerEvents="box-none">
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Back to camera"
+            onPress={onClose}
+            hitSlop={8}
+            style={styles.backPill}
+          >
+            <Icon icon={Camera} size="sm" color="#fff" />
+            <Text style={styles.backPillText}>Camera</Text>
+          </Pressable>
+          {shot.scan ? (
+            <View style={[styles.scanBadge, { backgroundColor: theme.colors.primary }]}>
+              <Text style={[styles.scanBadgeText, { color: theme.colors.primaryForeground }]}>
+                SCAN
+              </Text>
+            </View>
+          ) : null}
+        </View>
+        {phaseRow}
         {tags.length > 0 ? (
-          <View style={[styles.tagOverlay, { top: insets.top + 64 }]} pointerEvents="none">
+          <View style={styles.tagOverlay} pointerEvents="none">
             {tags.map((tag) => (
               <View key={tag} style={styles.tagPill}>
                 <Text style={styles.tagPillText}>{tag}</Text>
@@ -167,36 +333,28 @@ export function ShotEditor({
             ))}
           </View>
         ) : null}
-        {shot.scan ? (
-          <View style={[styles.scanBadge, { backgroundColor: theme.colors.primary }]}>
-            <Text style={[styles.scanBadgeText, { color: theme.colors.primaryForeground }]}>
-              SCAN
-            </Text>
-          </View>
-        ) : null}
       </View>
 
-      <View
-        style={[
-          styles.topBar,
-          {
-            top: insets.top + spacing.sm,
-            left: insets.left + spacing.lg,
-            right: insets.right + spacing.lg,
-          },
-        ]}
-        pointerEvents="box-none"
-      >
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Back to camera"
-          onPress={onClose}
-          hitSlop={8}
-          style={styles.roundButton}
+      {/* On a tablet, the tools in a column on the right-hand side. */}
+      {wide ? (
+        <View
+          style={[
+            styles.rail,
+            {
+              top: insets.top + spacing.sm,
+              bottom: insets.bottom + spacing.lg,
+              right: insets.right + spacing.lg,
+            },
+          ]}
         >
-          <Icon icon={X} size="md" color="#fff" />
-        </Pressable>
-      </View>
+          <ScrollView
+            contentContainerStyle={styles.railContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {toolButtons}
+          </ScrollView>
+        </View>
+      ) : null}
 
       <View
         style={[
@@ -204,71 +362,51 @@ export function ShotEditor({
           {
             bottom: insets.bottom + spacing.lg,
             left: insets.left + spacing.lg,
-            right: insets.right + spacing.lg,
+            right: insets.right + spacing.lg + (wide ? RAIL_WIDTH + spacing.sm : 0),
           },
         ]}
         pointerEvents="box-none"
       >
-        {message ? (
-          <Text style={[styles.message, message.error && styles.messageError]}>{message.text}</Text>
+        {shownMessage ? (
+          <Text style={[styles.message, shownMessage.error && styles.messageError]}>
+            {shownMessage.text}
+          </Text>
         ) : null}
 
-        {noteOpen ? (
-          <TextInput
-            value={shot.caption ?? ""}
-            onChangeText={(caption) => onChange({ caption })}
-            placeholder="Add a description (optional)"
-            placeholderTextColor="rgba(255,255,255,0.5)"
-            multiline
-            style={styles.description}
-            accessibilityLabel="Photo description"
-          />
-        ) : null}
-
-        <View style={styles.toolbarWrap}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.toolbar}
+        {caption ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Note: ${caption}. Edit`}
+            onPress={() => onNote("type")}
+            style={styles.captionLine}
           >
-            {actions.map((action) => (
-              <Pressable
-                key={action.id}
-                accessibilityRole="button"
-                accessibilityLabel={action.label}
-                accessibilityState={
-                  action.active !== undefined ? { selected: action.active } : undefined
-                }
-                onPress={action.onPress}
-                disabled={pdfBusy && action.id === "pdf"}
-                style={[styles.toolButton, action.active && styles.toolButtonActive]}
-              >
-                {action.id === "pdf" && pdfBusy ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Icon icon={action.icon} size="md" color="#fff" />
-                )}
-                <Text style={styles.toolText}>{action.label}</Text>
-                {action.badge ? (
-                  <View style={[styles.badge, { backgroundColor: theme.colors.primary }]}>
-                    <Text style={[styles.badgeText, { color: theme.colors.primaryForeground }]}>
-                      {action.badge}
-                    </Text>
-                  </View>
-                ) : null}
-              </Pressable>
-            ))}
-          </ScrollView>
-        </View>
+            <Text style={styles.captionText} numberOfLines={2}>
+              {caption}
+            </Text>
+          </Pressable>
+        ) : null}
+
+        {wide ? null : (
+          <View style={styles.toolbarWrap}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.toolbar}
+            >
+              {toolButtons}
+            </ScrollView>
+          </View>
+        )}
 
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Done"
+          accessibilityLabel="Back to camera"
+          accessibilityHint="The photo is already saved"
           onPress={onClose}
           style={styles.doneButton}
         >
-          <Icon icon={Check} size="md" color="#18130d" />
-          <Text style={styles.doneText}>Done</Text>
+          <Icon icon={Camera} size="md" color="#18130d" />
+          <Text style={styles.doneText}>Back to camera</Text>
         </Pressable>
       </View>
 
@@ -324,17 +462,35 @@ export function ShotEditor({
         onChange={(next) => onChange({ tags: next })}
         onClose={() => setTagsOpen(false)}
       />
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
+const RAIL_WIDTH = 84;
+const DANGER_FG = "#ff8a80";
+const SELECTED_FILL = "#ece8e3";
+const SELECTED_FG = "#18130d";
+
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#000" },
+  root: { ...StyleSheet.absoluteFill, backgroundColor: "#000" },
   imageWrap: { ...StyleSheet.absoluteFill },
+  topArea: { position: "absolute", gap: spacing.sm },
+  topBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  backPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    minHeight: HIT_TARGET,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.pill,
+    backgroundColor: "rgba(24, 20, 16, 0.7)",
+  },
+  backPillText: { color: "#fff", fontSize: 14, fontWeight: "700" },
   tagOverlay: {
-    position: "absolute",
-    left: spacing.lg,
-    right: spacing.lg,
     flexDirection: "row",
     flexWrap: "wrap",
     gap: spacing.xs,
@@ -347,31 +503,65 @@ const styles = StyleSheet.create({
   },
   tagPillText: { color: "#fff", fontSize: 13, fontWeight: "700" },
   scanBadge: {
-    position: "absolute",
-    right: spacing.lg,
-    top: 60,
     borderRadius: radius.pill,
     paddingHorizontal: spacing.md,
     paddingVertical: 4,
   },
   scanBadgeText: { fontSize: 12, fontWeight: "800", letterSpacing: 0.8 },
-  topBar: { position: "absolute", flexDirection: "row" },
-  roundButton: {
-    width: HIT_TARGET,
-    height: HIT_TARGET,
-    borderRadius: HIT_TARGET / 2,
-    backgroundColor: "rgba(24, 20, 16, 0.55)",
+  phaseRow: {
+    flexDirection: "row",
+    alignSelf: "center",
+    alignItems: "center",
+    gap: spacing.xs,
+    padding: 4,
+    backgroundColor: "rgba(10, 8, 6, 0.72)",
+    borderRadius: radius.pill,
+  },
+  phasePill: {
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.lg,
+    minHeight: 34,
     alignItems: "center",
     justifyContent: "center",
   },
+  phasePillActive: { backgroundColor: SELECTED_FILL },
+  phaseNoneActive: { backgroundColor: "rgba(255,255,255,0.15)" },
+  phaseText: {
+    color: "rgba(255,255,255,0.85)",
+    fontSize: 14,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+  },
+  phaseNoneText: { color: "rgba(255,255,255,0.8)", fontSize: 13, fontWeight: "600" },
+  phaseTextActive: { color: SELECTED_FG },
+  rail: {
+    position: "absolute",
+    width: RAIL_WIDTH,
+    justifyContent: "center",
+    backgroundColor: "rgba(10, 8, 6, 0.6)",
+    borderRadius: radius.xl,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.18)",
+    overflow: "hidden",
+  },
+  railContent: { flexGrow: 1, justifyContent: "center", gap: spacing.xs, padding: 6 },
   /* Floats over the photo, centred and capped so a tablet gets the same bar. */
   bottom: {
     position: "absolute",
     alignItems: "center",
     gap: spacing.sm,
   },
-  toolbarWrap: {
+  captionLine: {
+    alignSelf: "stretch",
     maxWidth: 560,
+    backgroundColor: "rgba(10, 8, 6, 0.6)",
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  captionText: { color: "#fff", fontSize: 14 },
+  toolbarWrap: {
+    maxWidth: "100%",
     backgroundColor: "rgba(10, 8, 6, 0.6)",
     borderRadius: radius.xl,
     borderWidth: StyleSheet.hairlineWidth,
@@ -402,19 +592,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   badgeText: { fontSize: 11, fontWeight: "800" },
-  description: {
-    alignSelf: "stretch",
-    maxWidth: 560,
-    color: "#fff",
-    fontSize: 15,
-    backgroundColor: "rgba(10, 8, 6, 0.6)",
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.sm,
-    minHeight: HIT_TARGET,
-    maxHeight: 96,
-  },
   doneButton: {
     flexDirection: "row",
     gap: spacing.xs,

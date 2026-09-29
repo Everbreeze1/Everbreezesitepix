@@ -35,6 +35,7 @@ export function PhotoShareSheet({
   photoId,
   caption,
   imageUrl,
+  localFileUri,
   onAskTeammate,
 }: {
   visible: boolean;
@@ -43,6 +44,11 @@ export function PhotoShareSheet({
   caption: string;
   /** The best URL for the image itself, for the native share. */
   imageUrl: string | null;
+  /**
+   * The photo as a file on this phone (the camera's just-taken shot), sent
+   * as it is rather than downloaded first. iOS only, as the download is.
+   */
+  localFileUri?: string | null;
   onAskTeammate?: () => void;
 }) {
   const theme = useTheme();
@@ -93,11 +99,12 @@ export function PhotoShareSheet({
   }
 
   async function sendFile() {
-    if (!imageUrl) return;
+    if (!imageUrl && !localFileUri) return;
     setSendingFile(true);
     setFailure(null);
     try {
-      await sharePhotoFile(imageUrl, caption);
+      if (localFileUri) await Share.share({ url: localFileUri, title: caption });
+      else if (imageUrl) await sharePhotoFile(imageUrl, caption);
     } catch (error) {
       setFailure(error instanceof Error ? error.message : "Could not share the photo.");
     } finally {
@@ -144,7 +151,7 @@ export function PhotoShareSheet({
               accessibilityLabel="Send the photo"
               accessibilityHint="Opens the share sheet with the photo itself"
               busy={sendingFile}
-              disabled={!imageUrl}
+              disabled={!imageUrl && !localFileUri}
               onPress={() => void sendFile()}
             />
           ) : null}

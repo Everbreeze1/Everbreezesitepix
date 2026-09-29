@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
+  Share,
   StyleSheet,
   Text,
   useWindowDimensions,
@@ -9,14 +11,19 @@ import {
 } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { router, Stack, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { router, Stack, useFocusEffect, useIsFocused, useLocalSearchParams } from "expo-router";
 import { goBack } from "@/lib/navigation";
 import { CameraView, useCameraPermissions, type CameraType, type FlashMode } from "expo-camera";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import { useQuery } from "@tanstack/react-query";
-import { listProjectPhotos, type CapturedAsset, type PhotoPhase } from "@/api/photos";
+import {
+  findQueuedPhotoId,
+  listProjectPhotos,
+  type CapturedAsset,
+  type PhotoPhase,
+} from "@/api/photos";
 import { getMyTeam } from "@/api/team";
 import { type WatermarkTag } from "@/api/watermark";
 import { downscaleForStamp, makePreviewThumb, renderWatermarked } from "@/api/watermark-render";
@@ -32,10 +39,11 @@ import { ShotEditor, type ShotPatch } from "@/components/ShotEditor";
 import { TagPickerSheet } from "@/components/TagPickerSheet";
 import { PhotoNoteEditor, type NoteEditorAction } from "@/components/capture/PhotoNoteEditor";
 import { useTagLibrary } from "@/components/photo-viewer/TagPill";
+import { PhotoShareSheet } from "@/components/photo-viewer/PhotoShareSheet";
 import { formatAddress, getProject, projectCoords } from "@/api/projects";
 import { projectDisplayName } from "@everlumen/shared";
 import { useAuth } from "@/lib/auth";
-import { takeCaptureNotice } from "@/lib/capture-notice";
+import { listenCaptureNotice, takeCaptureNotice } from "@/lib/capture-notice";
 import { deviceSupportsMeasure } from "@/lib/measure-support";
 import {
   addRecent,
@@ -49,6 +57,7 @@ import {
   pillOf,
   queuedMetaPatch,
   uploadedMetaPatch,
+  withTimeout,
   type CaptureNote,
 } from "@/lib/capture-batch";
 import { persistCapture, replaceCapture } from "@/offline/media";
@@ -75,7 +84,6 @@ import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
 import { Icon } from "@/ui";
 import {
   ChevronDown,
-  Crop,
   Grid3x3,
   ImageIcon,
   MapPin,
@@ -178,6 +186,69 @@ export default function CaptureScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
 
+  /*
+   * The live camera's own lifecycle. Jon (2026-09-29): "when I take a picture
+   * or a video the camera window stays open and doesnt reset. if i try to snap
+   * more pictures it wont allow me and error out."
+   *
+   * The cause, on Android: expo-camera binds each CameraView with
+   * `cameraProvider.unbindAll()` first, and unbinds everything again when a
+   * view goes. The video recorder is a second CameraView pushed over this
+   * one, so it took the camera away from this view, and closing it unbound
+   * whatever was left. Back here the preview sat frozen on its last frame and
+   * `takePictureAsync` failed, because nothing was bound any more.
+   *
+   * So this view's camera exists only while this screen is in front: it is
+   * dropped before the recorder opens and made afresh (a new `key`) once the
+   * recorder has finished closing. The shutter waits for `onCameraReady`, one
+   * shot runs at a time, and a failed shot remakes the camera so the next one
+   * works.
+   */
+  const focused = useIsFocused();
+  const [cameraLive, setCameraLive] = useState(true);
+  const [cameraKey, setCameraKey] = useState(0);
+  const [cameraReady, setCameraReady] = useState(false);
+  const cameraFailed = useRef(false);
+  /** A shot is on its way back from the camera: the shutter ignores presses. */
+  const shooting = useRef(false);
+  const [shutterBusy, setShutterBusy] = useState(false);
+
+  /** A fresh camera: the old one is dropped and a new one bound. */
+  const restartCamera = useCallback(() => {
+    cameraFailed.current = false;
+    setCameraReady(false);
+    setCameraKey((key) => key + 1);
+    setCameraLive(true);
+  }, []);
+
+  const wasFocused = useRef(true);
+  useEffect(() => {
+    if (!focused) {
+      wasFocused.current = false;
+      setCameraLive(false);
+      setCameraReady(false);
+      return;
+    }
+    if (wasFocused.current) return;
+    wasFocused.current = true;
+    /*
+     * After the screen that was over this one has closed and let go of the
+     * camera, so its unbind cannot take this new camera with it.
+     */
+    const timer = setTimeout(restartCamera, CAMERA_REBIND_MS);
+    return () => clearTimeout(timer);
+  }, [focused, restartCamera]);
+
+  /*
+   * `onCameraReady` has not arrived on every device every time. Past this the
+   * shutter is allowed to try; a failure remakes the camera.
+   */
+  useEffect(() => {
+    if (!cameraLive || cameraReady) return;
+    const timer = setTimeout(() => setCameraReady(true), CAMERA_READY_FALLBACK_MS);
+    return () => clearTimeout(timer);
+  }, [cameraLive, cameraReady, cameraKey]);
+
   const [facing, setFacing] = useState<CameraType>("back");
   const [flash, setFlash] = useState<FlashMode>("auto");
   const [busy, setBusy] = useState(false);
@@ -217,11 +288,21 @@ export default function CaptureScreen() {
     recentRef.current = next;
     setRecentState(next);
   }, []);
-  /** How many shots this visit has saved, for the corner's count. */
-  const [savedCount, setSavedCount] = useState(0);
   const [savedFlash, setSavedFlash] = useState(false);
-  /** The saved shot open full screen to annotate, measure or crop. */
+  /**
+   * The shot open in the editor, over the live camera. It opens on its own
+   * after every photo (Jon, 2026-09-29: "Once i snap a photo the edit window
+   * should open with all edit and sharing capabilities for that photo"), and
+   * again from the last-shot thumbnail.
+   */
   const [editingId, setEditingId] = useState<string | null>(null);
+  /** The just-taken shot's share sheet, once its photo is on the server. */
+  const [shareFor, setShareFor] = useState<{
+    id: string;
+    photoId: string;
+    caption: string;
+    fileUri: string | null;
+  } | null>(null);
   /** The picture Measure mode has just taken, open in the annotator's Measure tool. */
   const [measuring, setMeasuring] = useState<{ asset: CapturedAsset; phase: PhotoPhase } | null>(
     null,
@@ -391,11 +472,19 @@ export default function CaptureScreen() {
    */
   function changeMode(next: CameraMode) {
     if (next === "video" || next === "walkthrough") {
-      if (!projectId || busy) return;
-      router.push({
-        pathname: "/project/[id]/walkthrough-record",
-        params: next === "video" ? { id: projectId, kind: "video" } : { id: projectId },
-      });
+      if (!projectId || busy || shooting.current) return;
+      /*
+       * This camera lets go first, then the recorder opens, so the two never
+       * fight over the one camera (see `cameraLive`).
+       */
+      setCameraLive(false);
+      setCameraReady(false);
+      setTimeout(() => {
+        router.push({
+          pathname: "/project/[id]/walkthrough-record",
+          params: next === "video" ? { id: projectId, kind: "video" } : { id: projectId },
+        });
+      }, CAMERA_HANDOFF_MS);
       return;
     }
     if (next === "dual") {
@@ -436,6 +525,8 @@ export default function CaptureScreen() {
       if (text) showNotice(text);
     }, []),
   );
+  // The recorder finishes queueing after it has closed; hear it as it lands.
+  useEffect(() => listenCaptureNotice((text) => showNotice(text)), []);
 
   /**
    * Where a new picture goes, by mode.
@@ -451,12 +542,13 @@ export default function CaptureScreen() {
     scan: boolean,
     phase: PhotoPhase,
     allowMeasure = true,
+    openEditor = true,
   ) {
     if (allowMeasure && mode === "measure" && canMeasure) {
       setMeasuring({ asset, phase });
       return;
     }
-    saveShot(asset, scan, phase);
+    saveShot(asset, scan, phase, openEditor);
   }
 
   /**
@@ -476,7 +568,16 @@ export default function CaptureScreen() {
   }
 
   async function takeShot() {
-    if (!cameraRef.current || busy) return;
+    if (busy || shooting.current) return;
+    const camera = cameraRef.current;
+    if (!camera || !cameraLive || !cameraReady) {
+      // A camera that failed to start is remade by the next press.
+      if (cameraFailed.current || !cameraLive) restartCamera();
+      showNotice("Camera is starting. Try again in a moment.");
+      return;
+    }
+    shooting.current = true;
+    setShutterBusy(true);
     setError(null);
     setModeBarOpen(false);
     // Read now, at the shutter, not after the picture comes back.
@@ -486,8 +587,13 @@ export default function CaptureScreen() {
        * `quality: 1` because `uploadProjectPhoto` re-encodes exactly once.
        * Compressing here as well would stack two lossy passes on the same
        * image for no saving, since the second pass sets the final size.
+       *
+       * Bounded, so a camera that never answers cannot hold the shutter shut.
        */
-      const picture = await cameraRef.current.takePictureAsync({ exif: true, quality: 1 });
+      const picture = await withTimeout(
+        camera.takePictureAsync({ exif: true, quality: 1 }),
+        SHOT_TIMEOUT_MS,
+      );
       if (picture) {
         const asset: CapturedAsset = {
           uri: picture.uri,
@@ -507,8 +613,16 @@ export default function CaptureScreen() {
           afterCapture(asset, false, shutterPhase);
         }
       }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not take photo");
+    } catch {
+      /*
+       * Short, and the camera is remade so the very next press works rather
+       * than failing the same way again.
+       */
+      showNotice("That photo did not take. Try again.");
+      restartCamera();
+    } finally {
+      shooting.current = false;
+      setShutterBusy(false);
     }
   }
 
@@ -527,6 +641,8 @@ export default function CaptureScreen() {
     if (result.canceled) return;
     const scan = mode === "scan";
     const pickedPhase = phaseAtShutter(mode, phase, scan);
+    // One pick opens its editor, as a shot does; a run of them is just saved.
+    const openEditor = result.assets.length === 1;
     if (scan) setBusy(true);
     try {
       for (const asset of result.assets) {
@@ -546,9 +662,10 @@ export default function CaptureScreen() {
             true,
             pickedPhase,
             false,
+            openEditor,
           );
         } else {
-          afterCapture(picked, false, pickedPhase, false);
+          afterCapture(picked, false, pickedPhase, false, openEditor);
         }
       }
     } finally {
@@ -682,7 +799,7 @@ export default function CaptureScreen() {
    * away. No Save step: it is on its way to the project timeline before the
    * next shot.
    */
-  function saveShot(asset: CapturedAsset, scan: boolean, phase: PhotoPhase) {
+  function saveShot(asset: CapturedAsset, scan: boolean, phase: PhotoPhase, openEditor = true) {
     const meta = metaForNewShot(note, scan);
     const shot: RecentShot = {
       id: newOutboxId(),
@@ -700,6 +817,14 @@ export default function CaptureScreen() {
     setRecent(addRecent(recentRef.current, shot));
     thumbFor(shot.id, shot.source);
     void storeShot(shot.id);
+    /*
+     * Saved already (queued above); the editor opens on it at once, over the
+     * live camera, and "Back to camera" is one tap to the next shot.
+     */
+    if (openEditor) {
+      setPanel(null);
+      setEditingId(shot.id);
+    }
   }
 
   /**
@@ -754,7 +879,6 @@ export default function CaptureScreen() {
         tzOffsetMinutes: session.tzOffsetMinutes,
       }).catch(() => {});
       patchShot(shot.id, { localUri, failed: false });
-      setSavedCount((count) => count + 1);
       flashSaved();
       await refreshQueue();
       requestSync();
@@ -768,7 +892,7 @@ export default function CaptureScreen() {
       if (now && metaKey(now) !== metaKey(shot)) void flushMeta(shot.id);
     } catch {
       patchShot(shot.id, { failed: true });
-      setError("Could not save that photo to this device. Tap it in the corner to try again.");
+      setError("Could not save that photo to this device. Open it in the corner to try again.");
     }
   }
 
@@ -988,9 +1112,53 @@ export default function CaptureScreen() {
     }
     setRecent(recentRef.current.filter((item) => item.id !== id));
     setPanel((current) => (current?.kind === "shot" && current.id === id ? null : current));
-    if (shot.localUri) setSavedCount((count) => Math.max(0, count - 1));
+    setEditingId((current) => (current === id ? null : current));
     await refreshQueue();
     showNotice("Photo removed");
+  }
+
+  /*
+   * Share the photo just taken, the way the photo viewer shares one: its
+   * share sheet (the link switch, and on iOS the photo itself), once the
+   * photo is on the server. Until then iOS sends the file on this phone
+   * straight away; Android, whose share sheet takes no files from here,
+   * waits a few seconds for the upload and opens the sheet when it lands.
+   */
+  const shareWait = useRef(0);
+  async function shareShot(id: string) {
+    const shot = recentShot(id);
+    if (!shot || !projectId || !user) return;
+    const ticket = ++shareWait.current;
+    const fileUri = shot.localUri ?? shot.source;
+    const lookUp = () =>
+      shot.localUri
+        ? findQueuedPhotoId(user.id, projectId, id).catch(() => null)
+        : Promise.resolve(null);
+    let photoId = await lookUp();
+    if (!photoId && Platform.OS === "ios") {
+      try {
+        await Share.share({ url: fileUri, title: shot.caption || "Photo" });
+      } catch {
+        // Dismissing the share sheet is not a failure.
+      }
+      return;
+    }
+    if (!photoId) {
+      showNotice("Uploading. Share opens as soon as it is up.");
+      requestSync();
+      for (let attempt = 0; attempt < SHARE_WAIT_TRIES && !photoId; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, SHARE_WAIT_STEP_MS));
+        // Closed, moved on, or asked again since: this wait is over.
+        if (!alive.current || shareWait.current !== ticket) return;
+        photoId = await lookUp();
+      }
+    }
+    if (!photoId) {
+      showNotice("Still uploading. Try Share again once it is up.");
+      return;
+    }
+    const now = recentShot(id);
+    setShareFor({ id, photoId, caption: now?.caption || "Photo", fileUri });
   }
 
   /*
@@ -1082,48 +1250,10 @@ export default function CaptureScreen() {
   }
 
   /*
-   * One saved shot, full screen: web's post-capture tools (annotate, measure,
-   * crop, tags, description, and PDF for a scan). Every change goes to that
-   * shot's queued photo; Retake takes it back if it has not gone yet.
+   * The shot open in the editor, drawn over the live camera further down, so
+   * the camera stays bound and ready while the photo is being worked on.
    */
   const editingShot = editingId ? recent.find((shot) => shot.id === editingId) : undefined;
-  if (editingShot && projectId) {
-    return (
-      <>
-        <Stack.Screen options={{ headerShown: false }} />
-        {/* A pill can still be burning in the background. */}
-        {offscreenSurface}
-        <ShotEditor
-          shot={{
-            uri: editingShot.source,
-            width: editingShot.width,
-            height: editingShot.height,
-            scan: editingShot.scan,
-            caption: editingShot.caption,
-            tags: editingShot.tags,
-          }}
-          projectId={projectId}
-          userId={user?.id ?? null}
-          existingTags={existingTags}
-          canMeasure={canMeasure}
-          onChange={(patch: ShotPatch) =>
-            editShot(editingShot.id, {
-              ...(patch.uri !== undefined ? { source: patch.uri } : null),
-              ...(patch.width !== undefined ? { width: patch.width } : null),
-              ...(patch.height !== undefined ? { height: patch.height } : null),
-              ...(patch.caption !== undefined ? { caption: patch.caption } : null),
-              ...(patch.tags !== undefined ? { tags: patch.tags } : null),
-            })
-          }
-          onRetake={() => {
-            setEditingId(null);
-            void removeShot(editingShot.id);
-          }}
-          onClose={() => setEditingId(null)}
-        />
-      </>
-    );
-  }
 
   const lastShot = recent[0] ?? null;
   const projectLabel = project
@@ -1131,7 +1261,6 @@ export default function CaptureScreen() {
     : "Loading job";
   const noteActive = noteIsActive(note);
   const noteLabel = noteSummary(note);
-  const anyFailed = recent.some((shot) => shot.failed);
 
   /** The mic: a spoken note for the photo just taken, or for the next ones. */
   function openVoiceNote() {
@@ -1141,18 +1270,24 @@ export default function CaptureScreen() {
 
   /*
    * The bottom-left slot. On an empty camera it is web's gallery button. Once
-   * this visit has saved something it shows the last shot with the count of
-   * what has been saved, and opens that one photo's note editor: its
-   * Before/None/After, its voice note and caption, its tags. One photo, not a
-   * strip of this visit's photos: several photos side by side is the
-   * walkthrough's screen, where the AI reads them together (Jon, 2026-09-29).
+   * this visit has saved something it shows the last photo only, with no
+   * count and no pile (Jon, 2026-09-29: "they should just be saved
+   * automatically and not set there in a pile"), and opens that photo's
+   * editor again. A small red mark only when it could not be stored.
    */
   const leftSlot = lastShot ? (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${savedCount} saved. Open the last photo to add a voice note or retag it`}
+      accessibilityLabel={
+        lastShot.failed
+          ? "Last photo, not saved on this device yet. Open it to try again"
+          : "Last photo, saved. Open it to edit or share"
+      }
       style={styles.squareButton}
-      onPress={() => setPanel({ kind: "shot", id: lastShot.id })}
+      onPress={() => {
+        setPanel(null);
+        setEditingId(lastShot.id);
+      }}
     >
       <Image
         source={{ uri: lastShot.thumb ?? lastShot.source }}
@@ -1160,12 +1295,11 @@ export default function CaptureScreen() {
         allowDownscaling
         transition={0}
       />
-      <View
-        style={[styles.countBadge, anyFailed ? styles.failedBadge : styles.savedBadge]}
-        pointerEvents="none"
-      >
-        <Text style={[styles.countText, { color: "#fff" }]}>{anyFailed ? "!" : savedCount}</Text>
-      </View>
+      {lastShot.failed ? (
+        <View style={[styles.countBadge, styles.failedBadge]} pointerEvents="none">
+          <Text style={[styles.countText, { color: "#fff" }]}>!</Text>
+        </View>
+      ) : null}
     </Pressable>
   ) : (
     <Pressable
@@ -1303,6 +1437,14 @@ export default function CaptureScreen() {
   const panelShot =
     panel?.kind === "shot" ? recent.find((shot) => shot.id === panel.id) : undefined;
   const closePanel = () => setPanel(null);
+  /** Back to camera: one tap, and the camera under it is already live. */
+  const closeEditor = () => {
+    shareWait.current += 1;
+    setPanel(null);
+    setShareFor(null);
+    setEditingId(null);
+    setError(null);
+  };
   let panelView: React.ReactNode = null;
   if (panel?.kind === "next") {
     panelView = (
@@ -1342,20 +1484,11 @@ export default function CaptureScreen() {
             },
           ]
         : []),
-      {
-        id: "edit",
-        label: "Annotate",
-        icon: Crop,
-        onPress: () => {
-          setPanel(null);
-          setEditingId(shotId);
-        },
-      },
     ];
     panelView = (
       <PhotoNoteEditor
         key={`shot-${shotId}`}
-        title="Last photo"
+        title="This photo"
         photoUri={panelShot.thumb ?? panelShot.source}
         caption={panelShot.caption}
         onCaptionChange={(caption) => editShot(shotId, { caption })}
@@ -1386,13 +1519,25 @@ export default function CaptureScreen() {
   return (
     <View style={styles.cameraRoot}>
       <Stack.Screen options={{ headerShown: false }} />
-      <CameraView
-        ref={cameraRef}
-        style={StyleSheet.absoluteFill}
-        facing={facing}
-        flash={flash}
-        animateShutter
-      />
+      {cameraLive ? (
+        <CameraView
+          key={cameraKey}
+          ref={cameraRef}
+          style={StyleSheet.absoluteFill}
+          facing={facing}
+          flash={flash}
+          animateShutter
+          onCameraReady={() => {
+            cameraFailed.current = false;
+            setCameraReady(true);
+          }}
+          onMountError={() => {
+            cameraFailed.current = true;
+            setCameraReady(false);
+            showNotice("The camera did not start. Tap the shutter to try again.");
+          }}
+        />
+      ) : null}
 
       {/*
         Rule-of-thirds grid. Hairlines only, and not touchable: it is there to
@@ -1621,9 +1766,9 @@ export default function CaptureScreen() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={mode === "scan" ? "Scan document" : "Take photo"}
-            disabled={busy}
-            accessibilityHint="Saves the photo to this job straight away"
-            style={[styles.shutter, busy && { opacity: 0.6 }]}
+            disabled={busy || shutterBusy}
+            accessibilityHint="Saves the photo to this job straight away, then opens it to edit"
+            style={[styles.shutter, (busy || shutterBusy || !cameraReady) && { opacity: 0.6 }]}
             onPress={() => void takeShot()}
           >
             <View style={styles.shutterInner} />
@@ -1644,7 +1789,66 @@ export default function CaptureScreen() {
         </View>
       ) : null}
 
+      {editingShot && projectId ? (
+        <ShotEditor
+          key={editingShot.id}
+          shot={{
+            uri: editingShot.source,
+            width: editingShot.width,
+            height: editingShot.height,
+            scan: editingShot.scan,
+            caption: editingShot.caption,
+            tags: editingShot.tags,
+            phase: editingShot.phase,
+          }}
+          projectId={projectId}
+          userId={user?.id ?? null}
+          existingTags={existingTags}
+          canMeasure={canMeasure}
+          wide={wide}
+          status={
+            editingShot.failed
+              ? { text: "Not saved on this device yet. Tap Note to try again.", error: true }
+              : error
+                ? { text: error, error: true }
+                : null
+          }
+          onChange={(patch: ShotPatch) =>
+            editShot(editingShot.id, {
+              ...(patch.uri !== undefined ? { source: patch.uri } : null),
+              ...(patch.width !== undefined ? { width: patch.width } : null),
+              ...(patch.height !== undefined ? { height: patch.height } : null),
+              ...(patch.caption !== undefined ? { caption: patch.caption } : null),
+              ...(patch.tags !== undefined ? { tags: patch.tags } : null),
+            })
+          }
+          onPhaseChange={(next) => editShot(editingShot.id, { phase: next })}
+          onNote={(start) => setPanel({ kind: "shot", id: editingShot.id, start })}
+          onShare={() => void shareShot(editingShot.id)}
+          onRetake={() => {
+            setEditingId(null);
+            void removeShot(editingShot.id);
+          }}
+          onDelete={() => {
+            setEditingId(null);
+            void removeShot(editingShot.id);
+          }}
+          onClose={closeEditor}
+        />
+      ) : null}
+
       {panelView}
+
+      {shareFor ? (
+        <PhotoShareSheet
+          visible
+          onClose={() => setShareFor(null)}
+          photoId={shareFor.photoId}
+          caption={shareFor.caption}
+          imageUrl={null}
+          localFileUri={Platform.OS === "ios" ? shareFor.fileUri : null}
+        />
+      ) : null}
 
       <TagPickerSheet
         visible={tagsFor !== null}
@@ -1708,6 +1912,18 @@ export default function CaptureScreen() {
 /** A retag's word when the photo had already gone up with its old picture. */
 const ALREADY_SENT =
   "Already uploaded. Its tags and note are updated; the picture stays as it was.";
+
+/** How long a screen closing over the camera takes to let go of it. */
+const CAMERA_REBIND_MS = 450;
+/** A beat for this camera to let go before the recorder takes it. */
+const CAMERA_HANDOFF_MS = 80;
+/** Past this with no `onCameraReady`, the shutter may try anyway. */
+const CAMERA_READY_FALLBACK_MS = 2500;
+/** The longest one shot may take before it counts as failed. */
+const SHOT_TIMEOUT_MS = 12_000;
+/** Share waits this long, in steps, for a just-taken photo to upload. */
+const SHARE_WAIT_STEP_MS = 2000;
+const SHARE_WAIT_TRIES = 8;
 
 /** What a retag compares: the parts of a shot written to its photo row. */
 function metaKey(shot: { phase: PhotoPhase; caption: string; tags: string[] }): string {
@@ -1965,7 +2181,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  savedBadge: { backgroundColor: "rgba(16, 150, 96, 0.95)" },
   failedBadge: { backgroundColor: "rgba(180,35,24,0.95)" },
   countText: { fontSize: 12, fontWeight: "800" },
   shutter: {

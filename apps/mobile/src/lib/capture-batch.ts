@@ -147,3 +147,20 @@ export function patchRecent<T extends { id: string }>(
 function uniqueTags(tags: string[]): string[] {
   return Array.from(new Set(tags.map((tag) => tag.trim()).filter(Boolean)));
 }
+
+/** A promise that gives up after `ms`, so a stuck native call cannot hang the UI. */
+export function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("Timed out")), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (reason: unknown) => {
+        clearTimeout(timer);
+        reject(reason);
+      },
+    );
+  });
+}
