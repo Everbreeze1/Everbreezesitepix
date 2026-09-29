@@ -138,7 +138,7 @@ describe("one viewer", () => {
 /*
  * The owner's note on the first APK: "right now you have words only to
  * describe editing functions" and "the iconography is important". The web
- * viewer is icon-led: a pencil, sparkles, full-screen corners, the share glyph
+ * viewer is icon-led: a pencil, full-screen corners, the share glyph
  * and a cross in the top bar, zoom glyphs over the photo, an icon on every tab
  * and a send arrow in the composer. These hold the phone to the same.
  */
@@ -150,7 +150,6 @@ describe("icon-led like the web viewer", () => {
     const bar = s.slice(s.indexOf("const topBar = ("), s.indexOf("const pager ="));
     for (const [icon, label] of [
       ["PenLine", "Annotate"],
-      ["Sparkles", "Analyse with AI"],
       ["Maximize", "Full screen"],
       ["Share2", "Share photo"],
       ["X", "Close photo"],
@@ -178,5 +177,38 @@ describe("icon-led like the web viewer", () => {
     const sheet = read(`${dir}/PhotoShareSheet.tsx`);
     expect(sheet).not.toContain("<Button");
     expect(sheet.match(/<ShareTile/g)?.length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+/*
+ * The owner's note on the 2026-09-29 APK: "Any AI analysis is used to generate
+ * Reports and Summaries of reports. If I tag a photo it should show on the
+ * photo somewhere." Per-photo AI analysis is gone from the phone, and a
+ * photo's tags are drawn on the photo, in the viewer and on grid tiles.
+ */
+describe("tags on the photo, no per-photo AI analysis", () => {
+  const dir = "apps/mobile/src/components/photo-viewer";
+
+  it("offers no photo analysis anywhere in the viewer", () => {
+    for (const file of ["PhotoViewer.tsx", "PhotoDetailsTab.tsx"]) {
+      const s = read(`${dir}/${file}`);
+      expect(s).not.toMatch(/analy[sz]e|AI analysis|Sparkles/i);
+    }
+    expect(read("apps/mobile/app/(app)/_layout.tsx")).not.toContain("photo/[id]/analysis");
+  });
+
+  it("draws the photo's tags over the photo in the viewer", () => {
+    const s = read(`${dir}/PhotoViewer.tsx`);
+    expect(s.match(/<PhotoTagOverlay/g)?.length).toBe(2);
+  });
+
+  it("marks tagged photos on every photo grid", () => {
+    for (const file of [
+      "apps/mobile/app/(app)/project/[id]/index.tsx",
+      "apps/mobile/app/(app)/(tabs)/gallery.tsx",
+      "apps/mobile/src/components/ProjectPhotoCalendar.tsx",
+    ]) {
+      expect(read(file)).toContain("<ThumbTagBadge tags={photo.tags} />");
+    }
   });
 });

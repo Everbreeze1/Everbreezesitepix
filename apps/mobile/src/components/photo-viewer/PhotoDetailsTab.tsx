@@ -14,7 +14,6 @@ import {
   Navigation,
   PenLine,
   Plus,
-  Sparkles,
   StickyNote,
   Tag,
   User,
@@ -167,7 +166,6 @@ export function PhotoDetailsTab({
   onRemoveTag,
   onOpenTags,
   onSetPhase,
-  onAnalyse,
   onInputFocus,
   bottomInset,
 }: {
@@ -178,7 +176,6 @@ export function PhotoDetailsTab({
   onRemoveTag: (name: string) => void;
   onOpenTags: () => void;
   onSetPhase: (phase: "before" | "after" | "untagged") => void;
-  onAnalyse: () => void;
   onInputFocus?: () => void;
   bottomInset: number;
 }) {
@@ -390,42 +387,6 @@ export function PhotoDetailsTab({
           ) : null}
         </View>
       </Section>
-
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Analyse this photo with AI"
-        accessibilityHint="Reads the equipment plate and looks for visible defects"
-        onPress={onAnalyse}
-        style={({ pressed }) => ({
-          flexDirection: "row",
-          alignItems: "center",
-          gap: spacing.md,
-          borderRadius: radius.lg,
-          borderWidth: 1,
-          borderColor: "rgba(220, 135, 72, 0.4)",
-          backgroundColor: pressed ? "rgba(220, 135, 72, 0.22)" : "rgba(220, 135, 72, 0.12)",
-          padding: spacing.md,
-        })}
-      >
-        <View
-          style={{
-            width: 40,
-            height: 40,
-            borderRadius: 20,
-            alignItems: "center",
-            justifyContent: "center",
-            backgroundColor: c.primary,
-          }}
-        >
-          <Sparkles size={20} color={c.primaryForeground} />
-        </View>
-        <View style={{ flex: 1, gap: 2 }}>
-          <Text style={[typography.bodyStrong, { color: c.foreground }]}>AI analysis</Text>
-          <Text style={[typography.caption, { color: c.muted }]}>
-            Read the equipment plate and look for visible defects.
-          </Text>
-        </View>
-      </Pressable>
     </ScrollView>
   );
 }

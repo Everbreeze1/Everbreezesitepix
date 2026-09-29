@@ -34,6 +34,7 @@ export function ViewerSheet({
   hidden,
   onSnap,
   handle,
+  onHandleHeight,
   children,
 }: {
   /** Height of the area the sheet lives in. */
@@ -46,9 +47,14 @@ export function ViewerSheet({
   hidden: boolean;
   onSnap: (snap: SheetSnap) => void;
   handle: ReactNode;
+  /** Told the handle's height, so things can sit just above the lowered sheet. */
+  onHandleHeight?: (height: number) => void;
   children: ReactNode;
 }) {
   const [handleHeight, setHandleHeight] = useState(150);
+  useEffect(() => {
+    onHandleHeight?.(handleHeight);
+  }, [handleHeight, onHandleHeight]);
   const positions = {
     full: topLimit,
     half: Math.max(topLimit, Math.round(height * 0.42)),

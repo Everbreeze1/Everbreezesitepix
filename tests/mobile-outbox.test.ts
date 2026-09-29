@@ -409,3 +409,77 @@ describe("a full offline session", () => {
     expect((await outbox.counts()).outstanding).toBe(0);
   });
 });
+
+describe("rows held for their before/after pill", () => {
+  /*
+   * Save queues a Before/After photo held, returns at once, and burns the
+   * pill in afterwards. The hold is what stops the drain sending the file
+   * while it is being swapped, and its expiry is what makes the pill fail
+   * open: the photo always goes.
+   */
+  it("is not claimed while held, and is once released", async () => {
+    await outbox.enqueue({
+      kind: "photo_upload",
+      projectId: "project-a",
+      localUri: "file:///outbox/held.jpg",
+      payload: {},
+      id: "held",
+      holdUntil: Date.now() + 120_000,
+    });
+    expect(await outbox.claimNext()).toBeNull();
+    // Still counted, so the queue banner shows it.
+    expect((await outbox.counts()).pending).toBe(1);
+
+    const replace = vi.fn();
+    expect(await outbox.finishHeld("held", replace)).toBe(true);
+    expect(replace).toHaveBeenCalledTimes(1);
+    expect((await outbox.claimNext())?.id).toBe("held");
+  });
+
+  it("sends unstamped once the hold runs out", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-29T09:00:00Z"));
+    await outbox.enqueue({
+      kind: "photo_upload",
+      projectId: "project-a",
+      localUri: "file:///outbox/late.jpg",
+      payload: {},
+      id: "late",
+      holdUntil: Date.now() + 120_000,
+    });
+    vi.setSystemTime(new Date("2026-09-29T09:02:01Z"));
+    expect((await outbox.claimNext())?.id).toBe("late");
+  });
+
+  it("skips the swap when the row is already on its way", async () => {
+    await outbox.enqueue({
+      kind: "photo_upload",
+      projectId: "project-a",
+      localUri: "file:///outbox/gone.jpg",
+      payload: {},
+      id: "gone",
+    });
+    const row = await outbox.claimNext();
+    expect(row?.state).toBe("sending");
+
+    const replace = vi.fn();
+    expect(await outbox.finishHeld("gone", replace)).toBe(false);
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("releases the row even when the swap throws", async () => {
+    await outbox.enqueue({
+      kind: "photo_upload",
+      projectId: "project-a",
+      localUri: "file:///outbox/bad.jpg",
+      payload: {},
+      id: "bad",
+      holdUntil: Date.now() + 120_000,
+    });
+    const swapped = await outbox.finishHeld("bad", () => {
+      throw new Error("disk full");
+    });
+    expect(swapped).toBe(false);
+    expect((await outbox.claimNext())?.id).toBe("bad");
+  });
+});

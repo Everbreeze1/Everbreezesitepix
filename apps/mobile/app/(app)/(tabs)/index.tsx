@@ -32,7 +32,7 @@ import { getUnreadNotificationCount } from "@/api/notifications";
 import { listGalleryPhotoPage, listProjectCovers, type GalleryPhotoItem } from "@/api/photos";
 import { listProjects, type ProjectListItem } from "@/api/projects";
 import { ActionRail } from "@/components/ActionRail";
-import { MenuButton } from "@/components/AppMenu";
+import { FloatingMenuButton } from "@/components/AppMenu";
 import { BrandMark } from "@/components/BrandMark";
 import { QueueBanner } from "@/components/QueueBanner";
 import { useAuth } from "@/lib/auth";
@@ -412,14 +412,6 @@ export default function HomeScreen() {
             {initialsOf(fullName, user?.email)}
           </Text>
         </Pressable>
-
-        {/*
-          The app menu: every screen the web sidebar lists. Last in the row, at
-          the right end where the thumb of the hand holding a phone reaches.
-          A tablet floats its own menu button on the right edge, so it is not
-          drawn twice there.
-        */}
-        {rail ? null : <MenuButton />}
       </View>
 
       <Screen scroll padded={false} refreshing={refreshing} onRefresh={refresh} bottomInset={96}>
@@ -645,6 +637,22 @@ export default function HomeScreen() {
           },
         ]}
       />
+
+      {/*
+        The app menu: every screen the web sidebar lists. A floating button on
+        the right edge at the lower third of the page, where the thumb of the
+        hand holding the phone rests (Jon, 2026-09-29: "closer to lower third,
+        good color contrast, bigger"). Nothing else floats on this screen on a
+        phone. A tablet floats its own on the rail, so it is not drawn twice.
+      */}
+      {rail ? null : (
+        <View
+          pointerEvents="box-none"
+          style={{ position: "absolute", right: spacing.lg, bottom: "22%" }}
+        >
+          <FloatingMenuButton />
+        </View>
+      )}
     </View>
   );
 }

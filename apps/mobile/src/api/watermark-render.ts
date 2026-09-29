@@ -69,3 +69,56 @@ export async function renderWatermarked(canvas: Svg | null): Promise<string> {
 
   return encoded.uri;
 }
+
+/**
+ * Longest edge the pill is burnt in at. Matches `MAX_DIM` in photos.ts: the
+ * uploader shrinks every original to this anyway, so stamping at the camera's
+ * full 12 megapixels only made the rasteriser push four times the pixels
+ * through a base64 PNG for a result that was then thrown away.
+ */
+const STAMP_MAX_DIM = 2048;
+
+/**
+ * Shrink a capture once, natively, to the size it will be stored at, and
+ * report its real (upright) dimensions for the watermark surface.
+ *
+ * Throws on failure; the caller fails open to the original.
+ */
+export async function downscaleForStamp(
+  uri: string,
+): Promise<{ uri: string; width: number; height: number }> {
+  const probe = await ImageManipulator.manipulate(uri).renderAsync();
+  const { width, height } = probe;
+  if (Math.max(width, height) <= STAMP_MAX_DIM) {
+    const saved = await probe.saveAsync({ format: SaveFormat.JPEG, compress: JPEG_QUALITY });
+    return { uri: saved.uri, width: saved.width, height: saved.height };
+  }
+  // Resized from the image already decoded above, so the file is read once.
+  const context = ImageManipulator.manipulate(probe);
+  context.resize(width >= height ? { width: STAMP_MAX_DIM } : { height: STAMP_MAX_DIM });
+  const rendered = await context.renderAsync();
+  const saved = await rendered.saveAsync({ format: SaveFormat.JPEG, compress: JPEG_QUALITY });
+  return { uri: saved.uri, width: saved.width, height: saved.height };
+}
+
+/**
+ * A small copy of a capture for the batch strip and review grid.
+ *
+ * The camera hands back a 12 megapixel JPEG; a grid of those decoded at full
+ * size is what made review tiles appear one by one, seconds apart. Returns
+ * null on any failure and the caller shows the original instead.
+ */
+export async function makePreviewThumb(uri: string): Promise<string | null> {
+  try {
+    const context = ImageManipulator.manipulate(uri);
+    context.resize({ width: PREVIEW_DIM });
+    const rendered = await context.renderAsync();
+    const saved = await rendered.saveAsync({ format: SaveFormat.JPEG, compress: 0.7 });
+    return saved.uri;
+  } catch {
+    return null;
+  }
+}
+
+/** Wide enough for a tablet's review tile at 3x density. */
+const PREVIEW_DIM = 480;

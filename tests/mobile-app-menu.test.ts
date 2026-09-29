@@ -114,11 +114,27 @@ describe("how the menu is reached", () => {
     );
     // Out of the layout, so the page keeps the full width.
     expect(railBranch).toContain('position: "absolute"');
-    expect(railBranch).toContain('accessibilityLabel="Open menu"');
+    expect(railBranch).toContain("<FloatingMenuButton />");
     expect(railBranch).toContain("{cameraButton}");
     // No tabs stacked down the edge any more: they are rows in the menu.
     expect(railBranch).not.toContain("state.routes.map");
     expect(bar).not.toContain("width: 96 + insets.right");
+  });
+
+  it("draws the floating menu button big, high-contrast and on the lower third", () => {
+    // Jon, 2026-09-29: "closer to lower third of the page, give it a good
+    // color contrast and make it bigger".
+    const menu = read("apps/mobile/src/components/AppMenu.tsx");
+    const button = menu.slice(menu.indexOf("export function FloatingMenuButton"));
+    expect(menu).toContain("export const FLOATING_MENU_SIZE = 62;");
+    expect(button).toContain('accessibilityLabel="Open menu"');
+    expect(button).toContain("backgroundColor: theme.colors.foreground");
+    expect(button).toContain("color={theme.colors.background}");
+    const home = read(`${APP}/(tabs)/index.tsx`);
+    expect(home).toContain('bottom: "22%"');
+    expect(home).not.toContain("<MenuButton />");
+    const bar = read("apps/mobile/src/components/TabBar.tsx");
+    expect(bar).toContain('justifyContent: "flex-end"');
   });
 
   it("keeps the phone's bottom bar of four tabs around the camera", () => {

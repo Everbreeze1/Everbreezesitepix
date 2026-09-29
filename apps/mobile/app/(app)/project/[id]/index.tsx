@@ -77,7 +77,7 @@ import { ProjectStatusChip } from "@/components/ProjectStatusChip";
 import { ProjectWorkflowStrip } from "@/components/ProjectWorkflowStrip";
 import { ProjectLabels } from "@/components/ProjectLabels";
 import { ProjectPhotoCalendar } from "@/components/ProjectPhotoCalendar";
-import { PhotoViewer } from "@/components/photo-viewer";
+import { PhotoViewer, ThumbTagBadge } from "@/components/photo-viewer";
 import { ProjectVideos } from "@/components/ProjectVideos";
 import { PhotoFilterSheet } from "@/components/PhotoFilterSheet";
 import { listProjectVideos } from "@/api/project-videos";
@@ -1224,6 +1224,8 @@ export default function ProjectDetailScreen() {
                         would cover most of the photo.
                       */}
                       {tileSize >= 90 ? <PhasePill phase={photo.phase} /> : null}
+                      {/* The photo's tags on the photo, as the web grid shows them. */}
+                      {tileSize >= 72 ? <ThumbTagBadge tags={photo.tags} /> : null}
                       {selecting ? (
                         <View
                           style={[
@@ -1462,7 +1464,7 @@ export default function ProjectDetailScreen() {
 
       {/*
         The shared photo viewer: the web lightbox and its details panel, with
-        Annotate, AI analysis, Share, tags, description, tasks and comments on
+        Annotate, Share, tags, description, tasks and comments on
         the photo itself. Opens on the deep-linked photo when there is one.
       */}
       <PhotoViewer

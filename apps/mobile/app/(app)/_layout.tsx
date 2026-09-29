@@ -147,7 +147,6 @@ export default function AppLayout() {
         <Stack.Screen name="report/[reportId]" options={{ title: "Report" }} />
         <Stack.Screen name="project/[id]/documents" options={{ title: "Documents" }} />
         <Stack.Screen name="page/[pageId]" options={{ title: "Page" }} />
-        <Stack.Screen name="photo/[id]/analysis" options={{ title: "Photo analysis" }} />
       </Stack>
     </AppMenuProvider>
   );

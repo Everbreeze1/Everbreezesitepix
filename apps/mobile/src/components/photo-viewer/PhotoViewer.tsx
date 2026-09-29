@@ -52,7 +52,6 @@ import {
   PenLine,
   RotateCcw,
   Share2,
-  Sparkles,
   X,
   ZoomIn,
   ZoomOut,
@@ -64,6 +63,7 @@ import { PanelBody, PanelHeader, type PanelTab } from "./PhotoPanel";
 import { PhotoShareSheet } from "./PhotoShareSheet";
 import { PhotoTagSheet } from "./PhotoTagSheet";
 import { PhotoTasksTab, photoTasksKey } from "./PhotoTasksTab";
+import { PhotoTagOverlay } from "./TagPill";
 import { usePhotoEdit } from "./use-photo-edit";
 import { ViewerSheet, type SheetSnap } from "./ViewerSheet";
 import { viewerColors as c, viewerThreadColors } from "./viewer-theme";
@@ -112,7 +112,7 @@ export type PhotoViewerProps = {
  * right, as on the web, with previous/next arrows and zoom controls. The top
  * bar's actions sit at its right edge, under a right thumb.
  *
- * Leaving for Annotate, AI analysis or a task hides the viewer rather than
+ * Leaving for Annotate or a task hides the viewer rather than
  * closing it, so Back comes straight back to the same photo on the same tab.
  */
 export function PhotoViewer({
@@ -243,6 +243,7 @@ function ViewerBody({
   const [shareOpen, setShareOpen] = useState(false);
   const [seed, setSeed] = useState<{ text: string; nonce: number } | null>(null);
   const [topBarHeight, setTopBarHeight] = useState(0);
+  const [sheetHandle, setSheetHandle] = useState(0);
   const listRef = useRef<FlatList<ViewerPhoto>>(null);
   const controls = useRef<Record<string, ZoomControls | null>>({});
 
@@ -376,13 +377,6 @@ function ViewerBody({
       },
     });
   };
-  const analyse = () => {
-    if (!photo) return;
-    router.push({
-      pathname: "/photo/[id]/analysis",
-      params: { id: photo.id, uri: imageUrl ?? "", caption: photo.caption ?? "" },
-    });
-  };
   const openProject =
     !inProject && projectId
       ? () => {
@@ -451,7 +445,6 @@ function ViewerBody({
             onRemoveTag={toggleTag}
             onOpenTags={() => setTagsOpen(true)}
             onSetPhase={(phase) => void edit(photo.id, projectId, "phase", phasePatch(phase))}
-            onAnalyse={analyse}
             onInputFocus={expand}
             bottomInset={bottomInset}
           />
@@ -502,8 +495,7 @@ function ViewerBody({
       </View>
       {/* Right-aligned, for the right thumb: the owner's call and web's order. */}
       {/*
-        Icons, as on the web's top bar: pencil to annotate, sparkles for AI,
-        the full-screen corners, the share glyph and a close cross. Every one
+        Icons, as on the web's top bar: pencil to annotate, the full-screen corners, the share glyph and a close cross. Every one
         carries its name for a screen reader. Annotate is the one primary
         action, so it is the one drawn in the brand colour.
       */}
@@ -515,7 +507,6 @@ function ViewerBody({
           disabled={!projectId}
           primary
         />
-        <BarButton icon={Sparkles} label="Analyse with AI" onPress={analyse} />
         {tablet ? (
           <BarButton
             icon={panelOpen ? PanelRightClose : PanelRightOpen}
@@ -628,6 +619,19 @@ function ViewerBody({
                 </>
               ) : null}
 
+              {/*
+                The photo's tags, on the photo. Above the zoom controls so the
+                two never overlap on a narrow stage.
+              */}
+              {tablet && !chromeHidden && !zoomed ? (
+                <PhotoTagOverlay
+                  tags={tags}
+                  bottom={spacing.xl + insets.bottom + HIT_TARGET + spacing.md}
+                  left={spacing.lg}
+                  right={spacing.lg}
+                />
+              ) : null}
+
               {tablet && !chromeHidden && list.length > 0 ? (
                 <View
                   style={{
@@ -727,6 +731,20 @@ function ViewerBody({
           </View>
         ) : null}
 
+        {/*
+          The photo's tags, on the photo: bottom-left just above the lowered
+          sheet. Hidden while the sheet is raised (the Details tab lists them
+          there) and in full screen, which promises nothing over the photo.
+        */}
+        {!tablet && !chromeHidden && !zoomed && snap === "peek" && sheetHandle > 0 ? (
+          <PhotoTagOverlay
+            tags={tags}
+            bottom={sheetHandle + insets.bottom}
+            left={Math.max(insets.left, spacing.lg)}
+            right={Math.max(insets.right, spacing.lg)}
+          />
+        ) : null}
+
         {!tablet && area > 0 ? (
           <ViewerSheet
             height={area}
@@ -735,6 +753,7 @@ function ViewerBody({
             snap={snap}
             hidden={chromeHidden}
             onSnap={setSnap}
+            onHandleHeight={setSheetHandle}
             handle={header}
           >
             {body}

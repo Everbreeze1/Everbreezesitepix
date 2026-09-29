@@ -1,10 +1,10 @@
-import { Camera, Menu } from "@/ui/icons";
+import { Camera } from "@/ui/icons";
 import { Platform, Pressable, View } from "react-native";
 import type { BottomTabBarProps } from "expo-router/js-tabs";
 import { radius, spacing, useRightRail, useTheme } from "@/theme";
 import { Icon, Text } from "@/ui";
 import { useQuickCapture } from "@/lib/use-quick-capture";
-import { useAppMenu, withAlpha } from "./AppMenu";
+import { FloatingMenuButton, withAlpha } from "./AppMenu";
 
 /**
  * The bottom tab bar.
@@ -39,14 +39,20 @@ import { useAppMenu, withAlpha } from "./AppMenu";
  * the screen for four tabs and a lot of empty chrome, and still reached less
  * of the product than the website's sidebar. The menu button opens
  * `AppMenu`, which lists every destination the web sidebar has, and the page
- * keeps the full width. The buttons sit at the middle of the edge, clear of
- * the create actions `ActionRail` keeps in the lower right corner.
+ * keeps the full width. The buttons sit on the lower third of the edge
+ * (Jon, 2026-09-29), where the resting thumb is, and stop above the create
+ * actions `ActionRail` keeps in the lower right corner.
  */
+/**
+ * How far the rail's two buttons sit above the bottom edge: clear of a pair of
+ * `ActionRail` buttons (64 + 52 + gaps) in the same corner.
+ */
+const RAIL_LIFT = 184;
+
 export function TabBar({ state, descriptors, navigation, insets }: BottomTabBarProps) {
   const theme = useTheme();
   const rail = useRightRail();
   const openCamera = useQuickCapture();
-  const menu = useAppMenu();
 
   /*
    * The bar is always-dark chrome, in both schemes, so the inactive tint is the
@@ -176,51 +182,21 @@ export function TabBar({ state, descriptors, navigation, insets }: BottomTabBarP
         style={{
           /*
            * Out of the layout, so the screens take the full width. Pinned to
-           * the whole height of the edge and centred in it, which puts the two
-           * buttons under a resting thumb in either orientation.
+           * the whole height of the edge with the buttons at the foot of it,
+           * lifted to the lower third, and never lower than the corner the
+           * `ActionRail` create buttons use.
            */
           position: "absolute",
-          top: 0,
+          top: insets.top + spacing.md,
           bottom: 0,
           right: insets.right + spacing.md,
-          justifyContent: "center",
+          justifyContent: "flex-end",
           alignItems: "center",
           gap: spacing.md,
+          paddingBottom: RAIL_LIFT + insets.bottom,
         }}
       >
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Open menu"
-          accessibilityHint="Lists every part of the app"
-          onPress={menu.open}
-          style={({ pressed }) => [
-            {
-              width: 52,
-              height: 52,
-              borderRadius: radius.pill,
-              alignItems: "center",
-              justifyContent: "center",
-              borderWidth: 1,
-              borderColor: theme.colors.border,
-              // See-through enough to read as floating over the page.
-              backgroundColor: withAlpha(theme.colors.card, 0.9),
-              opacity: pressed ? 0.8 : 1,
-              transform: [{ scale: pressed ? 0.96 : 1 }],
-            },
-            Platform.select({
-              ios: {
-                shadowColor: "#000",
-                shadowOpacity: 0.15,
-                shadowRadius: 12,
-                shadowOffset: { width: 0, height: 4 },
-              },
-              android: { elevation: 4 },
-              default: {},
-            }),
-          ]}
-        >
-          <Icon icon={Menu} size="lg" />
-        </Pressable>
+        <FloatingMenuButton />
         {cameraButton}
       </View>
     );

@@ -14,7 +14,7 @@ import {
   type GalleryFilters,
 } from "@/api/gallery-filters";
 import { GalleryFilterSheet } from "@/components/GalleryFilterSheet";
-import { PhotoViewer } from "@/components/photo-viewer";
+import { PhotoViewer, ThumbTagBadge } from "@/components/photo-viewer";
 import { mergeTags, phasePatch, trashPhotos, type PhotoPatch } from "@/api/photo-edit";
 import { generateSummaryFromPhotos } from "@/api/summaries";
 import { photoSelectionError } from "@/api/summary-view";
@@ -579,6 +579,8 @@ export default function GalleryScreen() {
                         height="100%"
                         rounded={radius.md}
                       />
+                      {/* The photo's tags on the photo, as the web grid shows them. */}
+                      {tile >= 72 ? <ThumbTagBadge tags={photo.tags} /> : null}
                       {picked ? (
                         <View
                           pointerEvents="none"

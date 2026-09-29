@@ -82,13 +82,13 @@ describe("home shows photographs", () => {
     /*
      * The Browse grid closed the page, under everything else, where the owner
      * testing it on a tablet called it "not a good place". Its destinations
-     * are rows in the app menu now, which the header opens on a phone and a
-     * floating button opens on a tablet.
+     * are rows in the app menu now, which a floating button on the right
+     * edge opens on a phone and on a tablet.
      */
     const s = home();
     expect(s).not.toContain('<SectionTitle title="Browse" />');
     expect(s).not.toContain("QuickTile");
-    expect(s).toContain("<MenuButton />");
+    expect(s).toContain("<FloatingMenuButton />");
   });
 
   it("opens the job rather than the picture", () => {

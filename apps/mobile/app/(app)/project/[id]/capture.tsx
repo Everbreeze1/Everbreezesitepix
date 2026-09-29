@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  BackHandler,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -8,6 +9,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import Svg, { Path } from "react-native-svg";
@@ -21,7 +23,7 @@ import { useQuery } from "@tanstack/react-query";
 import { listProjectPhotos, type CapturedAsset, type PhotoPhase } from "@/api/photos";
 import { getMyTeam } from "@/api/team";
 import { tagForPhase, type WatermarkTag } from "@/api/watermark";
-import { renderWatermarked } from "@/api/watermark-render";
+import { downscaleForStamp, makePreviewThumb, renderWatermarked } from "@/api/watermark-render";
 import { WatermarkCanvas } from "@/components/WatermarkCanvas";
 import { ScanCanvas } from "@/components/ScanCanvas";
 import { ScanCropper } from "@/components/ScanCropper";
@@ -37,14 +39,30 @@ import { formatAddress, getProject, projectCoords } from "@/api/projects";
 import { projectDisplayName } from "@everlumen/shared";
 import { useAuth } from "@/lib/auth";
 import { deviceSupportsMeasure } from "@/lib/measure-support";
-import { persistCapture } from "@/offline/media";
-import { enqueue, newOutboxId } from "@/offline/outbox";
+import {
+  phaseAtShutter,
+  savedMessage,
+  setPhaseForAll,
+  sharedPhase,
+  shotPhase,
+} from "@/lib/capture-batch";
+import { persistCapture, replaceCapture } from "@/offline/media";
+import { enqueue, finishHeld, newOutboxId } from "@/offline/outbox";
 import { recordSessionPhoto } from "@/offline/capture-session";
 import { refreshQueue, requestSync } from "@/offline/sync";
 import type { PhotoUploadPayload } from "@/offline/handlers";
 import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
 import { Icon } from "@/ui";
-import { ChevronDown, Grid3x3, ImageIcon, MapPin, Ruler, SwitchCamera, X } from "@/ui/icons";
+import {
+  ChevronDown,
+  ChevronLeft,
+  Grid3x3,
+  ImageIcon,
+  MapPin,
+  Ruler,
+  SwitchCamera,
+  X,
+} from "@/ui/icons";
 
 /**
  * `scan` marks a shot taken in Scan mode. Its file already has the document
@@ -58,11 +76,29 @@ type Shot = CapturedAsset & {
   caption?: string;
   /** This shot's own tags, from its preview. Added to the batch tags. */
   tags?: string[];
+  /**
+   * Before/After as selected when this shot's shutter fired. Saved per shot,
+   * never read from the toggle at Save time; see `capture-batch.ts`.
+   */
+  phase?: PhotoPhase;
+  /** A small copy for the strip and review grid, once it has been made. */
+  thumb?: string;
 };
+
+/** A queued shot still waiting for its before/after pill. */
+type StampJob = { id: string; uri: string; localUri: string; tag: WatermarkTag };
+
+/**
+ * How long a queued Before/After photo waits for its pill before it uploads
+ * without one. The pill takes about a second a photo; this is only the
+ * ceiling for a camera closed, or an app killed, before it finished.
+ */
+const STAMP_HOLD_MS = 2 * 60_000;
 
 /** The tag a Scan mode capture is filed under, so scans can be found later. */
 const SCAN_TAG = "scan";
 
+/** Review's "Set all" row. */
 const PHASES: { id: PhotoPhase; label: string }[] = [
   { id: "before", label: "Before" },
   { id: "untagged", label: "Untagged" },
@@ -94,6 +130,7 @@ export default function CaptureScreen() {
   }>();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const { width: winWidth } = useWindowDimensions();
   const { user } = useAuth();
 
   const [permission, requestPermission] = useCameraPermissions();
@@ -104,7 +141,6 @@ export default function CaptureScreen() {
   const [shots, setShots] = useState<Shot[]>([]);
   const [reviewing, setReviewing] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   /** A passing word on the viewfinder, such as Dual being on its way. */
   const [notice, setNotice] = useState<string | null>(null);
@@ -114,6 +150,12 @@ export default function CaptureScreen() {
   const [caption, setCaption] = useState("");
   const [tagText, setTagText] = useState("");
   const [batchTagsOpen, setBatchTagsOpen] = useState(false);
+  /**
+   * Whether the whole mode bar is showing. It opens on arrival so the modes
+   * can be seen, then settles to the chosen mode once one is picked and after
+   * every shot; tapping that pill opens it again.
+   */
+  const [modeBarOpen, setModeBarOpen] = useState(true);
 
   /** Rule-of-thirds grid, on by default as on web. */
   const [gridOn, setGridOn] = useState(true);
@@ -240,23 +282,58 @@ export default function CaptureScreen() {
     };
   }, []);
 
+  /*
+   * Android's back button on review goes back to the viewfinder, as review's
+   * own back arrow does, rather than closing the camera and the batch with it.
+   */
+  useEffect(() => {
+    if (!reviewing) return;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (!busy) setReviewing(false);
+      return true;
+    });
+    return () => sub.remove();
+  }, [reviewing, busy]);
+
   /** A shot for the batch, with a key that is known before it is added. */
-  const makeShot = useCallback((asset: CapturedAsset, scan = false): Shot => {
+  const makeShot = useCallback((asset: CapturedAsset, scan: boolean, phase: PhotoPhase): Shot => {
     keyCounter.current += 1;
-    return { ...asset, scan, key: `${asset.uri}-${keyCounter.current}` };
+    return { ...asset, scan, phase, key: `${asset.uri}-${keyCounter.current}` };
+  }, []);
+
+  /**
+   * Make the strip's small copy in the background. The grid shows the full
+   * photo until it lands; a thumb made for a file the preview has since
+   * replaced (crop, annotate) is dropped rather than shown.
+   */
+  const thumbFor = useCallback((key: string, uri: string) => {
+    void makePreviewThumb(uri).then((thumb) => {
+      if (!thumb) return;
+      setShots((prev) =>
+        prev.map((shot) => (shot.key === key && shot.uri === uri ? { ...shot, thumb } : shot)),
+      );
+    });
   }, []);
 
   const addShot = useCallback(
-    (asset: CapturedAsset, scan = false) => {
-      const shot = makeShot(asset, scan);
+    (asset: CapturedAsset, scan: boolean, phase: PhotoPhase) => {
+      const shot = makeShot(asset, scan, phase);
       setShots((prev) => [...prev, shot]);
+      thumbFor(shot.key, shot.uri);
       return shot;
     },
-    [makeShot],
+    [makeShot, thumbFor],
   );
 
   function patchShot(key: string, patch: ShotPatch) {
-    setShots((prev) => prev.map((shot) => (shot.key === key ? { ...shot, ...patch } : shot)));
+    setShots((prev) =>
+      prev.map((shot) => {
+        if (shot.key !== key) return shot;
+        const replaced = patch.uri !== undefined && patch.uri !== shot.uri;
+        return { ...shot, ...patch, ...(replaced ? { thumb: undefined } : null) };
+      }),
+    );
+    if (patch.uri) thumbFor(key, patch.uri);
   }
 
   /*
@@ -289,13 +366,18 @@ export default function CaptureScreen() {
    * video"; Walkthrough is the narrated walk with photos pinned to it. Leaving
    * Before/After clears the phase, as web clears its tag, so a Photo or Scan
    * run never inherits a pill picked for a different job.
+   *
+   * A batch still on screen is saved on the way to the recorder rather than
+   * blocking the switch: Save only hands it to the offline queue, which takes
+   * a moment and needs no signal, so there is nothing to make anyone wait for.
    */
-  function changeMode(next: CameraMode) {
+  async function changeMode(next: CameraMode) {
     if (next === "video" || next === "walkthrough") {
-      if (!projectId) return;
+      if (!projectId || busy) return;
       if (shots.length > 0) {
-        setError("Save or review this batch first, then switch to video.");
-        return;
+        const saved = await save();
+        // Anything that could not be stored stays on screen with its error.
+        if (!saved) return;
       }
       router.push({
         pathname: "/project/[id]/walkthrough-record",
@@ -311,6 +393,7 @@ export default function CaptureScreen() {
     if (next === "measure" && !canMeasure) return;
     setError(null);
     setMode(next);
+    setModeBarOpen(false);
     if (next !== "before-after") setPhase("untagged");
     // Untagged is where tags are picked, as web's tag picker: it opens the
     // picker every time it is tapped, and the bar then shows what was picked.
@@ -335,18 +418,26 @@ export default function CaptureScreen() {
    *
    * Measure opens it straight in the annotator's Measure tool, as web does.
    * Quick capture queues it at once. Everything else joins the batch.
+   *
+   * `phase` is the one selected when the shutter fired, passed in rather than
+   * read here, because a capture can land after the toggle has moved on.
    */
-  function afterCapture(asset: CapturedAsset, scan: boolean, allowMeasure = true) {
+  function afterCapture(
+    asset: CapturedAsset,
+    scan: boolean,
+    phase: PhotoPhase,
+    allowMeasure = true,
+  ) {
     if (allowMeasure && mode === "measure" && canMeasure) {
-      const shot = addShot(asset, scan);
+      const shot = addShot(asset, scan, phase);
       setMeasuringKey(shot.key);
       return;
     }
     if (quick) {
-      void quickSave(makeShot(asset, scan));
+      void quickSave(makeShot(asset, scan, phase));
       return;
     }
-    addShot(asset, scan);
+    addShot(asset, scan, phase);
   }
 
   /**
@@ -368,6 +459,9 @@ export default function CaptureScreen() {
   async function takeShot() {
     if (!cameraRef.current || busy) return;
     setError(null);
+    setModeBarOpen(false);
+    // Read now, at the shutter, not after the picture comes back.
+    const shutterPhase = phaseAtShutter(mode, phase);
     try {
       /*
        * `quality: 1` because `uploadProjectPhoto` re-encodes exactly once.
@@ -391,7 +485,7 @@ export default function CaptureScreen() {
            */
           setScanPending({ asset, quad: guideQuad(asset) });
         } else {
-          afterCapture(asset, false);
+          afterCapture(asset, false, shutterPhase);
         }
       }
     } catch (e) {
@@ -413,6 +507,7 @@ export default function CaptureScreen() {
     });
     if (result.canceled) return;
     const scan = mode === "scan";
+    const pickedPhase = phaseAtShutter(mode, phase, scan);
     if (scan) setBusy(true);
     try {
       for (const asset of result.assets) {
@@ -430,10 +525,11 @@ export default function CaptureScreen() {
           afterCapture(
             { ...picked, ...(await scanLook(picked)), mimeType: "image/jpeg" },
             true,
+            pickedPhase,
             false,
           );
         } else {
-          afterCapture(picked, false, false);
+          afterCapture(picked, false, pickedPhase, false);
         }
       }
     } finally {
@@ -446,18 +542,33 @@ export default function CaptureScreen() {
   }
 
   /*
-   * Jobs for the one off-screen surface, run strictly one after another. Quick
-   * capture can be stamping one shot while Scan mode is rendering the next,
-   * and two jobs on one surface would each resolve with the other's picture.
+   * Jobs for the one off-screen surface, run strictly one after another. The
+   * background pill burner can be stamping one shot while Scan mode is
+   * rendering the next, and two jobs on one surface would each resolve with
+   * the other's picture.
    */
   const surfaceQueue = useRef<Promise<unknown>>(Promise.resolve());
+  /** False once the screen has gone, so queued surface work stops waiting on it. */
+  const alive = useRef(true);
+  /** Ends the render in flight early, with the original, when the screen goes. */
+  const stampAbort = useRef<(() => void) | null>(null);
+  useEffect(
+    () => () => {
+      alive.current = false;
+      stampAbort.current?.();
+    },
+    [],
+  );
 
   /** Mount the off-screen surface, flatten it, and hand back the file. */
   const renderOffscreen = useCallback((job: NonNullable<typeof stamping>) => {
     const now = async (): Promise<string> => {
+      // No screen, no surface: waiting out the timeout would only delay the queue.
+      if (!alive.current) return job.uri;
       try {
         const rendered = await new Promise<string>((resolve, reject) => {
           stampResolve.current = resolve;
+          stampAbort.current = () => reject(new Error("Camera closed"));
           setStamping(job);
           // The canvas has to mount and lay out before it can rasterise. This is
           // the outer bound on that, separate from the rasteriser's own timeout.
@@ -468,7 +579,8 @@ export default function CaptureScreen() {
         return job.uri;
       } finally {
         stampResolve.current = null;
-        setStamping(null);
+        stampAbort.current = null;
+        if (alive.current) setStamping(null);
       }
     };
     const run = surfaceQueue.current.then(now);
@@ -477,40 +589,13 @@ export default function CaptureScreen() {
   }, []);
 
   /**
-   * Burn the before/after pill into one shot.
-   *
-   * **Fails open, always.** Any problem here returns the original photo rather
-   * than throwing, and the capture queues unwatermarked. Losing a pill is a
-   * cosmetic difference from a web-captured photo; losing the photo is the
-   * thing the whole offline queue exists to prevent, and this is the last
-   * screen where that could still happen.
-   *
-   * `untagged` gets nothing, matching web. See `tagForPhase`.
-   */
-  const stamp = useCallback(
-    async (shot: Shot, currentPhase: PhotoPhase): Promise<string> => {
-      const tag = tagForPhase(currentPhase);
-      // No pill wanted, or the picker gave us no dimensions to size one against.
-      if (!tag || !shot.width || !shot.height) return shot.uri;
-      return renderOffscreen({
-        kind: "watermark",
-        uri: shot.uri,
-        width: shot.width,
-        height: shot.height,
-        tag,
-      });
-    },
-    [renderOffscreen],
-  );
-
-  /**
    * Give one imported page the document look, without the corner step (a run
    * of library imports should not open one after another; each can be
    * straightened from its preview's Crop).
    *
    * Upright and resized first, so the look is drawn at the picture's real
-   * orientation and size. Fails open like `stamp`: a scan that keeps its
-   * colour is still a scan.
+   * orientation and size. Fails open: a scan that keeps its colour is still a
+   * scan.
    */
   const scanLook = useCallback(
     async (
@@ -552,18 +637,54 @@ export default function CaptureScreen() {
     };
   }, [stamping]);
 
-  /**
-   * Hand the batch to the outbox and get out of the way.
-   *
-   * Nothing is uploaded here. Each shot is copied into app storage and written
-   * to the queue, which takes milliseconds and cannot fail for lack of signal,
-   * then the drain delivers it whenever the network allows. The alternative,
-   * uploading inline, means a progress bar the user has to stand still and
-   * watch on the one connection least likely to hold: a phone on a job site.
+  /*
+   * The background pill burner. Runs after Save has returned, one photo at a
+   * time, so the shutter and the screen never wait on it.
    */
+  const stampChain = useRef<Promise<void>>(Promise.resolve());
+
   /**
-   * Queue one shot: stamp, copy into app storage, enqueue. Throws when the
+   * Burn the before/after pill into queued photos, after the fact.
+   *
+   * Each row was queued held (`holdUntil`), so the drain leaves it alone while
+   * this works. Per photo: shrink it once, natively, to the 2048px the upload
+   * stores anyway; draw the pill on that; swap the queued file for the result;
+   * release the row. **Fails open, always**: any problem, or the camera
+   * closing first, releases the row with the photo as it was. Losing a pill is
+   * a cosmetic difference from a web-captured photo; losing the photo is what
+   * the whole queue exists to prevent. `photos.phase` is written either way.
+   */
+  function stampInBackground(jobs: StampJob[]) {
+    if (jobs.length === 0) return;
+    const run = async () => {
+      for (const job of jobs) {
+        let stamped: string | null = null;
+        if (alive.current) {
+          try {
+            const small = await downscaleForStamp(job.uri);
+            const out = await renderOffscreen({ kind: "watermark", ...small, tag: job.tag });
+            if (out !== small.uri) stamped = out;
+          } catch {
+            // Released unstamped below.
+          }
+        }
+        const file = stamped;
+        await finishHeld(job.id, file ? () => replaceCapture(file, job.localUri) : undefined).catch(
+          () => false,
+        );
+        requestSync();
+      }
+    };
+    stampChain.current = stampChain.current.then(run, run);
+  }
+
+  /**
+   * Queue one shot: copy it into app storage and enqueue it. Throws when the
    * device could not store it, so the caller can keep the shot on screen.
+   *
+   * Milliseconds per photo: nothing is decoded or drawn here. A Before/After
+   * photo is queued held and handed back as a `StampJob` for
+   * `stampInBackground`, which burns its pill in after Save has returned.
    *
    * The shot's own description wins over the batch caption, and its own tags
    * are added to the batch tags, so the per-shot preview and the batch fields
@@ -572,22 +693,19 @@ export default function CaptureScreen() {
   async function queueShot(
     shot: Shot,
     batch: { sessionId: string; tzOffsetMinutes: number; tags: string[]; caption: string },
-  ) {
+  ): Promise<StampJob | null> {
     if (!projectId || !user) throw new Error("Not ready");
     // The id is minted first: the durable copy is named after it, and it
     // becomes the idempotency key for the upload itself.
     const id = newOutboxId();
-    // A scan never carries a before/after pill, whatever the batch says.
-    const shotPhase: PhotoPhase = shot.scan ? "untagged" : phase;
+    // The phase this shot was taken under; a scan is always untagged.
+    const phaseOfShot = shotPhase(shot);
+    const tag = tagForPhase(phaseOfShot);
     const shotTags = Array.from(
       new Set([...batch.tags, ...(shot.tags ?? []), ...(shot.scan ? [SCAN_TAG] : [])]),
     );
     const shotCaption = shot.caption?.trim() || batch.caption.trim() || undefined;
-    // Watermark first, then persist, so the durable copy the queue owns is
-    // the one with the pill already in it. Persisting first and stamping
-    // after would leave the outbox pointing at the unstamped file.
-    const stamped = await stamp(shot, shotPhase);
-    const localUri = persistCapture(stamped, id);
+    const localUri = persistCapture(shot.uri, id);
 
     const payload: PhotoUploadPayload = {
       userId: user.id,
@@ -598,14 +716,21 @@ export default function CaptureScreen() {
       width: shot.width,
       height: shot.height,
       exif: shot.exif,
-      phase: shotPhase,
+      phase: phaseOfShot,
       tags: shotTags,
       caption: shotCaption,
       deviceCoords,
       projectCoords: projectCoords(project ?? null),
     };
 
-    await enqueue({ id, kind: "photo_upload", projectId, localUri, payload });
+    await enqueue({
+      id,
+      kind: "photo_upload",
+      projectId,
+      localUri,
+      payload,
+      holdUntil: tag ? Date.now() + STAMP_HOLD_MS : undefined,
+    });
     // After the enqueue, so a session row can never point at a photo that
     // was never queued. A failure here costs the log, not the photograph.
     await recordSessionPhoto({
@@ -615,6 +740,7 @@ export default function CaptureScreen() {
       source: "camera",
       tzOffsetMinutes: batch.tzOffsetMinutes,
     }).catch(() => {});
+    return tag ? { id, uri: shot.uri, localUri, tag } : null;
   }
 
   /*
@@ -634,35 +760,50 @@ export default function CaptureScreen() {
         tzOffsetMinutes: new Date().getTimezoneOffset(),
       };
     }
-    const tags = tagText
-      .split(",")
-      .map((tag) => tag.trim())
-      .filter(Boolean);
     try {
-      await queueShot(shot, { ...quickSession.current, tags, caption });
+      const job = await queueShot(shot, {
+        ...quickSession.current,
+        tags: splitTags(tagText),
+        caption,
+      });
       setQuickSaved((prev) => [shot.uri, ...prev].slice(0, 8));
       setSavedFlash(true);
       setTimeout(() => setSavedFlash(false), 700);
       await refreshQueue();
       requestSync();
+      if (job) stampInBackground([job]);
     } catch {
       setShots((prev) => [...prev, shot]);
+      thumbFor(shot.key, shot.uri);
       setError("Could not save that one to this device. It is in the batch below.");
     }
   }
 
-  async function save() {
-    if (!projectId || !user || shots.length === 0 || busy) return;
+  /**
+   * Hand the batch to the outbox and get out of the way.
+   *
+   * Nothing is uploaded here, and nothing is drawn. Each shot is copied into
+   * app storage and written to the queue, which takes milliseconds and cannot
+   * fail for lack of signal; the drain delivers it whenever the network
+   * allows, with the queue banner showing progress. Before/After pills are
+   * burnt in afterwards by `stampInBackground`.
+   *
+   * It used to stamp each photo inline, at the camera's full resolution,
+   * before queueing the next: a 12 megapixel SVG render, a base64 PNG of it
+   * across the bridge and a re-encode, one after another, behind a "Saving 2
+   * of 5" button. That was the wait.
+   *
+   * @returns whether every shot was queued.
+   */
+  async function save(): Promise<boolean> {
+    if (!projectId || !user || shots.length === 0 || busy) return false;
     setBusy(true);
     setError(null);
-    setProgress({ done: 0, total: shots.length });
 
-    const tags = tagText
-      .split(",")
-      .map((tag) => tag.trim())
-      .filter(Boolean);
-
+    const tags = splitTags(tagText);
     const failed: Shot[] = [];
+    const jobs: StampJob[] = [];
+    const count = shots.length;
 
     /*
      * One session per Save, which is what the Daily Log is written against.
@@ -680,21 +821,20 @@ export default function CaptureScreen() {
     const sessionId = newOutboxId();
     const tzOffsetMinutes = new Date().getTimezoneOffset();
 
-    for (let i = 0; i < shots.length; i += 1) {
-      const shot = shots[i];
+    for (const shot of shots) {
       try {
-        await queueShot(shot, { sessionId, tzOffsetMinutes, tags, caption });
+        const job = await queueShot(shot, { sessionId, tzOffsetMinutes, tags, caption });
+        if (job) jobs.push(job);
       } catch {
         failed.push(shot);
       }
-      setProgress({ done: i + 1, total: shots.length });
     }
 
     await refreshQueue();
     requestSync();
+    stampInBackground(jobs);
 
     setBusy(false);
-    setProgress(null);
 
     if (failed.length) {
       /*
@@ -704,27 +844,30 @@ export default function CaptureScreen() {
        */
       setShots(failed);
       setError(`${failed.length} could not be saved to this device. Still here, try again.`);
-      return;
+      return false;
     }
 
     /*
-     * Success. The batch is queued and the durable copies are in app storage,so
+     * Success. The batch is queued and the durable copies are in app storage, so
      * there is nothing left on screen that has to be uploaded. Reset the form and
      * flip back to the viewfinder so the next photo can be taken immediately
-     * without re-opening the camera. Phase is deliberately kept: a technician
-     * shooting a run of "before" (or "after") photos across several saves should
-     * not have to re-pick the segment every time; the per-batch caption and tags
-     * are cleared so one batch's notes don't leak into the next.
+     * without re-opening the camera. The toggle is deliberately kept: a
+     * technician shooting a run of "before" (or "after") photos across several
+     * saves should not have to re-pick it every time; the per-batch caption and
+     * tags are cleared so one batch's notes don't leak into the next.
      */
     setShots([]);
     setCaption("");
     setTagText("");
     setReviewing(false);
+    showNotice(savedMessage(count));
+    return true;
   }
 
   /*
-   * The off-screen surface, shared by both views: Scan mode renders its
-   * document look from the viewfinder, the watermark is burnt in from review.
+   * The off-screen surface, in every view: Scan mode renders its document
+   * look from the viewfinder, and the pill burner runs wherever the person has
+   * moved on to after Save.
    */
   const offscreenSurface = stamping ? (
     <View style={styles.stampSurface} pointerEvents="none" accessibilityElementsHidden>
@@ -737,6 +880,9 @@ export default function CaptureScreen() {
         />
       ) : (
         <WatermarkCanvas
+          // A fresh surface per photo, so one render can never pick up the
+          // previous photo's image before its own has loaded.
+          key={stamping.uri}
           ref={stampRef}
           uri={stamping.uri}
           width={stamping.width}
@@ -814,12 +960,22 @@ export default function CaptureScreen() {
   }
 
   if (reviewing) {
+    /*
+     * Tiles sized from the window, three across on a phone and five on a
+     * tablet, inside a column capped at REVIEW_MAX_WIDTH so a tablet on its
+     * side does not stretch the form across the whole screen.
+     */
+    const columnWidth = Math.min(winWidth - insets.left - insets.right, REVIEW_MAX_WIDTH);
+    const columns = columnWidth >= 600 ? 5 : 3;
+    const tileSize = Math.floor(
+      (columnWidth - spacing.lg * 2 - spacing.sm * (columns - 1)) / columns,
+    );
+    const allPhase = sharedPhase(shots);
+    const hasPhotos = shots.some((shot) => !shot.scan);
+
     return (
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={{ flex: 1, backgroundColor: theme.colors.background }}
-      >
-        <Stack.Screen options={{ title: `Review ${shots.length}`, headerShown: true }} />
+      <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+        <Stack.Screen options={{ headerShown: false }} />
 
         {/*
           The watermark surface, mounted off-screen while a shot is being
@@ -832,185 +988,288 @@ export default function CaptureScreen() {
         */}
         {offscreenSurface}
 
-        <ScrollView contentContainerStyle={{ padding: spacing.lg, gap: spacing.lg }}>
-          <Text style={[typography.caption, { color: theme.colors.mutedForeground }]}>
-            Tap a photo to annotate, measure, crop, tag or describe it.
+        {/*
+          Its own header rather than the stack's: the stack's back arrow
+          would close the whole camera and drop the batch, where this one goes
+          back to the viewfinder with every photo still there.
+        */}
+        <View
+          style={[
+            styles.reviewHeader,
+            {
+              paddingTop: insets.top + spacing.sm,
+              paddingLeft: insets.left + spacing.md,
+              paddingRight: insets.right + spacing.md,
+              borderBottomColor: theme.colors.border,
+            },
+          ]}
+        >
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Back to camera"
+            disabled={busy}
+            hitSlop={8}
+            onPress={() => setReviewing(false)}
+            style={styles.reviewBack}
+          >
+            <Icon icon={ChevronLeft} size="md" color={theme.colors.foreground} />
+          </Pressable>
+          <Text
+            style={[typography.heading, { color: theme.colors.foreground, flex: 1 }]}
+            numberOfLines={1}
+            accessibilityRole="header"
+          >
+            Review {shots.length} photo{shots.length === 1 ? "" : "s"}
           </Text>
-          <View style={styles.reviewGrid}>
-            {shots.map((shot) => (
-              <View key={shot.key} style={styles.reviewTile}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Open this photo to annotate, crop, tag or describe it"
-                  onPress={() => setEditingKey(shot.key)}
-                  style={StyleSheet.absoluteFill}
-                >
-                  <Image source={{ uri: shot.uri }} style={styles.reviewImage} contentFit="cover" />
-                </Pressable>
-                {shot.scan || shot.caption?.trim() || shot.tags?.length ? (
-                  <View style={styles.tileMarks} pointerEvents="none">
-                    {shot.scan ? <Text style={styles.tileMark}>SCAN</Text> : null}
-                    {shot.tags?.length ? (
-                      <Text style={styles.tileMark}>{shot.tags.length} TAG</Text>
-                    ) : null}
-                    {shot.caption?.trim() ? <Text style={styles.tileMark}>NOTE</Text> : null}
-                  </View>
-                ) : null}
-                <Pressable
-                  accessibilityRole="button"
-                  style={styles.removeBadge}
-                  hitSlop={8}
-                  onPress={() => removeShot(shot.key)}
-                >
-                  <Text style={styles.removeBadgeText}>×</Text>
-                </Pressable>
-              </View>
-            ))}
-          </View>
+        </View>
 
-          {/*
-            The same `phase` the pills on the viewfinder set, repeated here as a
-            last look before Save burns it in, and so it can still be corrected
-            if the batch was shot under the wrong pill.
-          */}
-          <View style={{ gap: spacing.sm }}>
-            <Text style={[typography.overline, { color: theme.colors.mutedForeground }]}>
-              PHASE
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={{ flex: 1 }}
+        >
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={[
+              styles.reviewColumn,
+              { padding: spacing.lg, gap: spacing.lg, maxWidth: REVIEW_MAX_WIDTH },
+            ]}
+          >
+            <Text style={[typography.caption, { color: theme.colors.mutedForeground }]}>
+              Tap a photo to annotate, measure, crop, tag or describe it.
             </Text>
-            <View style={styles.segmented}>
-              {PHASES.map((option) => {
-                const active = phase === option.id;
+            <View style={styles.reviewGrid}>
+              {shots.map((shot) => {
+                const tag = tagForPhase(shotPhase(shot));
+                const firstTag = shot.tags?.[0];
                 return (
-                  <Pressable
-                    accessibilityRole="button"
-                    key={option.id}
-                    onPress={() => setPhase(option.id)}
-                    style={[
-                      styles.segment,
-                      {
-                        backgroundColor: active ? theme.colors.primary : theme.colors.card,
-                        borderColor: theme.colors.border,
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        typography.bodyStrong,
-                        {
-                          color: active
-                            ? theme.colors.primaryForeground
-                            : theme.colors.mutedForeground,
-                        },
-                      ]}
+                  <View key={shot.key} style={{ width: tileSize, height: tileSize }}>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Open this photo to annotate, crop, tag or describe it"
+                      onPress={() => setEditingKey(shot.key)}
+                      style={StyleSheet.absoluteFill}
                     >
-                      {option.label}
-                    </Text>
-                  </Pressable>
+                      {/*
+                        The small copy made after the shot, so the grid paints at
+                        once instead of decoding every full-size photo. Until it
+                        lands, the original, asked for at tile size.
+                      */}
+                      <Image
+                        source={{ uri: shot.thumb ?? shot.uri }}
+                        style={styles.reviewImage}
+                        contentFit="cover"
+                        recyclingKey={shot.key}
+                        cachePolicy="memory"
+                        allowDownscaling
+                        transition={0}
+                      />
+                    </Pressable>
+                    {tag ? (
+                      <View
+                        style={[styles.tilePhase, { backgroundColor: PHASE_FILL[tag] }]}
+                        pointerEvents="none"
+                      >
+                        <Text style={styles.tilePhaseText}>{tag.toUpperCase()}</Text>
+                      </View>
+                    ) : null}
+                    {shot.scan || shot.caption?.trim() || firstTag ? (
+                      <View style={styles.tileMarks} pointerEvents="none">
+                        {shot.scan ? <Text style={styles.tileMark}>SCAN</Text> : null}
+                        {firstTag ? (
+                          <Text style={styles.tileMark} numberOfLines={1}>
+                            {firstTag}
+                            {shot.tags && shot.tags.length > 1 ? ` +${shot.tags.length - 1}` : ""}
+                          </Text>
+                        ) : null}
+                        {shot.caption?.trim() ? <Text style={styles.tileMark}>NOTE</Text> : null}
+                      </View>
+                    ) : null}
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Remove this photo"
+                      style={styles.removeBadge}
+                      hitSlop={8}
+                      onPress={() => removeShot(shot.key)}
+                    >
+                      <Text style={styles.removeBadgeText}>×</Text>
+                    </Pressable>
+                  </View>
                 );
               })}
             </View>
-          </View>
 
-          <View style={{ gap: spacing.sm }}>
-            <Text style={[typography.overline, { color: theme.colors.mutedForeground }]}>
-              CAPTION
-            </Text>
-            <TextInput
-              value={caption}
-              onChangeText={setCaption}
-              placeholder="Optional, applied to every photo"
-              placeholderTextColor={theme.colors.mutedForeground}
-              style={[
-                styles.input,
-                {
-                  backgroundColor: theme.colors.card,
-                  borderColor: theme.colors.border,
-                  color: theme.colors.foreground,
-                },
-              ]}
-            />
-          </View>
+            {/*
+              Each photo keeps the Before/After it was taken under, shown on its
+              tile. This row corrects a whole batch shot under the wrong one;
+              it lights up only when every photo already shares that phase.
+            */}
+            {hasPhotos ? (
+              <View style={{ gap: spacing.sm }}>
+                <Text style={[typography.overline, { color: theme.colors.mutedForeground }]}>
+                  SET ALL PHOTOS TO
+                </Text>
+                <View style={styles.segmented}>
+                  {PHASES.map((option) => {
+                    const active = allPhase === option.id;
+                    return (
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: active }}
+                        key={option.id}
+                        onPress={() => setShots((prev) => setPhaseForAll(prev, option.id))}
+                        style={[
+                          styles.segment,
+                          {
+                            backgroundColor: active ? theme.colors.primary : theme.colors.card,
+                            borderColor: theme.colors.border,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            typography.bodyStrong,
+                            {
+                              color: active
+                                ? theme.colors.primaryForeground
+                                : theme.colors.mutedForeground,
+                            },
+                          ]}
+                        >
+                          {option.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            ) : null}
 
-          <View style={{ gap: spacing.sm }}>
-            <View style={styles.labelRow}>
+            <View style={{ gap: spacing.sm }}>
               <Text style={[typography.overline, { color: theme.colors.mutedForeground }]}>
-                TAGS
+                CAPTION
               </Text>
+              <TextInput
+                value={caption}
+                onChangeText={setCaption}
+                placeholder="Optional, applied to every photo"
+                placeholderTextColor={theme.colors.mutedForeground}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: theme.colors.card,
+                    borderColor: theme.colors.border,
+                    color: theme.colors.foreground,
+                  },
+                ]}
+              />
+            </View>
+
+            <View style={{ gap: spacing.sm }}>
+              <View style={styles.labelRow}>
+                <Text style={[typography.overline, { color: theme.colors.mutedForeground }]}>
+                  TAGS
+                </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  hitSlop={8}
+                  onPress={() => setBatchTagsOpen(true)}
+                >
+                  <Text style={[typography.bodyStrong, { color: theme.colors.primary }]}>
+                    Pick tags
+                  </Text>
+                </Pressable>
+              </View>
+              <TextInput
+                value={tagText}
+                onChangeText={setTagText}
+                autoCapitalize="none"
+                placeholder="Comma separated, for example: roof, framing"
+                placeholderTextColor={theme.colors.mutedForeground}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: theme.colors.card,
+                    borderColor: theme.colors.border,
+                    color: theme.colors.foreground,
+                  },
+                ]}
+              />
+            </View>
+          </ScrollView>
+
+          {/*
+            The three ways out, pinned under the form so they are always on
+            screen, however many photos or however small the phone: Save
+            first, then more from the library or back to the viewfinder.
+          */}
+          <View
+            style={[
+              styles.reviewActions,
+              {
+                paddingBottom: insets.bottom + spacing.md,
+                paddingLeft: insets.left + spacing.lg,
+                paddingRight: insets.right + spacing.lg,
+                borderTopColor: theme.colors.border,
+                backgroundColor: theme.colors.background,
+              },
+            ]}
+          >
+            <View style={[styles.reviewColumn, { gap: spacing.sm, maxWidth: REVIEW_MAX_WIDTH }]}>
+              {error ? (
+                <Text style={[typography.caption, { color: theme.colors.destructive }]}>
+                  {error}
+                </Text>
+              ) : null}
               <Pressable
                 accessibilityRole="button"
-                hitSlop={8}
-                onPress={() => setBatchTagsOpen(true)}
+                disabled={busy || shots.length === 0}
+                style={[
+                  styles.primaryButton,
+                  { backgroundColor: theme.colors.primary, opacity: busy ? 0.7 : 1 },
+                ]}
+                onPress={() => void save()}
               >
-                <Text style={[typography.bodyStrong, { color: theme.colors.primary }]}>
-                  Pick tags
-                </Text>
+                {busy ? (
+                  <ActivityIndicator color={theme.colors.primaryForeground} />
+                ) : (
+                  <Text style={[typography.bodyStrong, { color: theme.colors.primaryForeground }]}>
+                    Save {shots.length} photo{shots.length === 1 ? "" : "s"}
+                  </Text>
+                )}
               </Pressable>
+              <View style={styles.reviewSecondaryRow}>
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={busy}
+                  style={[
+                    styles.secondaryButton,
+                    styles.reviewSecondary,
+                    { borderColor: theme.colors.border },
+                  ]}
+                  onPress={() => void pickFromLibrary()}
+                >
+                  <Text style={[typography.bodyStrong, { color: theme.colors.foreground }]}>
+                    Add from library
+                  </Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={busy}
+                  style={[
+                    styles.secondaryButton,
+                    styles.reviewSecondary,
+                    { borderColor: theme.colors.border },
+                  ]}
+                  onPress={() => setReviewing(false)}
+                >
+                  <Text style={[typography.bodyStrong, { color: theme.colors.foreground }]}>
+                    Back to camera
+                  </Text>
+                </Pressable>
+              </View>
             </View>
-            <TextInput
-              value={tagText}
-              onChangeText={setTagText}
-              autoCapitalize="none"
-              placeholder="Comma separated, for example: roof, framing"
-              placeholderTextColor={theme.colors.mutedForeground}
-              style={[
-                styles.input,
-                {
-                  backgroundColor: theme.colors.card,
-                  borderColor: theme.colors.border,
-                  color: theme.colors.foreground,
-                },
-              ]}
-            />
           </View>
-
-          {error ? (
-            <Text style={[typography.caption, { color: theme.colors.destructive }]}>{error}</Text>
-          ) : null}
-
-          <View style={{ gap: spacing.sm }}>
-            <Pressable
-              accessibilityRole="button"
-              disabled={busy || shots.length === 0}
-              style={[
-                styles.primaryButton,
-                { backgroundColor: theme.colors.primary, opacity: busy ? 0.7 : 1 },
-              ]}
-              onPress={() => void save()}
-            >
-              {busy ? (
-                <Text style={[typography.bodyStrong, { color: theme.colors.primaryForeground }]}>
-                  Saving {progress ? `${progress.done} of ${progress.total}` : ""}
-                </Text>
-              ) : (
-                <Text style={[typography.bodyStrong, { color: theme.colors.primaryForeground }]}>
-                  Save {shots.length} photo{shots.length === 1 ? "" : "s"}
-                </Text>
-              )}
-            </Pressable>
-
-            <Pressable
-              accessibilityRole="button"
-              disabled={busy}
-              style={[styles.secondaryButton, { borderColor: theme.colors.border }]}
-              onPress={() => void pickFromLibrary()}
-            >
-              <Text style={[typography.bodyStrong, { color: theme.colors.foreground }]}>
-                Add from library
-              </Text>
-            </Pressable>
-
-            <Pressable
-              accessibilityRole="button"
-              disabled={busy}
-              style={[styles.secondaryButton, { borderColor: theme.colors.border }]}
-              onPress={() => setReviewing(false)}
-            >
-              <Text style={[typography.bodyStrong, { color: theme.colors.foreground }]}>
-                Back to camera
-              </Text>
-            </Pressable>
-          </View>
-        </ScrollView>
+        </KeyboardAvoidingView>
 
         <TagPickerSheet
           visible={batchTagsOpen}
@@ -1021,7 +1280,7 @@ export default function CaptureScreen() {
           onChange={(next) => setTagText(next.join(", "))}
           onClose={() => setBatchTagsOpen(false)}
         />
-      </KeyboardAvoidingView>
+      </View>
     );
   }
 
@@ -1045,7 +1304,12 @@ export default function CaptureScreen() {
       style={styles.squareButton}
       onPress={() => setReviewing(true)}
     >
-      <Image source={{ uri: lastShot.uri }} style={styles.lastShotImage} />
+      <Image
+        source={{ uri: lastShot.thumb ?? lastShot.uri }}
+        style={styles.lastShotImage}
+        allowDownscaling
+        transition={0}
+      />
       <View style={[styles.countBadge, { backgroundColor: theme.colors.primary }]}>
         <Text style={[styles.countText, { color: theme.colors.primaryForeground }]}>
           {shots.length}
@@ -1073,10 +1337,10 @@ export default function CaptureScreen() {
 
   /*
    * Before / None / After, as web draws it: its own small dark toggle between
-   * the mode bar and the shutter row, only in Before/After mode. The same
-   * `phase` state is what the review step shows and what `stamp` burns in on
-   * Save, and it applies to the whole batch. Tapping the chosen side again
-   * goes back to None, as on web.
+   * the mode bar and the shutter row, only in Before/After mode. Each shot
+   * takes whichever side is selected when its shutter fires (`phaseAtShutter`),
+   * so a Before, a flip, then an After are saved as one of each. Tapping the
+   * chosen side again goes back to None, as on web.
    */
   const phaseSelector =
     mode === "before-after" ? (
@@ -1368,9 +1632,11 @@ export default function CaptureScreen() {
         <CameraModeRow
           modes={cameraModes(canMeasure)}
           value={mode}
-          onChange={changeMode}
+          onChange={(next) => void changeMode(next)}
           disabled={busy}
           labels={modeLabels}
+          collapsed={!modeBarOpen}
+          onExpand={() => setModeBarOpen(true)}
         />
 
         {phaseSelector}
@@ -1416,7 +1682,11 @@ export default function CaptureScreen() {
           onApply={({ uri, width, height, note }) => {
             const { asset } = scanPending;
             setScanPending(null);
-            afterCapture({ ...asset, uri, width, height, mimeType: "image/jpeg" }, true);
+            afterCapture(
+              { ...asset, uri, width, height, mimeType: "image/jpeg" },
+              true,
+              "untagged",
+            );
             if (note) setError(note);
           }}
         />
@@ -1483,6 +1753,15 @@ function FlashGlyph({ mode }: { mode: FlashMode }) {
     </View>
   );
 }
+
+/** Review's form and buttons stop widening here, on a tablet or a phone on its side. */
+const REVIEW_MAX_WIDTH = 760;
+
+/** Review tiles' phase badge, in the watermark pill's own colours (`watermark.ts`). */
+const PHASE_FILL: Record<WatermarkTag, string> = {
+  before: "rgba(37,99,235,0.96)",
+  after: "rgba(16,185,129,0.96)",
+};
 
 /** Gallery and level: web's rounded squares either side of the shutter. */
 const SQUARE = 56;
@@ -1584,6 +1863,7 @@ const styles = StyleSheet.create({
   tileMarks: {
     position: "absolute",
     left: 4,
+    right: 4,
     bottom: 4,
     flexDirection: "row",
     flexWrap: "wrap",
@@ -1728,7 +2008,32 @@ const styles = StyleSheet.create({
    */
   stampSurface: { position: "absolute", left: -10000, top: 0 },
   reviewGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-  reviewTile: { width: "31%", aspectRatio: 1 },
+  reviewHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingBottom: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  reviewBack: {
+    width: HIT_TARGET,
+    height: HIT_TARGET,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  reviewColumn: { width: "100%", alignSelf: "center" },
+  reviewActions: { paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth },
+  reviewSecondaryRow: { flexDirection: "row", gap: spacing.sm },
+  reviewSecondary: { flex: 1, paddingHorizontal: spacing.sm },
+  tilePhase: {
+    position: "absolute",
+    top: 4,
+    left: 4,
+    borderRadius: radius.pill,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  tilePhaseText: { color: "#fff", fontSize: 10, fontWeight: "800", letterSpacing: 0.5 },
   reviewImage: { width: "100%", height: "100%", borderRadius: radius.md, backgroundColor: "#ddd" },
   removeBadge: {
     position: "absolute",

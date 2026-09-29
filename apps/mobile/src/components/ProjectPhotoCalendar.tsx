@@ -16,6 +16,7 @@ import {
   weekdayLabels,
   type Month,
 } from "@/api/timeline-view";
+import { ThumbTagBadge } from "@/components/photo-viewer/TagPill";
 import { withAlpha } from "@/components/ProjectStatusPill";
 import { radius, spacing, useTheme } from "@/theme";
 import { Calendar, ChevronLeft, ChevronRight } from "@/ui/icons";
@@ -221,6 +222,7 @@ export function ProjectPhotoCalendar({
                   height="100%"
                   rounded={radius.md}
                 />
+                {thumb >= 72 ? <ThumbTagBadge tags={photo.tags} /> : null}
               </Pressable>
             ))}
           </View>

@@ -12,6 +12,7 @@ import { Icon, type LucideIcon } from "@/ui";
 import {
   ArrowLeftRight,
   Camera,
+  ChevronUp,
   Footprints,
   Layers,
   Ruler,
@@ -98,6 +99,11 @@ const ACTIVE_FG = "#18130d";
  *
  * `labels` overrides a mode's word, which is how Untagged shows the tag or
  * the tag count once tags are picked, as web does.
+ *
+ * `collapsed` settles the bar to one pill: the chosen mode with a chevron,
+ * which opens the full bar again. The capture screen collapses it once a mode
+ * is picked and after every shot, so the whole row is not left open over the
+ * viewfinder (Jon, 2026-09-29).
  */
 export function CameraModeRow({
   modes = CAMERA_MODES,
@@ -105,12 +111,16 @@ export function CameraModeRow({
   onChange,
   disabled = false,
   labels,
+  collapsed = false,
+  onExpand,
 }: {
   modes?: CameraModeOption[];
   value: CameraMode;
   onChange: (mode: CameraMode) => void;
   disabled?: boolean;
   labels?: Partial<Record<CameraMode, string>>;
+  collapsed?: boolean;
+  onExpand?: () => void;
 }) {
   const scrollRef = useRef<ScrollView>(null);
   const [rowWidth, setRowWidth] = useState(0);
@@ -126,6 +136,36 @@ export function CameraModeRow({
   function onItemLayout(id: CameraMode, event: LayoutChangeEvent) {
     const { x, width } = event.nativeEvent.layout;
     positions.current[id] = { x, width };
+    // Reopened from the collapsed pill: the bar remounts at the start, so
+    // bring the chosen mode back into view once it has a position.
+    if (id === value && rowWidth) {
+      const target = Math.max(0, x + width / 2 - rowWidth / 2);
+      scrollRef.current?.scrollTo({ x: target, animated: false });
+    }
+  }
+
+  if (collapsed) {
+    const current = modes.find((mode) => mode.id === value) ?? modes[0];
+    const label = labels?.[current.id] ?? current.label;
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Camera mode: ${label}. Change mode`}
+        accessibilityState={{ disabled }}
+        disabled={disabled}
+        hitSlop={6}
+        onPress={onExpand}
+        style={styles.collapsed}
+      >
+        <View style={styles.collapsedChip}>
+          <Icon icon={current.icon} size="sm" color={ACTIVE_FG} />
+          <Text style={[styles.label, { color: ACTIVE_FG }]} numberOfLines={1}>
+            {label.toUpperCase()}
+          </Text>
+        </View>
+        <Icon icon={ChevronUp} size="sm" color={INACTIVE_FG} />
+      </Pressable>
+    );
   }
 
   return (
@@ -195,5 +235,27 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   itemActive: { backgroundColor: ACTIVE_FILL },
+  collapsed: {
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    padding: 5,
+    paddingRight: spacing.md,
+    minHeight: 44,
+    backgroundColor: CHROME_BAR,
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255, 255, 255, 0.18)",
+  },
+  collapsedChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: ACTIVE_FILL,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    minHeight: 34,
+  },
   label: { fontSize: 11, fontWeight: "800", letterSpacing: 0.6, maxWidth: 140 },
 });

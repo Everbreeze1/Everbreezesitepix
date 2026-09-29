@@ -60,6 +60,14 @@ export type EnqueueInput = {
    * path does: the file is copied to a name derived from the id.
    */
   id?: string;
+  /**
+   * Keep the row out of the drain until this time (ms since epoch), unless
+   * `finishHeld` lets it go first. The camera uses it to burn the before/after
+   * pill in after Save has already returned. It is only ever a ceiling: when
+   * the time passes the row sends as it is, so a pill that never finishes
+   * costs the pill and never the photo.
+   */
+  holdUntil?: number;
 };
 
 /** A new id, usable as a row id and as the deterministic key derived from it. */
@@ -74,18 +82,60 @@ export async function enqueue(input: EnqueueInput): Promise<string> {
   await db.runAsync(
     `INSERT OR REPLACE INTO outbox
        (id, kind, project_id, payload, local_uri, state, attempts, next_attempt, last_error, created_at)
-     VALUES (?, ?, ?, ?, ?, 'pending', 0, 0, NULL, ?)`,
+     VALUES (?, ?, ?, ?, ?, 'pending', 0, ?, NULL, ?)`,
     [
       id,
       input.kind,
       input.projectId ?? null,
       JSON.stringify(input.payload),
       input.localUri ?? null,
+      input.holdUntil ?? 0,
       Date.now(),
     ],
   );
 
   return id;
+}
+
+/**
+ * How long `finishHeld` keeps a row back while its file is being swapped.
+ * Seconds of work at most; a minute is generous cover.
+ */
+const SWAP_HOLD_MS = 60_000;
+
+/**
+ * Release a row queued with `holdUntil`, optionally swapping its file first.
+ *
+ * `replace` runs only while the row is still pending and has never been tried,
+ * with its hold renewed for the duration, so the drain can never be reading
+ * the file while it is being overwritten. If the hold already ran out and the
+ * row went (or is going) up as it was, the swap is skipped: the original is
+ * what landed, and overwriting it now would change nothing but the local copy.
+ *
+ * @returns whether the swap ran.
+ */
+export async function finishHeld(id: string, replace?: () => void): Promise<boolean> {
+  const db = await getDb();
+  let swapped = false;
+  if (replace) {
+    const held = await db.runAsync(
+      `UPDATE outbox SET next_attempt = ? WHERE id = ? AND state = 'pending' AND attempts = 0`,
+      [Date.now() + SWAP_HOLD_MS, id],
+    );
+    if (held.changes > 0) {
+      try {
+        replace();
+        swapped = true;
+      } catch {
+        // The unswapped file is still there and still sends.
+      }
+    }
+  }
+  await db.runAsync(
+    `UPDATE outbox SET next_attempt = 0 WHERE id = ? AND state = 'pending' AND attempts = 0`,
+    [id],
+  );
+  return swapped;
 }
 
 /**

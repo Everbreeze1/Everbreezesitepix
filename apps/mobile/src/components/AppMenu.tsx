@@ -322,6 +322,62 @@ export function MenuButton() {
   );
 }
 
+/** Diameter of the floating menu button: a size a gloved thumb finds blind. */
+export const FLOATING_MENU_SIZE = 62;
+
+/**
+ * The floating button that opens the menu, on the right edge.
+ *
+ * Jon (2026-09-29): "I like the floating three lines that pops the whole
+ * menu. Can we make that closer to lower third of the page, give it a good
+ * color contrast and make it bigger?" So it is 62pt, and drawn inverted: the
+ * foreground colour as its fill and the page colour as its glyph, which is
+ * near-black with a cream icon on the light palette and the reverse on the
+ * dark one. Either way it is the strongest contrast the palette has, where
+ * the old see-through card fill melted into the page behind it. A ring in
+ * the page colour and a shadow lift it off whatever scrolls underneath.
+ *
+ * Placed by the caller, which knows what else floats on its screen.
+ */
+export function FloatingMenuButton() {
+  const theme = useTheme();
+  const { open } = useAppMenu();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Open menu"
+      accessibilityHint="Lists every part of the app"
+      onPress={open}
+      style={({ pressed }) => [
+        {
+          width: FLOATING_MENU_SIZE,
+          height: FLOATING_MENU_SIZE,
+          borderRadius: radius.pill,
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: theme.colors.foreground,
+          borderWidth: 2,
+          borderColor: theme.colors.background,
+          opacity: pressed ? 0.85 : 1,
+          transform: [{ scale: pressed ? 0.96 : 1 }],
+        },
+        Platform.select({
+          ios: {
+            shadowColor: "#000",
+            shadowOpacity: 0.3,
+            shadowRadius: 14,
+            shadowOffset: { width: 0, height: 6 },
+          },
+          android: { elevation: 10 },
+          default: {},
+        }),
+      ]}
+    >
+      <Icon icon={Menu} size="xl" color={theme.colors.background} strokeWidth={2.5} />
+    </Pressable>
+  );
+}
+
 /**
  * A `#rrggbb` token at the given opacity.
  *

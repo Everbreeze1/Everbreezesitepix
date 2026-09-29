@@ -76,7 +76,6 @@ const ALLOWED = new Map<string, string>([
     // client one.
     "the phone trashes via the outbox, where RLS allows any teammate",
   ],
-  ["photo-ai-view.ts:analysisSummary", "written before the analysis screen chose its own wording"],
   [
     "photo-shares-view.ts:exposureSummary",
     "the sheet counts live links itself; kept for a photo-row badge",
