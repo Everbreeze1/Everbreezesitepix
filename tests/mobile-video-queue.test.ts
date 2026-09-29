@@ -28,7 +28,8 @@ describe("a site video after Stop", () => {
     expect(branch).toContain("persistRecording(videoUri, id)");
     expect(branch).toContain('kind: "video_upload"');
     expect(branch).toContain("requestSync()");
-    expect(branch).toContain("router.back()");
+    // Back to the project even when the recorder was the first screen open.
+    expect(branch).toContain("goBack(`/project/${projectId}`)");
   });
 
   it("does not upload, count up a percentage or raise an alert on the way out", () => {

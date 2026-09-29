@@ -4,6 +4,7 @@ import Constants from "expo-constants";
 import * as Device from "expo-device";
 import * as ImagePicker from "expo-image-picker";
 import { router, Stack, useLocalSearchParams } from "expo-router";
+import { goBack } from "@/lib/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { submitIssueReport, uploadFeedbackAttachments } from "@/api/feedback";
 import {
@@ -237,7 +238,7 @@ export default function ReportIssueScreen() {
               */}
               We read every one. If we need more detail, we will reply to your account email.
             </Text>
-            <Button label="Done" fullWidth onPress={() => router.back()} />
+            <Button label="Done" fullWidth onPress={() => goBack("/")} />
           </View>
         </Screen>
       </>

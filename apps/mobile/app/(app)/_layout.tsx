@@ -1,6 +1,9 @@
-import { Redirect, Stack } from "expo-router";
+import { Redirect, Stack, router } from "expo-router";
 import { ActivityIndicator, View } from "react-native";
 import { AppMenuProvider, MenuButton } from "@/components/AppMenu";
+import { HeaderBackButton, useFirstScreenHardwareBack } from "@/components/HeaderBack";
+import { parentHref } from "@/lib/back-fallback";
+import { goBack } from "@/lib/navigation";
 import { useAuth } from "@/lib/auth";
 import { usePush } from "@/push/use-push";
 import { useTheme } from "@/theme";
@@ -19,6 +22,36 @@ const MENU_DESTINATION = { headerRight: () => <MenuButton /> };
  */
 const MODAL_ANIMATION = { animation: "default" } as const;
 
+/**
+ * A modal opened over the stack: the platform draws no back arrow on one, so
+ * it gets a close button in the same corner.
+ */
+const MODAL_CLOSE = {
+  headerLeft: () => <HeaderBackButton variant="close" onPress={() => goBack("/")} />,
+};
+
+type StackOptionsArgs = {
+  route: { key: string; name: string; params?: object };
+  navigation: { getState: () => { routes: { key: string }[] } };
+};
+
+/**
+ * Every pushed screen shows a way back (Jon, 2026-09-29: "some of the pages
+ * have back buttons some of them dont"). The stack draws its own arrow when
+ * there is a screen underneath. A screen that is first in the stack (opened
+ * from a notification or a link) has none, so it gets one here that goes to
+ * the page it belongs under, the same place Android's Back goes
+ * (`useFirstScreenHardwareBack`).
+ */
+function fallbackBack({ route, navigation }: StackOptionsArgs) {
+  const first = navigation.getState().routes[0]?.key === route.key;
+  if (!first || route.name === "(tabs)") return {};
+  const target = parentHref(route.name, route.params as Record<string, unknown> | undefined);
+  return {
+    headerLeft: () => <HeaderBackButton onPress={() => router.replace(target as never)} />,
+  };
+}
+
 export default function AppLayout() {
   const { user, loading } = useAuth();
   const theme = useTheme();
@@ -32,6 +65,7 @@ export default function AppLayout() {
    * `!user` redirect and the hook itself does nothing without a user.
    */
   usePush();
+  useFirstScreenHardwareBack();
 
   if (loading) {
     return (
@@ -53,7 +87,8 @@ export default function AppLayout() {
   return (
     <AppMenuProvider>
       <Stack
-        screenOptions={{
+        screenOptions={(args) => ({
+          ...fallbackBack(args as unknown as StackOptionsArgs),
           headerStyle: { backgroundColor: theme.colors.background },
           headerTintColor: theme.colors.foreground,
           headerTitleStyle: { fontWeight: "600" },
@@ -69,7 +104,7 @@ export default function AppLayout() {
            */
           animation: "slide_from_right",
           fullScreenGestureEnabled: true,
-        }}
+        })}
       >
         {/*
           The four tabs. Header off here because each tab draws its own with
@@ -79,7 +114,12 @@ export default function AppLayout() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen
           name="capture-start"
-          options={{ presentation: "modal", title: "New photos", ...MODAL_ANIMATION }}
+          options={{
+            presentation: "modal",
+            title: "New photos",
+            ...MODAL_ANIMATION,
+            ...MODAL_CLOSE,
+          }}
         />
         <Stack.Screen name="project/[id]/index" options={{ title: "Project" }} />
         <Stack.Screen
@@ -106,6 +146,7 @@ export default function AppLayout() {
           name="photo/[id]/annotate"
           options={{ presentation: "fullScreenModal", headerShown: false, ...MODAL_ANIMATION }}
         />
+        <Stack.Screen name="photo/[id]/location" options={{ title: "Photo location" }} />
         <Stack.Screen name="queue" options={{ title: "Upload queue" }} />
         <Stack.Screen name="activity" options={{ title: "Team activity", ...MENU_DESTINATION }} />
         <Stack.Screen name="reports" options={{ title: "Reports", ...MENU_DESTINATION }} />

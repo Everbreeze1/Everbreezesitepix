@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Linking, Pressable, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { HIT_TARGET, radius, spacing, typography } from "@/theme";
 import {
   Building2,
@@ -28,7 +28,7 @@ export function PanelHeader({
   address,
   dateLabel,
   hasGps,
-  mapsUrl,
+  onOpenLocation,
   onOpenProject,
   tab,
   onTab,
@@ -41,7 +41,13 @@ export function PanelHeader({
   address: string | null;
   dateLabel: string | null;
   hasGps: boolean;
-  mapsUrl: string | null;
+  /**
+   * Opens the photo's location on the app's own map, a pushed screen with a
+   * Back that returns to this photo. It used to hand a link to Google Maps,
+   * which took over the phone with no way back (Jon, 2026-09-29). Absent when
+   * there is nothing to show: no GPS, no site pin and no address.
+   */
+  onOpenLocation?: () => void;
   /** Absent when the viewer was opened from this project's own screen. */
   onOpenProject?: () => void;
   tab: PanelTab;
@@ -116,9 +122,9 @@ export function PanelHeader({
               /* Web's GPS badge, which links to the map. */
               <Pressable
                 accessibilityRole="link"
-                accessibilityLabel="This photo has GPS. Open it in Maps"
-                disabled={!mapsUrl}
-                onPress={() => mapsUrl && void Linking.openURL(mapsUrl)}
+                accessibilityLabel="This photo has GPS. Show it on the map"
+                disabled={!onOpenLocation}
+                onPress={onOpenLocation}
                 hitSlop={8}
                 style={{
                   flexDirection: "row",
@@ -139,11 +145,11 @@ export function PanelHeader({
           </View>
         </View>
         <View style={{ flexDirection: "row", gap: spacing.xs }}>
-          {mapsUrl ? (
+          {onOpenLocation ? (
             <RoundButton
               icon={Navigation}
-              label={hasGps ? "Open photo location in Maps" : "Open project address in Maps"}
-              onPress={() => void Linking.openURL(mapsUrl)}
+              label={hasGps ? "Show photo location on the map" : "Show project location on the map"}
+              onPress={onOpenLocation}
             />
           ) : null}
           {onOpenProject ? (

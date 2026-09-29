@@ -36,6 +36,7 @@ import {
   Text,
   type ChipOption,
 } from "@/ui";
+import { useTabBack } from "@/lib/navigation";
 
 /**
  * Every photo in the workspace, newest first.
@@ -81,6 +82,7 @@ const GAP = spacing.sm;
 const LIBRARY_TILE = 80;
 
 export default function GalleryScreen() {
+  const tabBack = useTabBack();
   // Live width: a value read once never updates when an iPad rotates.
   const { width, safeSide } = useLayout();
   // The grid's gutter, plus the notch of a phone held on its side (zero upright).
@@ -375,6 +377,7 @@ export default function GalleryScreen() {
         }}
       >
         <PageHeader
+          onBack={selecting ? undefined : tabBack}
           title={selecting && selected.size > 0 ? `${selected.size} selected` : "Photo Library"}
           actions={
             <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.xs }}>

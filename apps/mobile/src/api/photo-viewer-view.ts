@@ -180,6 +180,44 @@ export function mapsLink(
   return null;
 }
 
+/**
+ * Where the in-app location screen puts its pin for one photo.
+ *
+ * The photo's own GPS when it has any, else the project's geocoded site, else
+ * only the address (no pin, but the Google Maps link still works). The viewer
+ * used to hand the link straight to Google Maps, which took over the whole
+ * screen with no way back to the photo (Jon, 2026-09-29); now it opens the
+ * app's own map, and Google Maps is a secondary button there.
+ */
+export type PhotoLocationTarget = {
+  kind: "photo" | "project" | "address" | "none";
+  coord: { latitude: number; longitude: number } | null;
+  mapsUrl: string | null;
+};
+
+export function photoLocationTarget(
+  photo: { latitude?: number | null; longitude?: number | null } | null | undefined,
+  project: { latitude?: number | null; longitude?: number | null } | null | undefined,
+  address: string | null | undefined,
+): PhotoLocationTarget {
+  if (photo && hasCoords(photo.latitude, photo.longitude)) {
+    const coord = { latitude: photo.latitude as number, longitude: photo.longitude as number };
+    return { kind: "photo", coord, mapsUrl: mapsLink(coord.latitude, coord.longitude, null) };
+  }
+  if (project && hasCoords(project.latitude, project.longitude)) {
+    const coord = { latitude: project.latitude as number, longitude: project.longitude as number };
+    return {
+      kind: "project",
+      coord,
+      mapsUrl: mapsLink(null, null, address) ?? mapsLink(coord.latitude, coord.longitude, null),
+    };
+  }
+  const url = mapsLink(null, null, address);
+  return url
+    ? { kind: "address", coord: null, mapsUrl: url }
+    : { kind: "none", coord: null, mapsUrl: null };
+}
+
 /** "43.65321, -79.38318", five places being about a metre. */
 export function formatCoords(lat: number, lng: number): string {
   return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;

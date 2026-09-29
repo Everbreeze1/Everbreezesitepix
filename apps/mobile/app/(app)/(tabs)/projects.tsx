@@ -26,6 +26,7 @@ import {
   SearchField,
   SkeletonList,
 } from "@/ui";
+import { useTabBack } from "@/lib/navigation";
 
 /*
  * "archived" is not a status, it is the `archived` flag. It sits in the same
@@ -38,6 +39,7 @@ type StatusFilter = "all" | "active" | "on_hold" | "completed" | "archived";
 const FAILED = { urls: [], count: null, latestAt: null, stageId: null };
 
 export default function ProjectsScreen() {
+  const tabBack = useTabBack();
   const theme = useTheme();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
@@ -172,6 +174,7 @@ export default function ProjectsScreen() {
       >
         <PageHeader
           title="Projects"
+          onBack={tabBack}
           actions={
             <View style={{ flexDirection: "row", alignItems: "center" }}>
               <IconButton

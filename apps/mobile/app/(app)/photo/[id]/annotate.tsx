@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import { useWindowDimensions, View } from "react-native";
-import { router, Stack, useLocalSearchParams } from "expo-router";
+import { Stack, useLocalSearchParams } from "expo-router";
+import { goBack } from "@/lib/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { annotatedCaption, annotationCanvasSize } from "@/api/annotation";
 import { getPhotoCapturedAt, saveAnnotatedPhoto } from "@/api/photo-annotations";
@@ -82,7 +83,7 @@ export default function AnnotateScreen() {
       height: out.height,
     });
     await queryClient.invalidateQueries({ queryKey: ["project-photos", projectId] });
-    router.back();
+    goBack(projectId ? `/project/${projectId}` : "/gallery");
   }
 
   return (
@@ -97,7 +98,7 @@ export default function AnnotateScreen() {
           height={hintH}
           canMeasure={canMeasure}
           capturedAt={capturedAt}
-          onCancel={() => router.back()}
+          onCancel={() => goBack(projectId ? `/project/${projectId}` : "/gallery")}
           onSave={save}
         />
       ) : (

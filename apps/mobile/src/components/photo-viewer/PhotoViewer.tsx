@@ -26,13 +26,13 @@ import { StatusBar } from "expo-status-bar";
 import { router, useIsFocused } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { displayCaption, formatPhotoDate } from "@everlumen/shared";
-import { phasePatch, type PhotoPatch } from "@/api/photo-edit";
+import type { PhotoPatch } from "@/api/photo-edit";
 import { listMentionable, listPhotoComments } from "@/api/photo-comments";
 import { getPhotoDetail, listPhotoTasks, signOriginal } from "@/api/photo-viewer";
 import {
   hasCoords,
   isTabletWidth,
-  mapsLink,
+  photoLocationTarget,
   sidePanelWidth,
   stepIndex,
   toggleTagName,
@@ -115,7 +115,7 @@ export type PhotoViewerProps = {
  * right, as on the web, with previous/next arrows and zoom controls. The top
  * bar's actions sit at its right edge, under a right thumb.
  *
- * Leaving for Annotate or a task hides the viewer rather than
+ * Leaving for Annotate, the location map or a task hides the viewer rather than
  * closing it, so Back comes straight back to the same photo on the same tab.
  */
 export function PhotoViewer({
@@ -418,6 +418,20 @@ function ViewerBody({
       },
     });
   };
+  /*
+   * The photo's place on the app's own map, pushed like Annotate so the
+   * viewer only hides and the map's Back lands on this same photo. It used to
+   * open Google Maps, which took the whole phone with no way back.
+   */
+  const location = photoLocationTarget(photo, project, address);
+  const openLocation =
+    photo && location.kind !== "none"
+      ? () =>
+          router.push({
+            pathname: "/photo/[id]/location",
+            params: { id: photo.id, projectId: projectId ?? "" },
+          })
+      : undefined;
   const openProject =
     !inProject && projectId
       ? () => {
@@ -437,7 +451,6 @@ function ViewerBody({
   const dateLabel = photo ? formatPhotoDate(photo.taken_at ?? photo.created_at) || null : null;
   const position = viewerPosition(index, found >= 0 ? photos.length : 1);
   const gps = hasCoords(photo?.latitude, photo?.longitude);
-  const maps = mapsLink(photo?.latitude, photo?.longitude, address);
   const panelWidth = sidePanelWidth(windowWidth);
   const bottomInset = Math.max(insets.bottom, spacing.md);
   /* A long caption scrolls in its box rather than covering the photo. */
@@ -449,7 +462,7 @@ function ViewerBody({
       address={address}
       dateLabel={dateLabel}
       hasGps={gps}
-      mapsUrl={maps}
+      onOpenLocation={openLocation}
       onOpenProject={openProject}
       tab={tab}
       onTab={chooseTab}
@@ -474,20 +487,18 @@ function ViewerBody({
               id: photo.id,
               caption: photo.caption,
               tags,
-              phase: photo.phase,
               taken_at: photo.taken_at,
               created_at: photo.created_at,
               latitude: photo.latitude ?? null,
               longitude: photo.longitude ?? null,
             }}
-            projectAddress={address}
             takenBy={takenBy}
             onSaveDescription={(next) =>
               void edit(photo.id, projectId, "caption", { caption: next })
             }
             onRemoveTag={toggleTag}
             onOpenTags={() => setTagsOpen(true)}
-            onSetPhase={(phase) => void edit(photo.id, projectId, "phase", phasePatch(phase))}
+            onOpenLocation={openLocation}
             onInputFocus={expand}
             bottomInset={bottomInset}
           />

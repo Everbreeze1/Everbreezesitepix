@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { Alert, View } from "react-native";
 import { router, Stack, useLocalSearchParams } from "expo-router";
+import { goBack } from "@/lib/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { relativeTime } from "@everlumen/shared";
 import {
@@ -154,7 +155,7 @@ export default function SummaryScreen() {
     mutationFn: () => deleteSummary(String(summaryId)),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["project-summaries"] });
-      router.back();
+      goBack("/reports");
     },
     onError: (error: unknown) =>
       Alert.alert("Could not delete", error instanceof Error ? error.message : "Please try again."),

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
+import { goBack } from "@/lib/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { relativeTime } from "@everlumen/shared";
 import {
@@ -280,7 +281,7 @@ function UserDetail() {
                   setMessage(
                     orphaned ? `Deleted. ${orphaned} project(s) are now unattributed.` : "Deleted.",
                   );
-                  router.back();
+                  goBack("/admin/users");
                 },
               })
             }

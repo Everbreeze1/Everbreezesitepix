@@ -3,6 +3,7 @@ import {
   Bell,
   BellRing,
   Building2,
+  ChevronLeft,
   CircleQuestionMark,
   CreditCard,
   ExternalLink,
@@ -35,12 +36,14 @@ import { api, webAppLink } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useAccountOwner, usePlatformAdmin } from "@/lib/use-access";
 import { useQueue } from "@/offline/use-queue";
+import { useTabBack } from "@/lib/navigation";
 import { spacing } from "@/theme";
 import {
   Avatar,
   Badge,
   Button,
   CountBadge,
+  IconButton,
   ListGroup,
   ListRow,
   RowDivider,
@@ -67,6 +70,7 @@ import {
  * taps one expecting to stay inside the app.
  */
 export default function AccountScreen() {
+  const tabBack = useTabBack();
   const { user, signOut } = useAuth();
   const queue = useQueue();
   /*
@@ -180,6 +184,15 @@ export default function AccountScreen() {
           paddingTop: spacing.xxl,
         }}
       >
+        {/* Only when reached from another tab or the menu; see `useTabBack`. */}
+        {tabBack ? (
+          <IconButton
+            icon={ChevronLeft}
+            accessibilityLabel="Back"
+            surface={false}
+            onPress={tabBack}
+          />
+        ) : null}
         <Avatar
           name={profileName ?? user?.email ?? null}
           uri={profileQuery.data?.avatar_url}

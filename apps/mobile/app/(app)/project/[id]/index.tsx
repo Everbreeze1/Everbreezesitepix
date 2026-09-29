@@ -41,6 +41,7 @@ import {
   X,
 } from "@/ui/icons";
 import { router, Stack, useLocalSearchParams } from "expo-router";
+import { goBack } from "@/lib/navigation";
 import { useInfiniteQuery, useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { displayCaption, formatPhotoDateGroup, projectDisplayName } from "@everlumen/shared";
 import {
@@ -816,7 +817,10 @@ export default function ProjectDetailScreen() {
                         <Icon icon={X} size="md" color="#ffffff" />
                       </ProjectHeroButton>
                     ) : (
-                      <ProjectHeroButton accessibilityLabel="Back" onPress={() => router.back()}>
+                      <ProjectHeroButton
+                        accessibilityLabel="Back"
+                        onPress={() => goBack("/projects")}
+                      >
                         <Icon icon={ChevronLeft} size="md" color="#ffffff" />
                       </ProjectHeroButton>
                     )
@@ -1462,7 +1466,7 @@ export default function ProjectDetailScreen() {
                     style: "destructive" as const,
                     onPress: () => {
                       void patchProject("deleted", trashProjectPatch());
-                      router.back();
+                      goBack("/projects");
                     },
                   },
                 ],

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router, Stack, useLocalSearchParams } from "expo-router";
+import { goBack } from "@/lib/navigation";
 import {
   CameraView,
   useCameraPermissions,
@@ -233,7 +234,7 @@ export default function WalkthroughRecordScreen() {
         await enqueue({ id, kind: "video_upload", projectId, localUri, payload });
         requestSync();
         leaveCaptureNotice("Video saved. Uploading in the background.");
-        router.back();
+        goBack(`/project/${projectId}`);
       } catch (e) {
         setStage("idle");
         setStatus(null);
@@ -381,7 +382,7 @@ export default function WalkthroughRecordScreen() {
           accessibilityRole="button"
           accessibilityLabel="Close"
           style={styles.roundButton}
-          onPress={() => router.back()}
+          onPress={() => goBack(`/project/${projectId}`)}
           hitSlop={8}
         >
           <Icon icon={X} size="md" color="#fff" />

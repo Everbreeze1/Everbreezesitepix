@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Search, X } from "@/ui/icons";
+import { ChevronLeft, Search, X } from "@/ui/icons";
 import { TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
@@ -23,11 +23,18 @@ import { Text } from "./Text";
 export function PageHeader({
   title,
   subtitle,
+  onBack,
   actions,
   children,
 }: {
   title: string;
   subtitle?: string;
+  /**
+   * Draws a back arrow before the title. A tab passes it only when it was
+   * reached from somewhere (`useTabBack`); with nothing to go back to there is
+   * no arrow, just the tab bar.
+   */
+  onBack?: () => void;
   /** Icon buttons, right-aligned against the title. */
   actions?: ReactNode;
   /** A search field, a chip row, or anything else pinned under the title. */
@@ -56,6 +63,14 @@ export function PageHeader({
           paddingHorizontal: spacing.lg,
         }}
       >
+        {onBack ? (
+          <IconButton
+            icon={ChevronLeft}
+            accessibilityLabel="Back"
+            surface={false}
+            onPress={onBack}
+          />
+        ) : null}
         <View style={{ flex: 1, gap: 2 }}>
           <Text variant="display" numberOfLines={1}>
             {title}

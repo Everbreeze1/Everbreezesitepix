@@ -1,6 +1,7 @@
 import { Pressable, View } from "react-native";
 import { Image } from "expo-image";
 import { router, Stack, useLocalSearchParams } from "expo-router";
+import { goBack } from "@/lib/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { relativeTime } from "@everlumen/shared";
 import { getProjectGroupDetail, type GroupProject } from "@/api/project-groups";
@@ -90,7 +91,7 @@ export default function GroupScreen() {
                 icon={FolderKanban}
                 title="No projects in this group"
                 body="Add projects to it from the Groups list, with the Projects button on its card."
-                action={{ label: "Back to groups", onPress: () => router.back() }}
+                action={{ label: "Back to groups", onPress: () => goBack("/groups") }}
               />
             ) : (
               detail.projects.map((project) => (

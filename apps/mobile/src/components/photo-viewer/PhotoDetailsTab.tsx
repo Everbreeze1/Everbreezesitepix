@@ -1,15 +1,11 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Linking, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { cleanCaption } from "@everlumen/shared";
-import { formatCoords, hasCoords, mapsLink } from "@/api/photo-viewer-view";
-import { HIT_TARGET, radius, spacing, typography } from "@/theme";
+import { formatCoords, hasCoords } from "@/api/photo-viewer-view";
+import { radius, spacing, typography } from "@/theme";
 import {
   Calendar,
   Check,
-  CircleCheck,
-  CircleDashed,
-  History,
-  Images,
   MapPin,
   Navigation,
   PenLine,
@@ -27,7 +23,6 @@ export type DetailsPhoto = {
   id: string;
   caption: string | null;
   tags: string[];
-  phase: string | null;
   taken_at: string | null;
   created_at: string;
   latitude: number | null;
@@ -143,16 +138,11 @@ export function SmallButton({
   );
 }
 
-const PHASES: { value: "before" | "after" | "untagged"; label: string; icon: LucideIcon }[] = [
-  { value: "before", label: "Before", icon: History },
-  { value: "after", label: "After", icon: CircleCheck },
-  { value: "untagged", label: "None", icon: CircleDashed },
-];
-
 /**
- * The Details tab: web's tags and description sections, plus the two things
- * the phone already had that belong with them, before/after and where and when
- * the photo was taken.
+ * The Details tab: web's tags and description sections, plus where and when
+ * the photo was taken. The Before / After / None chooser that sat between them
+ * is gone (Jon, 2026-09-29: "we dont need that"); a phase set by the camera
+ * still shows on the photo itself.
  *
  * Voice input: web's panel has a mic that uses the browser's speech API. The
  * app has no speech package and none can be added, so there is no mic button;
@@ -160,22 +150,21 @@ const PHASES: { value: "before" | "after" | "untagged"; label: string; icon: Luc
  */
 export function PhotoDetailsTab({
   photo,
-  projectAddress,
   takenBy,
   onSaveDescription,
   onRemoveTag,
   onOpenTags,
-  onSetPhase,
+  onOpenLocation,
   onInputFocus,
   bottomInset,
 }: {
   photo: DetailsPhoto;
-  projectAddress: string | null;
   takenBy: string | null;
   onSaveDescription: (next: string | null) => void;
   onRemoveTag: (name: string) => void;
   onOpenTags: () => void;
-  onSetPhase: (phase: "before" | "after" | "untagged") => void;
+  /** The in-app map, pushed over the viewer; absent when there is nothing to show. */
+  onOpenLocation?: () => void;
   onInputFocus?: () => void;
   bottomInset: number;
 }) {
@@ -196,8 +185,6 @@ export function PhotoDetailsTab({
       ? formatWhen(photo.created_at)
       : null;
   const gps = hasCoords(photo.latitude, photo.longitude);
-  const maps = mapsLink(photo.latitude, photo.longitude, projectAddress);
-  const phase = photo.phase === "before" || photo.phase === "after" ? photo.phase : "untagged";
   const changed = draft.trim() !== (description ?? "").trim();
 
   return (
@@ -309,57 +296,6 @@ export function PhotoDetailsTab({
       </Section>
 
       <Section>
-        <SectionHeader icon={Images} label="Before / after" />
-        <View
-          accessibilityRole="radiogroup"
-          style={{
-            flexDirection: "row",
-            borderRadius: radius.md,
-            borderWidth: 1,
-            borderColor: c.border,
-            overflow: "hidden",
-          }}
-        >
-          {PHASES.map((option, index) => {
-            const on = phase === option.value;
-            const Glyph = option.icon;
-            return (
-              <Pressable
-                key={option.value}
-                accessibilityRole="radio"
-                accessibilityState={{ selected: on }}
-                accessibilityLabel={`Mark as ${option.label}`}
-                onPress={() => {
-                  if (!on) onSetPhase(option.value);
-                }}
-                style={({ pressed }) => ({
-                  flex: 1,
-                  minHeight: HIT_TARGET,
-                  flexDirection: "row",
-                  gap: 6,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  borderLeftWidth: index === 0 ? 0 : 1,
-                  borderLeftColor: c.border,
-                  backgroundColor: on ? c.primary : pressed ? c.raised : "transparent",
-                })}
-              >
-                <Glyph size={16} color={on ? c.primaryForeground : c.muted} />
-                <Text
-                  style={[
-                    typography.bodyStrong,
-                    { color: on ? c.primaryForeground : c.foreground },
-                  ]}
-                >
-                  {option.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </Section>
-
-      <Section>
         <SectionHeader icon={Calendar} label="Capture" />
         <View style={{ gap: spacing.sm }}>
           <InfoRow icon={User} label="Taken by" value={takenBy ?? "Unknown"} />
@@ -375,14 +311,14 @@ export function PhotoDetailsTab({
             }
             tint={gps ? c.success : undefined}
           />
-          {maps ? (
+          {onOpenLocation ? (
             <SmallButton
-              label="Open in Maps"
+              label="Show on map"
               icon={Navigation}
               accessibilityLabel={
-                gps ? "Open photo location in Maps" : "Open project address in Maps"
+                gps ? "Show photo location on the map" : "Show project location on the map"
               }
-              onPress={() => void Linking.openURL(maps)}
+              onPress={onOpenLocation}
             />
           ) : null}
         </View>

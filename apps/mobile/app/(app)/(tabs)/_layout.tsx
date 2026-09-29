@@ -36,6 +36,12 @@ export default function TabsLayout() {
   const rail = useRightRail();
   return (
     <Tabs
+      /*
+       * The tabs remember the order they were opened in, so Back (the key on
+       * Android, and the arrow `useTabBack` puts in a tab's header) returns
+       * to the tab someone came from, not always to Home.
+       */
+      backBehavior="history"
       screenOptions={{ headerShown: false, tabBarPosition: rail ? "right" : "bottom" }}
       tabBar={(props) => <TabBar {...props} />}
     >

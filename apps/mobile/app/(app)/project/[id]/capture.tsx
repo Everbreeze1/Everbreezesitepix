@@ -10,6 +10,7 @@ import {
 import Svg, { Path } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router, Stack, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { goBack } from "@/lib/navigation";
 import { CameraView, useCameraPermissions, type CameraType, type FlashMode } from "expo-camera";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
@@ -1067,6 +1068,15 @@ export default function CaptureScreen() {
             Grant access
           </Text>
         </Pressable>
+        {/* Full screen with no header: without this there is no way out on iOS. */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Close camera"
+          style={styles.primaryButton}
+          onPress={() => goBack(`/project/${projectId}`)}
+        >
+          <Text style={[typography.bodyStrong, { color: theme.colors.foreground }]}>Back</Text>
+        </Pressable>
       </View>
     );
   }
@@ -1458,7 +1468,7 @@ export default function CaptureScreen() {
             accessibilityRole="button"
             accessibilityLabel="Close camera"
             style={styles.roundButton}
-            onPress={() => router.back()}
+            onPress={() => goBack(`/project/${projectId}`)}
             hitSlop={8}
           >
             <Icon icon={X} size="md" color={CHROME_FG} />
