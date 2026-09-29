@@ -238,15 +238,26 @@ export default function TimelineScreen() {
                   ) : null}
 
                   {selectedDay && selectedDay.photoCount > 0 ? (
+                    /*
+                      Opens the library filtered to this one day, not the whole
+                      library: the day was the question. The library buckets a
+                      photo by when it was taken, as this calendar does, so the
+                      photos it shows are the ones counted here.
+                    */
                     <Pressable
                       accessibilityRole="button"
-                      accessibilityLabel="Open the gallery"
-                      onPress={() => router.push("/gallery")}
+                      accessibilityLabel={`Open the photos from ${selected}`}
+                      onPress={() =>
+                        router.push({
+                          pathname: "/gallery",
+                          params: { from: selected, to: selected, nonce: String(Date.now()) },
+                        })
+                      }
                       style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}
                     >
                       <Icon icon={Images} size="md" tone="primary" />
                       <Text variant="body" tone="primary">
-                        See these in the gallery
+                        {`See ${selectedDay.photoCount === 1 ? "this photo" : `these ${selectedDay.photoCount} photos`}`}
                       </Text>
                     </Pressable>
                   ) : null}

@@ -9,10 +9,14 @@ import { Button, Chip, Field, Sheet, Text } from "@/ui";
 /**
  * Edit a project.
  *
- * Name, address, client and status: the fields the web `EditProjectDialog`
- * offers, in the same order. Anything beyond that (labels, pipeline stage,
- * crew) belongs to a screen the phone does not have yet, and adding half of it
- * here would leave two places that disagree about what a project is.
+ * Name, address, client, description and status: the fields the web
+ * `EditProjectDialog` offers. Labels and the pipeline stage are set from the
+ * project screen itself (the labels row and the status chip), as on the web
+ * project header, rather than a second copy of each living in here.
+ *
+ * Where the project stands in a pipeline stage, the stage owns the status, so
+ * the status row says so instead of offering a choice that would contradict
+ * it. The caller leaves `status` out of the patch in that case.
  *
  * Only the name is required. Someone renaming a job on site should not be made
  * to fill in a postcode first.
@@ -26,12 +30,15 @@ export function ProjectEditorSheet({
   project,
   onSave,
   saving = false,
+  stageName = null,
 }: {
   visible: boolean;
   onClose: () => void;
   project: ProjectListItem | null;
   onSave: (draft: ProjectDraft) => void;
   saving?: boolean;
+  /** The pipeline stage the project stands in, which then owns its status. */
+  stageName?: string | null;
 }) {
   const [draft, setDraft] = useState<ProjectDraft>({
     name: "",
@@ -41,6 +48,7 @@ export function ProjectEditorSheet({
     zip: null,
     client_name: null,
     status: "active",
+    description: null,
   });
   const [touched, setTouched] = useState(false);
 
@@ -60,6 +68,7 @@ export function ProjectEditorSheet({
       zip: project.zip,
       client_name: project.client_name,
       status: isStatus(project.status) ? project.status : "active",
+      description: project.description ?? null,
     });
     setTouched(false);
   }, [visible, project]);
@@ -143,20 +152,36 @@ export function ProjectEditorSheet({
         autoCapitalize="characters"
       />
 
+      <Field
+        label="Description"
+        value={draft.description ?? ""}
+        onChangeText={(v) => set("description", v)}
+        placeholder="What the job is, for anyone opening it"
+        hint="Optional. Shown under the project name."
+        multiline
+        rows={3}
+      />
+
       <View style={{ gap: spacing.sm }}>
         <Text variant="caption" tone="muted">
           Status
         </Text>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }}>
-          {STATUSES.map((option) => (
-            <Chip
-              key={option}
-              label={PROJECT_STATUS_LABELS[option]}
-              selected={draft.status === option}
-              onPress={() => set("status", option)}
-            />
-          ))}
-        </View>
+        {stageName ? (
+          <Text variant="caption">
+            {`Set by its pipeline stage, ${stageName}. Change the stage from the status chip on the project.`}
+          </Text>
+        ) : (
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }}>
+            {STATUSES.map((option) => (
+              <Chip
+                key={option}
+                label={PROJECT_STATUS_LABELS[option]}
+                selected={draft.status === option}
+                onPress={() => set("status", option)}
+              />
+            ))}
+          </View>
+        )}
       </View>
     </Sheet>
   );

@@ -43,6 +43,11 @@ export type StagedProject = {
   client_name?: string | null;
   city?: string | null;
   pipeline_stage_id?: string | null;
+  /* The rest is what a board card draws. Optional, so older callers still type. */
+  street?: string | null;
+  state?: string | null;
+  location?: string | null;
+  updated_at?: string | null;
 };
 
 /** Stages left to right, as the board would draw them. */
@@ -178,4 +183,54 @@ export function readableOn(hex: string): "#ffffff" | "#111827" {
  */
 export function stageCountLabel(stageName: string, count: number): string {
   return `${stageName}, ${count} ${count === 1 ? "job" : "jobs"}`;
+}
+
+/**
+ * The address line on a board card, as the web board writes it: the full
+ * location when the job has one, else street, city and state.
+ */
+export function cardAddress(project: StagedProject): string | null {
+  if (project.location?.trim()) return project.location.trim();
+  const parts = [project.street, project.city, project.state]
+    .map((part) => part?.trim())
+    .filter((part): part is string => Boolean(part));
+  return parts.length ? parts.join(", ") : null;
+}
+
+/**
+ * The stage after this one, for the card's advance arrow. Null at the last
+ * stage, and for a job not on this board at all.
+ */
+export function nextStage(stages: PipelineStage[], stageId: string | null | undefined) {
+  const index = stages.findIndex((stage) => stage.id === stageId);
+  return index >= 0 && index < stages.length - 1 ? stages[index + 1] : null;
+}
+
+/**
+ * How wide a board column is.
+ *
+ * A phone shows one column and the edge of the next, which is what tells
+ * somebody the board scrolls sideways; a tablet shows as many as fit at the
+ * web's width. Never wider than a card reads well at.
+ */
+export function boardColumnWidth(screenWidth: number): number {
+  if (screenWidth < 600) return Math.round(Math.min(320, screenWidth * 0.82));
+  return 280;
+}
+
+/**
+ * The list with one job moved, for the instant a card is dropped.
+ *
+ * Only the stage id changes. The job's status also moves with its stage, but
+ * that rule lives on the server and the list is refetched straight after, so
+ * guessing it here would put a second copy of it on the phone.
+ */
+export function withStage<T extends StagedProject>(
+  projects: T[],
+  projectId: string,
+  stageId: string | null,
+): T[] {
+  return projects.map((project) =>
+    project.id === projectId ? { ...project, pipeline_stage_id: stageId } : project,
+  );
 }

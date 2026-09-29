@@ -225,7 +225,19 @@ export default function SignUpScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: { flexGrow: 1, justifyContent: "center", padding: spacing.xl },
+  /*
+   * A form, so it keeps a form's width on a tablet and on a phone held on its
+   * side rather than running its fields a metre across. Scrolls, so a short
+   * landscape screen with the keyboard up still reaches the button.
+   */
+  content: {
+    flexGrow: 1,
+    justifyContent: "center",
+    padding: spacing.xl,
+    width: "100%",
+    maxWidth: 560,
+    alignSelf: "center",
+  },
   done: { flex: 1, alignItems: "center", justifyContent: "center", padding: spacing.xl },
   input: {
     borderWidth: 1,

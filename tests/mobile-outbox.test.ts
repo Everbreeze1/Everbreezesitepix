@@ -409,3 +409,147 @@ describe("a full offline session", () => {
     expect((await outbox.counts()).outstanding).toBe(0);
   });
 });
+
+describe("rows held for their before/after pill", () => {
+  /*
+   * Save queues a Before/After photo held, returns at once, and burns the
+   * pill in afterwards. The hold is what stops the drain sending the file
+   * while it is being swapped, and its expiry is what makes the pill fail
+   * open: the photo always goes.
+   */
+  it("is not claimed while held, and is once released", async () => {
+    await outbox.enqueue({
+      kind: "photo_upload",
+      projectId: "project-a",
+      localUri: "file:///outbox/held.jpg",
+      payload: {},
+      id: "held",
+      holdUntil: Date.now() + 120_000,
+    });
+    expect(await outbox.claimNext()).toBeNull();
+    // Still counted, so the queue banner shows it.
+    expect((await outbox.counts()).pending).toBe(1);
+
+    const replace = vi.fn();
+    expect(await outbox.finishHeld("held", replace)).toBe(true);
+    expect(replace).toHaveBeenCalledTimes(1);
+    expect((await outbox.claimNext())?.id).toBe("held");
+  });
+
+  it("sends unstamped once the hold runs out", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-29T09:00:00Z"));
+    await outbox.enqueue({
+      kind: "photo_upload",
+      projectId: "project-a",
+      localUri: "file:///outbox/late.jpg",
+      payload: {},
+      id: "late",
+      holdUntil: Date.now() + 120_000,
+    });
+    vi.setSystemTime(new Date("2026-09-29T09:02:01Z"));
+    expect((await outbox.claimNext())?.id).toBe("late");
+  });
+
+  it("skips the swap when the row is already on its way", async () => {
+    await outbox.enqueue({
+      kind: "photo_upload",
+      projectId: "project-a",
+      localUri: "file:///outbox/gone.jpg",
+      payload: {},
+      id: "gone",
+    });
+    const row = await outbox.claimNext();
+    expect(row?.state).toBe("sending");
+
+    const replace = vi.fn();
+    expect(await outbox.finishHeld("gone", replace)).toBe(false);
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("releases the row even when the swap throws", async () => {
+    await outbox.enqueue({
+      kind: "photo_upload",
+      projectId: "project-a",
+      localUri: "file:///outbox/bad.jpg",
+      payload: {},
+      id: "bad",
+      holdUntil: Date.now() + 120_000,
+    });
+    const swapped = await outbox.finishHeld("bad", () => {
+      throw new Error("disk full");
+    });
+    expect(swapped).toBe(false);
+    expect((await outbox.claimNext())?.id).toBe("bad");
+  });
+});
+
+describe("editing a photo the camera has already queued", () => {
+  /*
+   * The camera saves every shot the moment it is taken, so a retag (Before,
+   * After, a note, tags) reaches a row that is already queued. Untried, the
+   * queued upload itself is rewritten; once it may be on the server, these
+   * refuse and the camera queues a patch instead.
+   */
+  async function queueShot(id: string) {
+    await outbox.enqueue({
+      kind: "photo_upload",
+      projectId: "project-a",
+      localUri: `file:///outbox/${id}.jpg`,
+      payload: { phase: "before", tags: [], caption: undefined, width: 10 },
+      id,
+    });
+  }
+
+  function payloadOf(id: string) {
+    const row = db.prepare("SELECT payload FROM outbox WHERE id = ?").get(id) as {
+      payload: string;
+    };
+    return JSON.parse(row.payload) as Record<string, unknown>;
+  }
+
+  it("rewrites an untried row's phase, note and tags, keeping the rest", async () => {
+    await queueShot("shot-1");
+    expect(
+      await outbox.updateQueuedPayload("shot-1", {
+        phase: "after",
+        caption: "Done",
+        tags: ["roof"],
+      }),
+    ).toBe(true);
+    expect(payloadOf("shot-1")).toEqual({
+      phase: "after",
+      caption: "Done",
+      tags: ["roof"],
+      width: 10,
+    });
+  });
+
+  it("refuses a row that is sending or has been tried", async () => {
+    await queueShot("shot-2");
+    const row = await outbox.claimNext();
+    expect(await outbox.updateQueuedPayload("shot-2", { phase: "after" })).toBe(false);
+    await outbox.markFailed(row!, "offline");
+    expect(await outbox.updateQueuedPayload("shot-2", { phase: "after" })).toBe(false);
+    expect(payloadOf("shot-2").phase).toBe("before");
+  });
+
+  it("holds an untried row out of the drain, and not one already on its way", async () => {
+    await queueShot("shot-3");
+    expect(await outbox.holdQueued("shot-3", Date.now() + 60_000)).toBe(true);
+    expect(await outbox.claimNext()).toBeNull();
+    await outbox.finishHeld("shot-3");
+    expect((await outbox.claimNext())?.id).toBe("shot-3");
+    expect(await outbox.holdQueued("shot-3", Date.now() + 60_000)).toBe(false);
+  });
+
+  it("takes back an untried shot with its file, never one in flight", async () => {
+    await queueShot("keep");
+    await queueShot("drop");
+    await outbox.claimNext();
+    expect(await outbox.discardUnsent("keep")).toBe(false);
+    expect(await outbox.discardUnsent("drop")).toBe(true);
+    expect(discardCapture).toHaveBeenCalledWith("file:///outbox/drop.jpg");
+    expect((await outbox.counts()).outstanding).toBe(1);
+  });
+});

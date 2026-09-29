@@ -220,3 +220,196 @@ export function mapUnavailable(opts: {
   if (opts.pinCount === 0) return "no_pins";
   return null;
 }
+
+/**
+ * The map's four status filters, in the web's order. Archived is the
+ * `archived` flag rather than a status, and "all" is every job not archived.
+ */
+export type MapStatus = "active" | "on_hold" | "completed" | "archived";
+export type MapFilter = MapStatus | "all";
+
+export const MAP_STATUSES: readonly MapStatus[] = ["active", "on_hold", "completed", "archived"];
+
+export const MAP_STATUS_LABELS: Record<MapStatus, string> = {
+  active: "Active",
+  on_hold: "On hold",
+  completed: "Completed",
+  archived: "Archived",
+};
+
+/**
+ * Pin colours, the web map's own four (`statusColor` in `MapPage.tsx`): active
+ * green, on-hold warm amber, completed blue, archived warm grey. The same hexes
+ * so a job is the same colour on the phone as on the office screen.
+ */
+export const MAP_STATUS_COLORS: Record<MapStatus, string> = {
+  active: "#348f4f",
+  on_hold: "#c56c21",
+  completed: "#3c7ebe",
+  archived: "#77746f",
+};
+
+/** An unknown status borrows a slate rather than inventing a fifth colour. */
+const FALLBACK_PIN_COLOR = "#94a3b8";
+
+type Statused = { status?: string | null; archived?: boolean | null };
+
+/** Which of the four buckets a job is drawn in. Archived wins over its status. */
+export function mapStatusOf(project: Statused): MapStatus | null {
+  if (project.archived) return "archived";
+  const status = project.status ?? "";
+  return (MAP_STATUSES as readonly string[]).includes(status) ? (status as MapStatus) : null;
+}
+
+export function pinColorFor(project: Statused): string {
+  const status = mapStatusOf(project);
+  return status ? MAP_STATUS_COLORS[status] : FALLBACK_PIN_COLOR;
+}
+
+/** Whether a job shows under a filter. "all" is every job that is not archived. */
+export function matchesMapFilter(project: Statused, filter: MapFilter): boolean {
+  if (filter === "archived") return Boolean(project.archived);
+  if (project.archived) return false;
+  return filter === "all" || project.status === filter;
+}
+
+/**
+ * How far out from the busiest pin a job still counts as "here", in metres.
+ *
+ * A service area rather than a continent: every job a crew drives to from one
+ * yard fits comfortably inside it, and a job in another country does not.
+ */
+const CLUSTER_METRES = 250_000;
+
+/**
+ * The pins the map should open on.
+ *
+ * Fitting the frame to every pin is what made the map open on the whole
+ * world: one test job in Quezon City and fifty in Sacramento have a bounding
+ * box that spans the Pacific. So the frame is fitted to where the work is: the
+ * pins around the phone when it is near any, otherwise the pins around the
+ * busiest one. The outliers are still on the map, one pinch away; they just do
+ * not get to choose the zoom.
+ */
+export function mainCluster<T extends Coord>(coords: T[], here: Coord | null = null): T[] {
+  if (coords.length <= 1) return coords;
+
+  const near = (a: Coord, b: Coord) => distanceMetres(a, b) <= CLUSTER_METRES;
+  if (here) {
+    const local = coords.filter((c) => near(here, c));
+    if (local.length > 0) return local;
+  }
+
+  // Quadratic, so the anchor is chosen from a sample on a very large board.
+  const candidates = coords.length > 400 ? coords.slice(0, 400) : coords;
+  let anchor = candidates[0];
+  let best = -1;
+  for (const candidate of candidates) {
+    let count = 0;
+    for (const other of coords) if (near(candidate, other)) count += 1;
+    if (count > best) {
+      best = count;
+      anchor = candidate;
+    }
+  }
+  return coords.filter((c) => near(anchor, c));
+}
+
+/**
+ * Where the map opens when nothing is pinned and the phone has no fix: the
+ * continental United States, where most of this app's crews work. A country,
+ * which is a sensible thing to be looking at, rather than the planet.
+ */
+export const DEFAULT_REGION: Region = {
+  latitude: 39.5,
+  longitude: -98.35,
+  latitudeDelta: 28,
+  longitudeDelta: 34,
+};
+
+/** Around the phone, when there is nothing else to frame: a city, not a street. */
+const AROUND_ME_DELTA = 0.25;
+
+/**
+ * The region the map opens on: the team's pins (the main cluster of them),
+ * else the phone's own location, else `DEFAULT_REGION`. Never null, so the map
+ * never falls back to its own whole-world default.
+ */
+export function initialMapRegion(coords: Coord[], here: Coord | null): Region {
+  const fitted = regionFor(mainCluster(coords, here));
+  if (fitted) return fitted;
+  if (here) {
+    return { ...here, latitudeDelta: AROUND_ME_DELTA, longitudeDelta: AROUND_ME_DELTA };
+  }
+  return DEFAULT_REGION;
+}
+
+/** The second line of a Nearby row: town and state, else whatever address there is. */
+export function nearbyLine(project: {
+  city?: string | null;
+  state?: string | null;
+  location?: string | null;
+  street?: string | null;
+}): string {
+  const town = [project.city, project.state]
+    .map((part) => part?.trim())
+    .filter(Boolean)
+    .join(", ");
+  if (town) return town;
+  return project.location?.trim() || project.street?.trim() || "No address on file";
+}
+
+type MapStyleRule = {
+  featureType?: string;
+  elementType?: string;
+  stylers: Record<string, string | number>[];
+};
+
+/**
+ * The Google map's style, in the app's warm palette.
+ *
+ * The web map mutes the base map to a pale wash so the coloured pins carry the
+ * page; this does the same in the app's cream and umber rather than the web's
+ * blue-grey, with points of interest and transit switched off for the same
+ * reason. Android only: Apple Maps takes no style, just light or dark.
+ */
+export function mapStyleFor(scheme: "light" | "dark"): MapStyleRule[] {
+  const c =
+    scheme === "dark"
+      ? {
+          land: "#211c15",
+          label: "#a69d91",
+          halo: "#18130d",
+          border: "#3a3127",
+          road: "#2f281e",
+          highway: "#3d3428",
+          water: "#141a1f",
+        }
+      : {
+          land: "#f6f0e8",
+          label: "#8a7f72",
+          halo: "#f9f4ee",
+          border: "#e0d6c9",
+          road: "#ffffff",
+          highway: "#f1e2cf",
+          water: "#dfe9ee",
+        };
+  return [
+    { elementType: "geometry", stylers: [{ color: c.land }] },
+    { elementType: "labels.text.fill", stylers: [{ color: c.label }] },
+    { elementType: "labels.text.stroke", stylers: [{ color: c.halo }] },
+    {
+      featureType: "administrative",
+      elementType: "geometry.stroke",
+      stylers: [{ color: c.border }],
+    },
+    { featureType: "administrative.land_parcel", stylers: [{ visibility: "off" }] },
+    { featureType: "poi", stylers: [{ visibility: "off" }] },
+    { featureType: "road", elementType: "geometry", stylers: [{ color: c.road }] },
+    { featureType: "road", elementType: "labels.icon", stylers: [{ visibility: "off" }] },
+    { featureType: "road.highway", elementType: "geometry", stylers: [{ color: c.highway }] },
+    { featureType: "transit", stylers: [{ visibility: "off" }] },
+    { featureType: "water", elementType: "geometry", stylers: [{ color: c.water }] },
+    { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: c.label }] },
+  ];
+}

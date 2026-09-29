@@ -167,7 +167,8 @@ describe("the screen", () => {
 
   it("is reachable from the documents header", () => {
     const docs = read("apps/mobile/app/(app)/project/[id]/documents.tsx").replace(/\s+/g, " ");
-    expect(docs).toContain('accessibilityLabel="Start from a template"');
+    // In the page's kebab sheet, and offered by the empty state beside New page.
+    expect(docs).toContain('label: "Start from a template"');
     expect(docs).toContain("<TemplatePickerSheet");
   });
 

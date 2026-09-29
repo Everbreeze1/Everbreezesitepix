@@ -41,6 +41,61 @@ export function persistCapture(sourceUri: string, outboxId: string): string {
 }
 
 /**
+ * Move a finished recording into app storage, named after its outbox row.
+ *
+ * Moved, not copied. A recording is the camera's own scratch file, never the
+ * user's library, so nothing is lost by taking it; and a move within the app's
+ * sandbox is a rename, done at once whatever the length of the clip. Copying a
+ * few hundred megabytes on the JS thread is exactly the wait this replaced.
+ *
+ * Safe to call twice for the same row, like `persistCapture`.
+ */
+export function persistRecording(sourceUri: string, outboxId: string, extension = "mp4"): string {
+  const target = new File(outboxDirectory(), `${outboxId}.${extension}`);
+  if (target.exists) return target.uri;
+
+  const source = new File(sourceUri);
+  if (!source.exists) throw new Error("Recording is no longer on the device");
+
+  try {
+    source.moveSync(target);
+  } catch {
+    // A move across volumes can refuse; a copy still keeps the clip safe.
+    source.copySync(target);
+  }
+  return target.uri;
+}
+
+/**
+ * Overwrite a queued capture with a finished version of it (the same photo
+ * with its before/after pill burnt in), then drop the scratch file.
+ *
+ * Scoped to the outbox directory like `discardCapture`: this writes over the
+ * target, and a `local_uri` outside it could be the user's own original.
+ * Throws when the copy fails, so the caller can leave the row as it was.
+ */
+export function replaceCapture(
+  sourceUri: string,
+  targetUri: string,
+  options: { keepSource?: boolean } = {},
+): void {
+  if (!targetUri.includes(`/${OUTBOX_DIRNAME}/`)) {
+    throw new Error("Only a queued copy can be replaced");
+  }
+  const source = new File(sourceUri);
+  if (!source.exists) throw new Error("Replacement is no longer on the device");
+  source.copySync(new File(targetUri), { overwrite: true });
+  // The camera keeps a shot's own picture to redo its pill from if it is
+  // retagged; only a one-off render is scratch to be cleared.
+  if (options.keepSource) return;
+  try {
+    source.delete();
+  } catch {
+    // Cache scratch; the OS reclaims it if this does not.
+  }
+}
+
+/**
  * Delete a queued file once its row is done or discarded.
  *
  * Scoped to the outbox directory on purpose. `local_uri` for a row that was

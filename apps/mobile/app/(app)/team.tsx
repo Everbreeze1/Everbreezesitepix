@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   assignableRoles,
   can,
+  canManageMember,
   normaliseRole,
   roleDescriptionForTier,
   roleLabelForTier,
@@ -46,7 +47,7 @@ import {
   toggledProject,
 } from "@/api/member-projects-view";
 import { listProjects } from "@/api/projects";
-import { radius, spacing, useTheme } from "@/theme";
+import { radius, spacing, useLayout, useTheme } from "@/theme";
 import {
   Check,
   FolderKanban,
@@ -103,10 +104,12 @@ export default function TeamScreen() {
 
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<"admin" | "member">("member");
+  const [inviteRole, setInviteRole] = useState<AssignableRole>("standard");
   const [inviteError, setInviteError] = useState<string | null>(null);
 
   const theme = useTheme();
+  // Inner lists shrink on a phone held on its side, so they fit in the sheet.
+  const layout = useLayout();
   const [actionsFor, setActionsFor] = useState<TeamMember | null>(null);
   const [roleFor, setRoleFor] = useState<TeamMember | null>(null);
   /** The Restricted member whose jobs are being chosen, and the picked set. */
@@ -126,6 +129,13 @@ export default function TeamScreen() {
 
   const blocked = inviteBlockedReason(myRole, used, limit);
   const canManageUsers = can(myRole, "manage_users") || can(myRole, "manage_own_crew");
+  const inviteRoles = useMemo(
+    () =>
+      assignableRoles(plan, { assignmentsEnforced: true }).filter((role) =>
+        myRole ? canManageMember(myRole, role) : false,
+      ),
+    [plan, myRole],
+  );
 
   /**
    * Every write refetches the roster rather than patching it optimistically.
@@ -278,8 +288,10 @@ export default function TeamScreen() {
   // Named because the header calls it; the roster no longer has its own copy.
   const openInvite = useCallback(() => {
     setInviteError(null);
+    // Standard when the plan offers it, else the first role it does.
+    setInviteRole(inviteRoles.includes("standard") ? "standard" : (inviteRoles[0] ?? "standard"));
     setInviteOpen(true);
-  }, []);
+  }, [inviteRoles]);
 
   if (query.isLoading) {
     return (
@@ -505,7 +517,7 @@ export default function TeamScreen() {
             Could not load the jobs list. Close this and try again.
           </Text>
         ) : (
-          <ScrollView style={{ maxHeight: 380 }}>
+          <ScrollView style={{ maxHeight: layout.listMaxHeight(380) }}>
             <View style={{ gap: spacing.xs }}>
               {sortedProjects(projectsQuery.data ?? [], scopePicked).map((project) => {
                 const on = scopePicked.includes(project.id);
@@ -585,27 +597,25 @@ export default function TeamScreen() {
               Role
             </Text>
             {/*
-              Two roles here and not the full matrix, because `inviteMember`
-              only accepts admin or member. Anything narrower is set from the
-              roster after they join, which is also when a manager or restricted
-              role can be scoped to the right jobs.
+              Every role the plan holds and the inviter may hand out, as the
+              web's invite dialog offers: `assignableRoles` for the plan and
+              `canManageMember` for the inviter, the two rules the server
+              applies to the same request.
             */}
             <ListGroup>
-              <ListRow
-                title={roleLabelForTier("member", plan)}
-                subtitle={roleDescriptionForTier("member", plan)}
-                right={
-                  inviteRole === "member" ? <Badge label="Chosen" tone="primary" /> : undefined
-                }
-                onPress={() => setInviteRole("member")}
-              />
-              <RowDivider />
-              <ListRow
-                title={roleLabelForTier("admin", plan)}
-                subtitle={roleDescriptionForTier("admin", plan)}
-                right={inviteRole === "admin" ? <Badge label="Chosen" tone="primary" /> : undefined}
-                onPress={() => setInviteRole("admin")}
-              />
+              {inviteRoles.map((role, index) => (
+                <View key={role}>
+                  {index > 0 ? <RowDivider /> : null}
+                  <ListRow
+                    title={roleLabelForTier(role, plan)}
+                    subtitle={roleDescriptionForTier(role, plan)}
+                    right={
+                      inviteRole === role ? <Badge label="Chosen" tone="primary" /> : undefined
+                    }
+                    onPress={() => setInviteRole(role)}
+                  />
+                </View>
+              ))}
             </ListGroup>
           </View>
 

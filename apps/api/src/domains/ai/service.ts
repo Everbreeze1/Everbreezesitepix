@@ -660,6 +660,105 @@ export async function transcribeAudio(base64: string, format: string): Promise<s
   return normalizeDashes(json.choices?.[0]?.message?.content ?? "").trim();
 }
 
+/** One timed line of a transcript. Seconds are relative to the audio sent. */
+export interface TranscriptLine {
+  start: number;
+  text: string;
+}
+
+const TIMESTAMP_LINE =
+  /^\s*[[(]?\s*(?:(\d{1,2}):)?(\d{1,3}):(\d{2})(?:[.,]\d+)?\s*[\])]?\s*(?:[-:|]\s*)?(.*)$/;
+
+/**
+ * Turn "[m:ss] words" lines into timed lines.
+ *
+ * Tolerant, because the model's formatting drifts: "[0:05]", "00:05 -",
+ * "(0:00:05)" and "[0:05.2]" all appear. A line with no timestamp continues the
+ * one before it; text before any timestamp starts at zero. Timestamps are
+ * forced to be non-decreasing, and clamped to `maxSeconds` when given, so one
+ * hallucinated "[9:59]" cannot throw every later caption off.
+ */
+export function parseTimestampedTranscript(raw: string, maxSeconds?: number): TranscriptLine[] {
+  const lines: TranscriptLine[] = [];
+  let floor = 0;
+  for (const line of raw.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const m = TIMESTAMP_LINE.exec(trimmed);
+    if (m) {
+      const seconds = Number(m[1] ?? 0) * 3600 + Number(m[2]) * 60 + Number(m[3]);
+      let start = Math.max(floor, seconds);
+      if (maxSeconds !== undefined && Number.isFinite(maxSeconds)) {
+        start = Math.min(start, Math.max(floor, maxSeconds));
+      }
+      floor = start;
+      const text = m[4].trim();
+      if (text) lines.push({ start, text });
+      else lines.push({ start, text: "" });
+    } else if (lines.length) {
+      const last = lines[lines.length - 1];
+      last.text = last.text ? `${last.text} ${trimmed}` : trimmed;
+    } else {
+      lines.push({ start: 0, text: trimmed });
+    }
+  }
+  return lines
+    .map((l) => ({ start: l.start, text: normalizeDashes(l.text.replace(/\s+/g, " ")).trim() }))
+    .filter((l) => l.text.length > 0);
+}
+
+/**
+ * Transcribe audio with a start time on each sentence.
+ *
+ * The same call as `transcribeAudio`, asking for one sentence per line with
+ * its start time, so a walkthrough can caption each photo with what was said
+ * around the moment it was taken instead of guessing by proportion.
+ * `durationSeconds` bounds the timestamps the model may claim.
+ */
+export async function transcribeAudioTimed(
+  base64: string,
+  format: string,
+  durationSeconds?: number,
+): Promise<TranscriptLine[]> {
+  const ep = chatEndpoint(CHAT_MODEL);
+  const res = await aiFetch(
+    ep.url,
+    {
+      method: "POST",
+      headers: ep.headers,
+      body: JSON.stringify({
+        model: ep.model,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text:
+                  "Transcribe the spoken words in this audio verbatim. Put each sentence on its " +
+                  "own line, starting with the time it begins in this audio as [m:ss], for " +
+                  "example: [0:07] The flashing on the north side is loose. Output only those " +
+                  "lines - no preamble, no speaker labels, no commentary, no quotation marks. " +
+                  "Transcribe quiet or distant speech too. If nobody speaks at all, output nothing.",
+              },
+              { type: "input_audio", input_audio: { data: base64, format } },
+            ],
+          },
+        ],
+      }),
+    },
+    "transcribeAudio",
+  );
+  if (!res.ok) {
+    throw await aiProviderError(res, "transcribeAudio");
+  }
+  const json = await res.json();
+  return parseTimestampedTranscript(
+    normalizeDashes(json.choices?.[0]?.message?.content ?? ""),
+    durationSeconds,
+  );
+}
+
 export async function chatComplete(system: string, user: string): Promise<string> {
   const ep = chatEndpoint(CHAT_MODEL);
   const res = await aiFetch(

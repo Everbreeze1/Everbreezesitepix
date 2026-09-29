@@ -972,6 +972,12 @@ export const rpcRegistry: Record<string, RpcEntry> = {
           projectId: z.string().uuid(),
           walkthroughId: z.string().uuid(),
           storagePath: z.string().min(1).max(500),
+          /*
+           * Declared here or zod strips it: the service writes `thumb_path`
+           * from it, and without this every walkthrough snap from the phone
+           * lost the thumbnail it had already uploaded.
+           */
+          thumbPath: z.string().min(1).max(600).nullable().optional(),
           sizeBytes: z.number().int().nonnegative(),
           caption: z.string().min(1).max(255),
           offsetSeconds: z.number().int().nonnegative().default(0),
@@ -982,6 +988,12 @@ export const rpcRegistry: Record<string, RpcEntry> = {
         })
         .parse(d),
     saveWalkthroughPhotoService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+    /*
+     * The phone now sends each snap from its offline outbox, which retries a
+     * send whose response was lost. Keyed on the outbox row, a retry returns
+     * the first result instead of writing a second photo.
+     */
+    { idempotent: true },
   ),
   finishWalkthroughSession: authed(
     (d) =>

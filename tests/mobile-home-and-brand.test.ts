@@ -62,21 +62,33 @@ describe("home shows photographs", () => {
      * The decision this file argues for, so it is worth pinning. The queue is
      * the only thing on the screen that can be LOST, and an overdue task can
      * lose a day; a photograph taken yesterday is not going anywhere. The strip
-     * therefore sits below both and above the menu, because between "here is
-     * the work" and "here is a list of screens", the work wins.
+     * therefore sits below both.
      */
     const s = home();
     const queue = s.indexOf("<QueueBanner />");
-    const needsYou = s.indexOf("title={`Needs you (${urgent.length})`}");
+    // Headings renamed and restyled to the warm redesign: "Needs you (n)" is
+    // now "Needs attention", drawn with the screen's own sentence-case title.
+    const needsYou = s.indexOf('<SectionTitle title="Needs attention" />');
     const strip = s.indexOf('title="Latest photos"');
-    const browse = s.indexOf('<SectionHeader title="Browse" />');
 
-    for (const [name, i] of Object.entries({ queue, needsYou, strip, browse })) {
+    for (const [name, i] of Object.entries({ queue, needsYou, strip })) {
       expect(i, `${name} is no longer on the home screen`).toBeGreaterThan(-1);
     }
     expect(queue).toBeLessThan(needsYou);
     expect(needsYou).toBeLessThan(strip);
-    expect(strip).toBeLessThan(browse);
+  });
+
+  it("hands the list of other screens to the app menu", () => {
+    /*
+     * The Browse grid closed the page, under everything else, where the owner
+     * testing it on a tablet called it "not a good place". Its destinations
+     * are rows in the app menu now, which a floating button on the right
+     * edge opens on a phone and on a tablet.
+     */
+    const s = home();
+    expect(s).not.toContain('<SectionTitle title="Browse" />');
+    expect(s).not.toContain("QuickTile");
+    expect(s).toContain("<FloatingMenuButton />");
   });
 
   it("opens the job rather than the picture", () => {

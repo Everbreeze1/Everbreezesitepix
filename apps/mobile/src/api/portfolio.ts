@@ -1,5 +1,11 @@
 import { api } from "@/lib/api";
-import type { PortfolioProject } from "./portfolio-view";
+import type {
+  GoogleApplyField,
+  MyPortfolio,
+  PortfolioPatch,
+  PortfolioProject,
+  ReviewLink,
+} from "./portfolio-view";
 
 /**
  * The Portfolio: a shareable mini-site of the company's best work.
@@ -72,4 +78,116 @@ export async function deletePortfolioProject(id: string): Promise<void> {
  */
 export async function setPortfolioShare(id: string, enable: boolean): Promise<void> {
   await api.rpc("setShowcaseShare", { id, enable });
+}
+
+/*
+ * ---------------------------------------------------------------------------
+ * The site: the same ops the web's Portfolio page calls, nothing new.
+ * ---------------------------------------------------------------------------
+ */
+
+/**
+ * The team's portfolio, its cards and the service types in use.
+ *
+ * Creates the portfolio on first read for an owner or admin, exactly as it
+ * does for the web, so opening the screen is safe to do before anything exists.
+ */
+export async function getMyPortfolio(): Promise<MyPortfolio> {
+  const result = await api.rpc<Partial<MyPortfolio>>("getMyPortfolio");
+  return {
+    portfolio: result?.portfolio ?? null,
+    canEdit: result?.canEdit,
+    showcases: result?.showcases ?? [],
+    serviceTypes: result?.serviceTypes ?? [],
+  };
+}
+
+/** Saves site fields, or publishes and unpublishes the whole site with `{ published }`. */
+export async function updatePortfolio(patch: PortfolioPatch): Promise<{ slug: string }> {
+  // Spread, because every field is optional: the op's `optionalText` helper
+  // allows each one to be left out, and only what changed is sent.
+  const result = await api.rpc<{ slug?: string }>("updatePortfolio", { ...patch });
+  return { slug: result?.slug ?? "" };
+}
+
+export async function checkPortfolioSlug(
+  slug: string,
+): Promise<{ available: boolean; reason: string | null }> {
+  const result = await api.rpc<{ available?: boolean; reason?: string | null }>(
+    "checkPortfolioSlug",
+    { slug },
+  );
+  return { available: result?.available !== false, reason: result?.reason ?? null };
+}
+
+/** A new embed key. Every snippet already pasted on another website stops working. */
+export async function rotatePortfolioEmbedKey(): Promise<string> {
+  const result = await api.rpc<{ embedKey?: string }>("rotatePortfolioEmbedKey");
+  if (!result?.embedKey) throw new Error("The embed key was not changed.");
+  return result.embedKey;
+}
+
+/** A page's listing on the site: shown or hidden, featured, and its facets. */
+export async function updateShowcaseSite(
+  id: string,
+  patch: {
+    onSite?: boolean;
+    featured?: boolean;
+    serviceType?: string | null;
+    summary?: string | null;
+    city?: string | null;
+    state?: string | null;
+    completedOn?: string | null;
+  },
+): Promise<void> {
+  await api.rpc("updateShowcaseSite", { id, ...patch });
+}
+
+/** The site's running order, as the full list of page ids. */
+export async function reorderPortfolioShowcases(ids: string[]): Promise<void> {
+  await api.rpc("reorderPortfolioShowcases", { ids });
+}
+
+export async function listReviewLinks(): Promise<ReviewLink[]> {
+  const result = await api.rpc<{ links?: ReviewLink[] }>("listReviewLinks");
+  return result?.links ?? [];
+}
+
+export async function setReviewLinks(links: ReviewLink[]): Promise<void> {
+  await api.rpc("setReviewLinks", {
+    links: links.map((link) => ({ platform: link.platform, url: link.url, label: link.label })),
+  });
+}
+
+/** A Google Business listing, as the lookup returns it before anything is saved. */
+export type GoogleBusinessProfile = {
+  placeId: string;
+  name: string | null;
+  address: string | null;
+  rating: number | null;
+  reviewCount: number | null;
+};
+
+/** Read-only: finds the listing behind a pasted link or a name, so it can be confirmed. */
+export async function lookupGoogleBusiness(query: string): Promise<GoogleBusinessProfile | null> {
+  const result = await api.rpc<{ found?: boolean; profile?: GoogleBusinessProfile | null }>(
+    "lookupGoogleBusiness",
+    { query },
+  );
+  return result?.found ? (result.profile ?? null) : null;
+}
+
+export async function connectGoogleBusiness(
+  placeId: string,
+  apply: GoogleApplyField[],
+): Promise<void> {
+  await api.rpc("connectGoogleBusiness", { placeId, apply });
+}
+
+export async function refreshGoogleBusiness(): Promise<void> {
+  await api.rpc("refreshGoogleBusiness");
+}
+
+export async function disconnectGoogleBusiness(): Promise<void> {
+  await api.rpc("disconnectGoogleBusiness");
 }

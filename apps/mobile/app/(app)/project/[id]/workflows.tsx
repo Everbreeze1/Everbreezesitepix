@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { FlatList, RefreshControl, View } from "react-native";
-import { router, Stack, useLocalSearchParams } from "expo-router";
+import { RefreshControl, ScrollView, View } from "react-native";
+import { router, useLocalSearchParams } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listProjectWorkflows } from "@/api/workflows";
 import {
@@ -8,20 +8,23 @@ import {
   listWorkflowTemplates,
   type TemplateSummary,
 } from "@/api/templates";
+import { ActionRail } from "@/components/ActionRail";
+import { ProjectSubPageHeader } from "@/components/ProjectSubPageHeader";
 import { QueueBanner } from "@/components/QueueBanner";
 import { TemplatePickerSheet } from "@/components/TemplatePickerSheet";
 import { useAuth } from "@/lib/auth";
 import { spacing, useTheme } from "@/theme";
-import { Plus, Workflow } from "@/ui/icons";
+import { LayoutTemplate, Plus, RefreshCw, Workflow } from "@/ui/icons";
 import {
-  Badge,
-  Card,
+  ActionSheet,
+  CardGrid,
   EmptyState,
   ErrorState,
-  IconButton,
-  ProgressBar,
+  ItemCard,
+  KebabButton,
   SkeletonList,
-  Text,
+  StatusChip,
+  useCardPage,
 } from "@/ui";
 
 /**
@@ -39,7 +42,9 @@ export default function ProjectWorkflowsScreen() {
   const theme = useTheme();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { inset } = useCardPage();
   const [picking, setPicking] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [applying, setApplying] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
 
@@ -75,23 +80,34 @@ export default function ProjectWorkflowsScreen() {
 
   const workflows = data ?? [];
 
+  const complete = workflows.filter((row) => Boolean(row.completed_at)).length;
+  const steps = workflows.reduce(
+    (acc, row) => ({ done: acc.done + row.done, total: acc.total + row.total }),
+    { done: 0, total: 0 },
+  );
+  const summary =
+    workflows.length === 0
+      ? null
+      : `${workflows.length} workflow${workflows.length === 1 ? "" : "s"} · ${complete} complete · ${steps.done} of ${steps.total} steps done`;
+
   return (
     <>
-      <Stack.Screen
-        options={{
-          title: "Workflows",
-          headerRight: () => (
-            <IconButton
-              icon={Plus}
-              accessibilityLabel="Start a workflow from a template"
-              surface={false}
-              tone="primary"
-              onPress={() => setPicking(true)}
-            />
-          ),
-        }}
-      />
       <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+        <ProjectSubPageHeader
+          projectId={id}
+          title="Workflows"
+          summary={summary}
+          progress={
+            workflows.length > 0
+              ? {
+                  value: steps.done,
+                  total: steps.total,
+                  tone: complete === workflows.length ? "success" : "primary",
+                }
+              : null
+          }
+          actions={<KebabButton onPress={() => setMenuOpen(true)} />}
+        />
         <QueueBanner />
 
         {isLoading ? (
@@ -102,10 +118,14 @@ export default function ProjectWorkflowsScreen() {
             onRetry={() => void refetch()}
           />
         ) : (
-          <FlatList
-            data={workflows}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, flexGrow: 1 }}
+          <ScrollView
+            contentContainerStyle={{
+              paddingHorizontal: inset,
+              paddingTop: spacing.lg,
+              // Room for the floating New workflow button.
+              paddingBottom: 120,
+              flexGrow: 1,
+            }}
             refreshControl={
               <RefreshControl
                 refreshing={isRefetching}
@@ -114,50 +134,80 @@ export default function ProjectWorkflowsScreen() {
                 colors={[theme.colors.primary]}
               />
             }
-            ListEmptyComponent={
+          >
+            {workflows.length === 0 ? (
               <EmptyState
                 icon={Workflow}
                 title="No workflows here"
                 body="Workflows are the named phases a job moves through. Start one from a template."
                 action={{ label: "Use a template", icon: Plus, onPress: () => setPicking(true) }}
               />
-            }
-            renderItem={({ item }) => {
-              const finished = Boolean(item.completed_at);
-              return (
-                <Card
-                  onPress={() => router.push(`/workflow/${item.id}`)}
-                  accessibilityLabel={`${item.name}, ${
-                    finished ? "complete" : `${item.done} of ${item.total} steps done`
-                  }`}
-                >
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "flex-start",
-                      gap: spacing.md,
-                      marginBottom: spacing.md,
-                    }}
-                  >
-                    <Text variant="heading" style={{ flex: 1 }} numberOfLines={2}>
-                      {item.name}
-                    </Text>
-                    {finished ? <Badge label="Complete" tone="success" /> : null}
-                  </View>
+            ) : (
+              <CardGrid>
+                {workflows.map((item) => {
+                  const finished = Boolean(item.completed_at);
+                  return (
+                    <ItemCard
+                      key={item.id}
+                      icon={Workflow}
+                      iconTone={finished ? "success" : "primary"}
+                      title={item.name}
+                      meta={`${item.total} step${item.total === 1 ? "" : "s"}`}
+                      status={
+                        finished ? (
+                          <StatusChip label="Complete" tone="success" />
+                        ) : item.done > 0 ? (
+                          <StatusChip label="In progress" tone="primary" />
+                        ) : (
+                          <StatusChip label="Not started" />
+                        )
+                      }
+                      progress={{
+                        value: item.done,
+                        total: item.total,
+                        tone: finished ? "success" : "primary",
+                        label: finished ? "Complete" : `${item.done} of ${item.total} steps done`,
+                      }}
+                      onPress={() => router.push(`/workflow/${item.id}`)}
+                      accessibilityLabel={`${item.name}, ${
+                        finished ? "complete" : `${item.done} of ${item.total} steps done`
+                      }`}
+                    />
+                  );
+                })}
+              </CardGrid>
+            )}
+          </ScrollView>
+        )}
 
-                  <ProgressBar
-                    value={item.done}
-                    total={item.total}
-                    tone={finished ? "success" : "primary"}
-                    showLabel
-                    label={finished ? "Complete" : `${item.done} of ${item.total} steps done`}
-                  />
-                </Card>
-              );
-            }}
+        {/* Hidden while the empty state offers the same thing. */}
+        {isLoading || workflows.length === 0 ? null : (
+          <ActionRail
+            actions={[
+              {
+                key: "new-workflow",
+                icon: Plus,
+                label: "New workflow",
+                hint: "Start a workflow from a template",
+                onPress: () => setPicking(true),
+              },
+            ]}
           />
         )}
       </View>
+      <ActionSheet
+        visible={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        title="Workflows"
+        actions={[
+          {
+            label: "Manage templates",
+            icon: LayoutTemplate,
+            onPress: () => router.push("/templates"),
+          },
+          { label: "Refresh", icon: RefreshCw, onPress: () => void refetch() },
+        ]}
+      />
       <TemplatePickerSheet
         visible={picking}
         onClose={() => setPicking(false)}

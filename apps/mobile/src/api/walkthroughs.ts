@@ -23,6 +23,9 @@ export type WalkthroughSummary = {
   video_path: string | null;
   transcript: string | null;
   summary_markdown: string | null;
+  /** First photo of the walk, signed, for the card's poster frame. */
+  thumb_url?: string | null;
+  photo_count?: number;
 };
 
 /** Video bucket and path shape, matching what the web recorder writes. */
@@ -61,6 +64,27 @@ export async function listProjectWalkthroughs(projectId: string): Promise<Walkth
 }
 
 /**
+ * Who recorded each walkthrough on a job, keyed by walkthrough id.
+ *
+ * The list op does not return `created_by`, and the card needs it to say who
+ * walked the site. Read over RLS: it is two columns of rows the person can
+ * already see. A failure here costs the card its "by" line and nothing else,
+ * so it answers empty rather than throwing.
+ */
+export async function listWalkthroughAuthors(projectId: string): Promise<Map<string, string>> {
+  const { data, error } = await supabase
+    .from("walkthroughs")
+    .select("id, created_by")
+    .eq("project_id", projectId);
+  if (error) return new Map();
+  return new Map(
+    ((data as { id: string; created_by: string | null }[]) ?? [])
+      .filter((row) => row.created_by)
+      .map((row) => [row.id, row.created_by!]),
+  );
+}
+
+/**
  * Upload one photo snapped during a recording and register it against the
  * session at its offset.
  *
@@ -78,8 +102,17 @@ export async function saveWalkthroughPhoto(options: {
   position: number;
   deviceCoords?: Coords | null;
   projectCoords?: Coords | null;
+  /**
+   * Stable id for this save, from the offline outbox row. The same id gives
+   * the same storage path and the same idempotency key, so a retry after a
+   * lost response converges on one photo instead of writing two.
+   */
+  uploadId?: string;
+  /** When the snap was taken (ISO): the photo's time when it carries no EXIF. */
+  capturedAt?: string;
 }): Promise<void> {
-  const storagePath = `${options.userId}/${options.projectId}/${randomUUID()}.jpg`;
+  const uploadId = options.uploadId ?? randomUUID();
+  const storagePath = `${options.userId}/${options.projectId}/${uploadId}.jpg`;
   const { sizeBytes, thumbPath } = await uploadPhotoObject(options.asset, storagePath);
 
   const meta = resolvePhotoMeta(
@@ -87,6 +120,7 @@ export async function saveWalkthroughPhoto(options: {
     options.deviceCoords ?? null,
     options.projectCoords ?? null,
   );
+  const takenAt = readExifMeta(options.asset.exif).takenAt ?? options.capturedAt ?? meta.taken_at;
 
   await api.rpc(
     "saveWalkthroughPhoto",
@@ -99,11 +133,11 @@ export async function saveWalkthroughPhoto(options: {
       caption: `Walkthrough +${Math.round(options.offsetSeconds)}s`,
       offsetSeconds: Math.max(0, Math.round(options.offsetSeconds)),
       position: options.position,
-      takenAt: meta.taken_at,
+      takenAt,
       latitude: meta.latitude,
       longitude: meta.longitude,
     },
-    { idempotencyKey: randomUUID() },
+    { idempotencyKey: uploadId },
   );
 }
 

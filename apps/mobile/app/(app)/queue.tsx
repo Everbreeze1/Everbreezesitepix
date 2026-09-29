@@ -5,7 +5,7 @@ import { relativeTime } from "@everlumen/shared";
 import { discard, listRows, retryFailed, type OutboxRow } from "@/offline/outbox";
 import { refreshQueue, requestSync } from "@/offline/sync";
 import { useQueue } from "@/offline/use-queue";
-import { radius, spacing, useTheme } from "@/theme";
+import { radius, spacing, useLayout, useTheme } from "@/theme";
 import { CircleCheck, RefreshCw, Trash2 } from "@/ui/icons";
 import { Badge, Button, Card, EmptyState, Text, type BadgeTone } from "@/ui";
 
@@ -39,6 +39,8 @@ const STATE_TONE: Record<OutboxRow["state"], BadgeTone> = {
 
 export default function QueueScreen() {
   const theme = useTheme();
+  // The notch of a phone held on its side; zero upright.
+  const { safeSide } = useLayout();
   const counts = useQueue();
   const [rows, setRows] = useState<OutboxRow[]>([]);
 
@@ -66,7 +68,9 @@ export default function QueueScreen() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+    <View
+      style={{ flex: 1, paddingHorizontal: safeSide, backgroundColor: theme.colors.background }}
+    >
       <FlatList
         data={rows}
         keyExtractor={(row) => row.id}
@@ -103,10 +107,15 @@ export default function QueueScreen() {
                 {/*
                  * The thumbnail is the local copy, not a signed URL. This row
                  * exists precisely because the photo has not reached the server,
-                 * so there is nothing remote to point at.
+                 * so there is nothing remote to point at. A queued video has no
+                 * still to show, so its tile stays a plain block.
                  */}
                 <Image
-                  source={item.local_uri ? { uri: item.local_uri } : undefined}
+                  source={
+                    item.local_uri && item.kind !== "video_upload"
+                      ? { uri: item.local_uri }
+                      : undefined
+                  }
                   style={{
                     width: 56,
                     height: 56,

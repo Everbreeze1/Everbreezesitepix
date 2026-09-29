@@ -82,7 +82,7 @@ describe("photo grids use it", () => {
     "apps/mobile/app/(app)/(tabs)/gallery.tsx",
     "apps/mobile/app/(app)/project/[id]/index.tsx",
     "apps/mobile/app/(app)/project/[id]/trash.tsx",
-    "apps/mobile/app/(app)/report/[reportId].tsx",
+    "apps/mobile/src/components/ReportEditor.tsx",
     "apps/mobile/app/(app)/site-log/[logId].tsx",
   ];
 
@@ -111,19 +111,26 @@ describe("lightboxes too", () => {
    * whose file is missing opened a black rectangle with a caption under it and
    * nothing to say why.
    */
-  const LIGHTBOXES = [
+  const SCREENS = [
     "apps/mobile/app/(app)/(tabs)/gallery.tsx",
     "apps/mobile/app/(app)/project/[id]/index.tsx",
   ];
 
   it("render the missing case on the scrim", () => {
-    for (const path of LIGHTBOXES) {
+    /*
+     * Both screens hand their photos to the shared viewer, and the viewer's
+     * page draws a photo with no file through PhotoThumb on the dark stage.
+     */
+    for (const path of SCREENS) {
       const s = read(path);
-      expect(s, `${path} lightbox should use PhotoThumb`).toMatch(/onDark/);
+      expect(s, `${path} should open the shared viewer`).toContain("<PhotoViewer");
       expect(s, `${path} still has a bare lightbox Image`).not.toMatch(
         /source=\{urls\[lightboxPhoto\.id\]/,
       );
     }
+    const page = read("apps/mobile/src/components/photo-viewer/ZoomableImage.tsx");
+    expect(page).toContain("<PhotoThumb");
+    expect(page).toMatch(/onDark/);
   });
 
   it("PhotoThumb drops its panel on dark rather than showing a pale rectangle", () => {

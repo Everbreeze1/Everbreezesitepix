@@ -1,57 +1,56 @@
 import { useMemo, useState } from "react";
-import { FolderPlus, MapPin, Plus } from "@/ui/icons";
-import { FlatList, RefreshControl, View } from "react-native";
+import { FolderPlus, Plus, Search } from "@/ui/icons";
+import { FlatList, Pressable, RefreshControl, StyleSheet, View } from "react-native";
 import { router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
-import {
-  isProjectStatus,
-  PROJECT_STATUS_LABELS,
-  projectDisplayName,
-  relativeTime,
-} from "@everlumen/shared";
-import { listProjectCovers } from "@/api/photos";
-import { formatAddress, listProjects, type ProjectListItem } from "@/api/projects";
+import { PROJECT_STATUS_LABELS, projectDisplayName } from "@everlumen/shared";
+import { formatAddress, listProjects } from "@/api/projects";
+import { listProjectBoards } from "@/api/pipelines";
+import type { PipelineStage } from "@/api/pipeline-view";
+import { listProjectCardExtras } from "@/api/project-cards";
+import { cardColumns } from "@/api/project-cards-view";
+import { ActionRail } from "@/components/ActionRail";
 import { QueueBanner } from "@/components/QueueBanner";
-import { radius, spacing, useTheme } from "@/theme";
+import { useLabelCatalog } from "@/components/ProjectLabels";
+import { FilterGlyph } from "@/components/ProjectGlyphs";
+import { useProjectCrews } from "@/components/ProjectCrewAvatars";
+import { ProjectListCard } from "@/components/ProjectListCard";
+import { ProjectFilterPills, type ProjectFilterOption } from "@/components/ProjectStatusPill";
+import { HIT_TARGET, spacing, useLayout, useTheme } from "@/theme";
 import {
-  Badge,
-  Card,
-  ChipGroup,
+  ActionSheet,
   EmptyState,
   ErrorState,
-  Icon,
   IconButton,
   PageHeader,
-  PhotoThumb,
   SearchField,
   SkeletonList,
-  Text,
-  type BadgeTone,
-  type ChipOption,
 } from "@/ui";
+import { useTabBack } from "@/lib/navigation";
 
-/** The cover thumb. Square, and big enough to recognise a job from. */
-const COVER = 88;
-
-type StatusFilter = "all" | "active" | "on_hold" | "completed";
-
-/**
- * Status to badge colour.
- *
- * Taken from the same three buckets `PROJECT_STATUSES` defines rather than a
- * mobile-only list, so a status added in one place cannot quietly render as
- * "unknown" here.
+/*
+ * "archived" is not a status, it is the `archived` flag. It sits in the same
+ * row because that is where the web puts it, and so an archived job has one
+ * place to be found rather than being mixed in among the live ones under All.
  */
-const STATUS_TONE: Record<string, BadgeTone> = {
-  active: "success",
-  on_hold: "warning",
-  completed: "neutral",
-};
+type StatusFilter = "all" | "active" | "on_hold" | "completed" | "archived";
+
+/** What a card shows when its photos could not be read at all. */
+const FAILED = { urls: [], count: null, latestAt: null, stageId: null };
 
 export default function ProjectsScreen() {
+  const tabBack = useTabBack();
   const theme = useTheme();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
+  /*
+   * The search field is behind the magnifier rather than always open, so the
+   * first screen of jobs starts under the filter row instead of under a field
+   * most visits never type into. It stays open while it holds text: hiding a
+   * field that is still filtering the list is how a list looks broken.
+   */
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [filterSheet, setFilterSheet] = useState(false);
 
   const { data, isLoading, isRefetching, error, refetch } = useQuery({
     queryKey: ["projects"],
@@ -61,20 +60,51 @@ export default function ProjectsScreen() {
   const all = useMemo(() => data ?? [], [data]);
 
   /*
-   * Covers for the whole list in one round trip, not one request per card.
-   *
-   * Keyed on the ids rather than on the query object, so a rename or a status
-   * change does not re-sign every URL. Signed URLs last an hour and re-signing
-   * sooner only spends requests.
+   * Crews for the whole list in one round trip, keyed on the ids so a rename or
+   * a status change does not refetch every card's avatars.
    */
   const projectIds = useMemo(() => all.map((project) => project.id), [all]);
-  const coversQuery = useQuery({
-    queryKey: ["project-covers", projectIds.join(",")],
-    queryFn: () => listProjectCovers(projectIds),
+  const crews = useProjectCrews(projectIds);
+
+  /*
+   * Photos for every card in one read (plus one signing batch), keyed on the
+   * ids like the crews. Separate from the list query so the cards draw the
+   * moment the jobs arrive and the strips fill in behind them; a failure here
+   * leaves the strips saying so and the jobs still reachable.
+   */
+  const extrasQuery = useQuery({
+    queryKey: ["project-card-extras", projectIds.join(",")],
+    queryFn: () => listProjectCardExtras(projectIds),
     enabled: projectIds.length > 0,
-    staleTime: 45 * 60 * 1000,
+    // Signed URLs last an hour; refetching well inside that keeps them live.
+    staleTime: 10 * 60 * 1000,
   });
-  const covers = coversQuery.data ?? {};
+  const extras = extrasQuery.data;
+
+  // Same key as the status chip and the Pipelines screen: one shared fetch.
+  const boardsQuery = useQuery({
+    queryKey: ["project-boards"],
+    queryFn: listProjectBoards,
+    staleTime: 60_000,
+  });
+  const stages = useMemo(() => {
+    const out: Record<string, PipelineStage> = {};
+    for (const board of boardsQuery.data ?? []) {
+      for (const stage of board.stages ?? []) out[stage.id] = stage;
+    }
+    return out;
+  }, [boardsQuery.data]);
+
+  const { colorOf } = useLabelCatalog();
+
+  /* One column on a phone, a grid of cards on a tablet. */
+  const { width, safeSide } = useLayout();
+  const columns = cardColumns(width);
+  const gap = spacing.md;
+  // Plus the side safe area, so a phone on its side keeps the first column
+  // out from under the notch.
+  const pad = (columns > 1 ? spacing.xl : spacing.lg) + safeSide;
+  const cellWidth = (width - pad * 2 - gap * (columns - 1)) / columns;
 
   /*
    * Counts come off the unfiltered list, so a chip reading "On hold 3" keeps
@@ -83,15 +113,29 @@ export default function ProjectsScreen() {
    * none" rather than "you are not looking at them".
    */
   const counts = useMemo(() => {
-    const out: Record<string, number> = { all: all.length };
-    for (const project of all) out[project.status] = (out[project.status] ?? 0) + 1;
+    // Archived jobs are counted once, under Archived, and nowhere else: the
+    // other pills describe the live board, as they do on the web.
+    const out: Record<string, number> = { all: 0, archived: 0 };
+    for (const project of all) {
+      if (project.archived) {
+        out.archived += 1;
+        continue;
+      }
+      out.all += 1;
+      out[project.status] = (out[project.status] ?? 0) + 1;
+    }
     return out;
   }, [all]);
 
   const projects = useMemo(() => {
     const needle = search.trim().toLowerCase();
     const matched = all.filter((project) => {
-      if (status !== "all" && project.status !== status) return false;
+      if (status === "archived") {
+        if (!project.archived) return false;
+      } else {
+        if (project.archived) return false;
+        if (status !== "all" && project.status !== status) return false;
+      }
       if (!needle) return true;
       const address = formatAddress(project) ?? "";
       return (
@@ -109,34 +153,73 @@ export default function ProjectsScreen() {
     return [...matched].sort((a, b) => Number(Boolean(b.starred)) - Number(Boolean(a.starred)));
   }, [all, search, status]);
 
-  const filters: ChipOption<StatusFilter>[] = [
+  const filters: ProjectFilterOption<StatusFilter>[] = [
     { id: "all", label: "All", count: counts.all },
     { id: "active", label: PROJECT_STATUS_LABELS.active, count: counts.active ?? 0 },
     { id: "on_hold", label: PROJECT_STATUS_LABELS.on_hold, count: counts.on_hold ?? 0 },
     { id: "completed", label: PROJECT_STATUS_LABELS.completed, count: counts.completed ?? 0 },
+    { id: "archived", label: "Archived", count: counts.archived ?? 0 },
   ];
+
+  const showSearch = searchOpen || search.length > 0;
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
-      <PageHeader
-        title="Projects"
-        subtitle={all.length ? `${all.length} ${all.length === 1 ? "job" : "jobs"}` : undefined}
-        actions={
-          <IconButton
-            icon={Plus}
-            accessibilityLabel="New project"
-            onPress={() => router.push("/project-new")}
-          />
-        }
+      <View
+        style={{
+          backgroundColor: theme.colors.card,
+          borderBottomWidth: StyleSheet.hairlineWidth,
+          borderBottomColor: theme.colors.border,
+        }}
       >
-        <SearchField
-          value={search}
-          onChangeText={setSearch}
-          placeholder="Search name or address"
-          accessibilityLabel="Search projects"
-        />
-        <ChipGroup options={filters} value={status} onChange={setStatus} label="Filter by status" />
-      </PageHeader>
+        <PageHeader
+          title="Projects"
+          onBack={tabBack}
+          actions={
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
+              <IconButton
+                icon={Search}
+                accessibilityLabel={showSearch ? "Hide search" : "Search projects"}
+                surface={false}
+                tone={showSearch ? "primary" : "default"}
+                onPress={() => {
+                  if (showSearch) {
+                    setSearch("");
+                    setSearchOpen(false);
+                  } else {
+                    setSearchOpen(true);
+                  }
+                }}
+              />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Filter projects"
+                onPress={() => setFilterSheet(true)}
+                style={({ pressed }) => [styles.glyphButton, { opacity: pressed ? 0.7 : 1 }]}
+              >
+                <FilterGlyph
+                  color={status === "all" ? theme.colors.foreground : theme.colors.primary}
+                />
+              </Pressable>
+            </View>
+          }
+        >
+          {showSearch ? (
+            <SearchField
+              value={search}
+              onChangeText={setSearch}
+              placeholder="Search name or address"
+              accessibilityLabel="Search projects"
+            />
+          ) : null}
+          <ProjectFilterPills
+            options={filters}
+            value={status}
+            onChange={setStatus}
+            label="Filter by status"
+          />
+        </PageHeader>
+      </View>
 
       <QueueBanner />
 
@@ -149,13 +232,18 @@ export default function ProjectsScreen() {
         />
       ) : (
         <FlatList
+          key={`cols-${columns}`}
           data={projects}
           keyExtractor={(item) => item.id}
+          numColumns={columns}
+          columnWrapperStyle={columns > 1 ? { gap } : undefined}
           contentContainerStyle={{
-            padding: spacing.lg,
-            gap: spacing.md,
-            // Clears the raised camera button, which overhangs the bar by 22.
-            paddingBottom: 120,
+            padding: pad,
+            paddingTop: spacing.xl,
+            gap,
+            // Clears the raised camera button, which overhangs the bar by 22,
+            // and the new-project button floating above the last card.
+            paddingBottom: 140,
             flexGrow: 1,
           }}
           refreshControl={
@@ -192,71 +280,76 @@ export default function ProjectsScreen() {
               />
             )
           }
-          renderItem={({ item }) => <ProjectCard project={item} coverUrl={covers[item.id]} />}
+          renderItem={({ item }) => {
+            const card = extras?.[item.id] ?? (extrasQuery.isError ? FAILED : undefined);
+            const stageId = card?.stageId ?? null;
+            return (
+              <View style={columns > 1 ? { width: cellWidth } : undefined}>
+                <ProjectListCard
+                  project={item}
+                  extras={card}
+                  stage={stageId ? (stages[stageId] ?? null) : null}
+                  crew={crews[item.id]}
+                  colorOf={colorOf}
+                  onPress={() => router.push(`/project/${item.id}`)}
+                />
+              </View>
+            );
+          }}
         />
       )}
+
+      {/*
+        The new-project button floats, like the design's, and hides while the
+        list has no jobs at all: the empty state already offers "New project",
+        and two controls for one intent is one too many. A filter that matches
+        nothing still shows it, since "Nothing matches" offers only a reset.
+      */}
+      {isLoading || error || all.length === 0 ? null : (
+        <ActionRail
+          actions={[
+            {
+              key: "new-project",
+              icon: Plus,
+              label: "New project",
+              onPress: () => router.push("/project-new"),
+            },
+          ]}
+        />
+      )}
+
+      <ActionSheet
+        visible={filterSheet}
+        onClose={() => setFilterSheet(false)}
+        title="Show projects"
+        actions={[
+          ...filters.map((option) => ({
+            label: `${option.id === status ? "✓ " : ""}${option.label} (${option.count ?? 0})`,
+            onPress: () => setStatus(option.id),
+          })),
+          ...(search || status !== "all"
+            ? [
+                {
+                  label: "Clear search and filter",
+                  onPress: () => {
+                    setSearch("");
+                    setSearchOpen(false);
+                    setStatus("all");
+                  },
+                },
+              ]
+            : []),
+        ]}
+      />
     </View>
   );
 }
 
-function ProjectCard({ project, coverUrl }: { project: ProjectListItem; coverUrl?: string }) {
-  const address = formatAddress(project);
-  const tone = isProjectStatus(project.status) ? STATUS_TONE[project.status] : "neutral";
-  const label = isProjectStatus(project.status)
-    ? PROJECT_STATUS_LABELS[project.status]
-    : project.status;
-
-  return (
-    <Card
-      onPress={() => router.push(`/project/${project.id}`)}
-      accessibilityLabel={`${projectDisplayName(project)}${address ? `, ${address}` : ""}, ${label}`}
-    >
-      {/*
-        Photo first, and on the left rather than as a hero.
-       
-        This is a documentation app whose project list showed no photography at
-        all: a title, a pin and a date, in a card tall enough to hold three of
-        the job's own photos. A full-bleed hero was the other option and is
-        wrong for this list - most jobs have a cover, some do not, and a hero
-        turns "no cover yet" into half a screen of nothing. A square thumb shows
-        the work, degrades to a small honest placeholder, and fits three times
-        as many jobs on a screen.
-      */}
-      <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.md }}>
-        <PhotoThumb uri={coverUrl} width={COVER} height={COVER} rounded={radius.md} />
-
-        {/*
-          `minWidth: 0` and two lines, for the reason `ListRow` needed the same:
-          a flex child defaults to its content width as its minimum, so a long
-          name is measured against the width it wanted rather than the width it
-          has, and `numberOfLines={1}` then cuts far too early. Seen on device
-          as "20 Charlcote Crescent - ..." with most of the card still empty.
-        */}
-        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-          <Text variant="bodyStrong" numberOfLines={2}>
-            {projectDisplayName(project)}
-          </Text>
-          {address ? (
-            <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.xs }}>
-              <Icon icon={MapPin} size="xs" tone="muted" />
-              <Text variant="caption" tone="muted" numberOfLines={1} style={{ flex: 1 }}>
-                {address}
-              </Text>
-            </View>
-          ) : null}
-          {/*
-            Status and date on one line, under the address. They were a badge in
-            the top-right and a line of their own at the bottom, which is two
-            rows of card spent on six words.
-          */}
-          <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.xs }}>
-            <Badge label={label} tone={tone} />
-            <Text variant="caption" tone="muted" numberOfLines={1}>
-              {relativeTime(project.updated_at)}
-            </Text>
-          </View>
-        </View>
-      </View>
-    </Card>
-  );
-}
+const styles = StyleSheet.create({
+  glyphButton: {
+    width: HIT_TARGET,
+    height: HIT_TARGET,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+});

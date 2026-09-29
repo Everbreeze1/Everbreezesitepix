@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { randomUUID } from "expo-crypto";
 import { Pressable, RefreshControl, ScrollView, View } from "react-native";
-import { router, Stack, useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { calendarDueLabel } from "@everlumen/shared";
 import {
@@ -14,6 +14,8 @@ import {
   type TaskStatus,
 } from "@/api/task-status";
 import { listProjectTasks, type TaskDraft, type TaskRow } from "@/api/tasks";
+import { ActionRail } from "@/components/ActionRail";
+import { ProjectSubPageHeader } from "@/components/ProjectSubPageHeader";
 import { QueueBanner } from "@/components/QueueBanner";
 import { TaskEditorSheet } from "@/components/TaskEditorSheet";
 import { useAuth } from "@/lib/auth";
@@ -25,26 +27,27 @@ import {
 } from "@/offline/handlers";
 import { enqueue } from "@/offline/outbox";
 import { refreshQueue, requestSync } from "@/offline/sync";
-import { HIT_TARGET, radius, spacing, useTheme } from "@/theme";
-import { ListTodo, Plus } from "@/ui/icons";
+import { spacing, useTheme } from "@/theme";
+import { CircleCheck, Clock, Flag, ListTodo, Plus } from "@/ui/icons";
 import {
   Avatar,
-  Badge,
-  Card,
+  CardGrid,
   ChipGroup,
-  IconButton,
   EmptyState,
   ErrorState,
+  ItemCard,
   SkeletonList,
+  StatusChip,
   Text,
-  type BadgeTone,
+  useCardPage,
   type ChipOption,
+  type StatusTone,
 } from "@/ui";
 
 type Filter = "open" | "mine" | "all";
 
-/** Status to badge colour, from the same three values `normaliseStatus` returns. */
-const STATUS_TONE: Record<TaskStatus, BadgeTone> = {
+/** Status to chip colour, from the same three values `normaliseStatus` returns. */
+const STATUS_TONE: Record<TaskStatus, StatusTone> = {
   open: "neutral",
   in_progress: "warning",
   done: "success",
@@ -53,6 +56,7 @@ const STATUS_TONE: Record<TaskStatus, BadgeTone> = {
 export default function ProjectTasksScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const theme = useTheme();
+  const { inset } = useCardPage();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<Filter>("open");
@@ -188,28 +192,41 @@ export default function ProjectTasksScreen() {
     [id, user?.id, tasks.length, queryClient, queryKey],
   );
 
+  const outstanding = tasks.filter((task) => normaliseStatus(task.status) !== "done").length;
+  const doneCount = tasks.length - outstanding;
+  const overdue = tasks.filter(
+    (task) =>
+      normaliseStatus(task.status) !== "done" && Boolean(calendarDueLabel(task.due_date)?.overdue),
+  ).length;
+  const summary =
+    tasks.length === 0
+      ? null
+      : [`${outstanding} open`, overdue > 0 ? `${overdue} overdue` : null, `${doneCount} done`]
+          .filter(Boolean)
+          .join(" · ");
+
   return (
     <>
-      <Stack.Screen
-        options={{
-          title: "Tasks",
-          headerRight: () => (
-            <IconButton
-              icon={Plus}
-              accessibilityLabel="New task"
-              surface={false}
-              tone="primary"
-              onPress={() => setComposing(true)}
-            />
-          ),
-        }}
-      />
       <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+        <ProjectSubPageHeader
+          projectId={id}
+          title="Tasks"
+          summary={summary}
+          progress={
+            tasks.length > 0
+              ? {
+                  value: doneCount,
+                  total: tasks.length,
+                  tone: outstanding === 0 ? "success" : "primary",
+                }
+              : null
+          }
+        >
+          {tasks.length > 0 ? (
+            <ChipGroup options={filters} value={filter} onChange={setFilter} label="Filter tasks" />
+          ) : null}
+        </ProjectSubPageHeader>
         <QueueBanner />
-
-        <View style={{ paddingVertical: spacing.sm }}>
-          <ChipGroup options={filters} value={filter} onChange={setFilter} label="Filter tasks" />
-        </View>
 
         {isLoading ? (
           <SkeletonList rows={5} />
@@ -221,9 +238,10 @@ export default function ProjectTasksScreen() {
         ) : (
           <ScrollView
             contentContainerStyle={{
-              padding: spacing.lg,
-              gap: spacing.md,
-              paddingBottom: spacing.xxxl,
+              paddingHorizontal: inset,
+              paddingTop: spacing.lg,
+              // Room for the floating New task button.
+              paddingBottom: 120,
               flexGrow: 1,
             }}
             refreshControl={
@@ -251,16 +269,27 @@ export default function ProjectTasksScreen() {
                 />
               )
             ) : (
-              visible.map((task) => (
-                <TaskCard
-                  key={task.id}
-                  task={task}
-                  onCycle={() => void cycleStatus(task)}
-                  onOpen={() => router.push(`/task/${task.id}?projectId=${task.project_id}`)}
-                />
-              ))
+              <CardGrid>
+                {visible.map((task) => (
+                  <TaskCard
+                    key={task.id}
+                    task={task}
+                    onCycle={() => void cycleStatus(task)}
+                    onOpen={() => router.push(`/task/${task.id}?projectId=${task.project_id}`)}
+                  />
+                ))}
+              </CardGrid>
             )}
           </ScrollView>
+        )}
+
+        {/* Hidden while the empty state offers the same thing. */}
+        {isLoading || tasks.length === 0 ? null : (
+          <ActionRail
+            actions={[
+              { key: "new-task", icon: Plus, label: "New task", onPress: () => setComposing(true) },
+            ]}
+          />
         )}
       </View>
 
@@ -283,7 +312,6 @@ function TaskCard({
   onCycle: () => void;
   onOpen: () => void;
 }) {
-  const theme = useTheme();
   const status = normaliseStatus(task.status);
   const done = status === "done";
   const priority = (task.priority as TaskPriority) ?? "normal";
@@ -296,93 +324,65 @@ function TaskCard({
    * of what someone scanning this screen needs.
    */
   const due = calendarDueLabel(task.due_date);
+  const hasDetails = Boolean(due) || (urgent && !done) || Boolean(task.assignee_email);
 
   return (
-    <Card padded={false}>
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          gap: spacing.md,
-          padding: spacing.lg,
-        }}
-      >
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={task.title}
-          accessibilityHint="Opens the task"
-          onPress={onOpen}
-          style={{ flex: 1, gap: spacing.xs }}
-        >
-          <Text
-            variant="bodyStrong"
-            tone={done ? "muted" : "default"}
-            style={{ textDecorationLine: done ? "line-through" : "none" }}
-          >
-            {task.title}
-          </Text>
-
-          {task.description ? (
-            <Text variant="caption" tone="muted" numberOfLines={2}>
-              {task.description}
-            </Text>
-          ) : null}
-
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: spacing.sm,
-              flexWrap: "wrap",
-              marginTop: spacing.xs,
-            }}
-          >
-            {due ? (
-              <Badge
-                label={due.overdue && !done ? `Overdue · ${due.label}` : due.label}
-                tone={done ? "neutral" : due.overdue ? "danger" : "warning"}
-                variant={due.overdue && !done ? "solid" : "soft"}
-              />
-            ) : null}
-            {urgent && !done ? (
-              <Badge label={TASK_PRIORITY_LABELS[priority]} tone="danger" variant="outline" />
-            ) : null}
-            {task.assignee_email ? (
-              <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.xs }}>
-                <Avatar name={task.assignee_email} size="sm" />
-                <Text variant="caption" tone="muted" numberOfLines={1} style={{ flexShrink: 1 }}>
-                  {task.assignee_email}
-                </Text>
-              </View>
-            ) : null}
-          </View>
-        </Pressable>
-
-        {/*
-         * The status control stays a separate tap target from the row itself.
+    <ItemCard
+      icon={done ? CircleCheck : ListTodo}
+      iconTone={done ? "success" : "primary"}
+      title={task.title}
+      titleDone={done}
+      meta={task.description}
+      onPress={onOpen}
+      accessibilityLabel={task.title}
+      status={
+        /*
+         * The status control stays a separate tap target from the card itself.
          * Advancing a task and opening it are different intents, and merging
          * them would mean every glance at a task's detail nudged its status.
-         */}
+         */
         <Pressable
           accessibilityRole="button"
           onPress={onCycle}
           accessibilityLabel={`Status ${TASK_STATUS_LABELS[status]}, tap to advance`}
-          style={({ pressed }) => ({
-            minHeight: HIT_TARGET,
-            minWidth: 96,
-            paddingHorizontal: spacing.md,
-            borderRadius: radius.pill,
-            alignItems: "center",
-            justifyContent: "center",
-            borderWidth: 1,
-            borderColor: theme.colors.border,
-            backgroundColor: theme.colors.card,
-            opacity: pressed ? 0.7 : 1,
-          })}
+          hitSlop={10}
+          style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
         >
-          <Badge label={TASK_STATUS_LABELS[status]} tone={STATUS_TONE[status]} />
+          <StatusChip label={TASK_STATUS_LABELS[status]} tone={STATUS_TONE[status]} />
         </Pressable>
-      </View>
-    </Card>
+      }
+    >
+      {hasDetails ? (
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: spacing.sm,
+            flexWrap: "wrap",
+          }}
+        >
+          {due ? (
+            <StatusChip
+              icon={Clock}
+              label={due.overdue && !done ? `Overdue · ${due.label}` : due.label}
+              tone={done ? "neutral" : due.overdue ? "danger" : "warning"}
+            />
+          ) : null}
+          {urgent && !done ? (
+            <StatusChip label={TASK_PRIORITY_LABELS[priority]} tone="danger" icon={Flag} />
+          ) : null}
+          {task.assignee_email ? (
+            <View
+              style={{ flexDirection: "row", alignItems: "center", gap: spacing.xs, flexShrink: 1 }}
+            >
+              <Avatar name={task.assignee_email} size="sm" />
+              <Text variant="caption" tone="muted" numberOfLines={1} style={{ flexShrink: 1 }}>
+                {task.assignee_email}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+    </ItemCard>
   );
 }

@@ -76,7 +76,6 @@ const ALLOWED = new Map<string, string>([
     // client one.
     "the phone trashes via the outbox, where RLS allows any teammate",
   ],
-  ["photo-ai-view.ts:analysisSummary", "written before the analysis screen chose its own wording"],
   [
     "photo-shares-view.ts:exposureSummary",
     "the sheet counts live links itself; kept for a photo-row badge",
@@ -89,7 +88,6 @@ const ALLOWED = new Map<string, string>([
     "push-view.ts:deviceLabel",
     "written for a 'signed in on' device list the phone does not have yet",
   ],
-  ["portfolio-view.ts:taglineError", "the phone does not edit the portfolio tagline"],
   ["push-view.ts:canPrompt", "the OS prompt is driven by expo-notifications' own permission state"],
   [
     "report-view.ts:comprehensiveTitleError",

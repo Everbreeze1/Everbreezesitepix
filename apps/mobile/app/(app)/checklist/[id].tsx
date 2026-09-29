@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, View } from "react-native";
-import { router, Stack, useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CHECKLIST_TYPE_LABELS, type ChecklistItemType } from "@everlumen/shared";
 import {
@@ -14,25 +14,15 @@ import {
   type ChecklistItem,
 } from "@/api/checklists";
 import { isShareLive, openShareSheet, publicUrl, setRecordShareEnabled } from "@/api/sharing";
+import { ProjectSubPageHeader } from "@/components/ProjectSubPageHeader";
 import { QueueBanner } from "@/components/QueueBanner";
 import { useAuth } from "@/lib/auth";
 import { checklistItemRowId, type ChecklistItemPatchPayload } from "@/offline/handlers";
 import { enqueue } from "@/offline/outbox";
 import { refreshQueue, requestSync } from "@/offline/sync";
-import { HIT_TARGET, radius, spacing, useTheme } from "@/theme";
+import { HIT_TARGET, radius, spacing, useLayout, useTheme } from "@/theme";
 import { Camera, CircleCheck, Share2, Star } from "@/ui/icons";
-import {
-  Badge,
-  Button,
-  Card,
-  ErrorState,
-  Field,
-  Icon,
-  IconButton,
-  ProgressBar,
-  SkeletonList,
-  Text,
-} from "@/ui";
+import { Badge, Button, Card, ErrorState, Field, Icon, IconButton, SkeletonList, Text } from "@/ui";
 
 /**
  * The checklist runner: the screen someone actually stands in a building and
@@ -48,6 +38,9 @@ import {
 export default function ChecklistRunnerScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const theme = useTheme();
+  // A form column, not a stretched phone layout, on a tablet.
+  // Centred upright on a tablet; spread and clear of the notch on its side.
+  const inset = useLayout().inset(spacing.lg);
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -171,10 +164,31 @@ export default function ChecklistRunnerScreen() {
 
   return (
     <>
-      <Stack.Screen
-        options={{
-          title: data?.name ?? "Checklist",
-          headerRight: () =>
+      <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+        <ProjectSubPageHeader
+          projectId={data?.project_id}
+          title={data?.name ?? "Checklist"}
+          summary={
+            !data
+              ? null
+              : items.length === 0
+                ? "No items on this checklist"
+                : `${done} of ${items.length} answered · ${
+                    outstandingRequired > 0
+                      ? `${outstandingRequired} required left`
+                      : "all required answered"
+                  }`
+          }
+          progress={
+            items.length > 0
+              ? {
+                  value: done,
+                  total: items.length,
+                  tone: outstandingRequired === 0 ? "success" : "primary",
+                }
+              : null
+          }
+          actions={
             data ? (
               <IconButton
                 icon={Share2}
@@ -183,7 +197,6 @@ export default function ChecklistRunnerScreen() {
                     ? "Share this checklist"
                     : "Turn on sharing for this checklist"
                 }
-                surface={false}
                 /*
                  * Tinted while the link is live, muted while it is off, so the
                  * header says whether this record is currently public without
@@ -192,17 +205,16 @@ export default function ChecklistRunnerScreen() {
                 tone={isShareLive(data.share_token, data.revoked_at) ? "primary" : "muted"}
                 onPress={() => void shareChecklist()}
               />
-            ) : null,
-        }}
-      />
-      <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+            ) : null
+          }
+        />
         <QueueBanner />
 
         {shareError ? (
           <Text
             variant="caption"
             tone="destructive"
-            style={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.sm }}
+            style={{ paddingHorizontal: inset, paddingVertical: spacing.sm }}
           >
             {shareError}
           </Text>
@@ -217,7 +229,11 @@ export default function ChecklistRunnerScreen() {
           />
         ) : (
           <ScrollView
-            contentContainerStyle={{ padding: spacing.lg, gap: spacing.md }}
+            contentContainerStyle={{
+              paddingHorizontal: inset,
+              paddingVertical: spacing.lg,
+              gap: spacing.md,
+            }}
             keyboardShouldPersistTaps="handled"
             refreshControl={
               <RefreshControl
@@ -228,29 +244,6 @@ export default function ChecklistRunnerScreen() {
               />
             }
           >
-            <Card>
-              <ProgressBar
-                value={done}
-                total={items.length}
-                tone={outstandingRequired === 0 && items.length > 0 ? "success" : "primary"}
-                showLabel
-              />
-              {outstandingRequired > 0 ? (
-                <Badge
-                  label={`${outstandingRequired} required left`}
-                  tone="warning"
-                  style={{ marginTop: spacing.md }}
-                />
-              ) : items.length > 0 ? (
-                <Badge
-                  label="All required answered"
-                  tone="success"
-                  icon={CircleCheck}
-                  style={{ marginTop: spacing.md }}
-                />
-              ) : null}
-            </Card>
-
             {items.map((item) => (
               <ChecklistRow
                 key={item.id}

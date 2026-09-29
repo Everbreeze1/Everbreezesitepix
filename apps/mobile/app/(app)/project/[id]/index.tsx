@@ -1,39 +1,49 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
   ActivityIndicator,
-  Modal,
+  Linking,
   Pressable,
   RefreshControl,
   SectionList,
   StyleSheet,
-  Text,
   View,
-  useWindowDimensions,
 } from "react-native";
 import {
   Archive,
+  Calendar,
   Camera,
   CheckCheck,
+  ChevronLeft,
   CircleCheck,
   ClipboardCheck,
   FileText,
+  FolderPlus,
+  GitMerge,
+  History,
   ImageOff,
+  Images,
   ListTodo,
   MapPin,
+  Navigation,
   NotebookPen,
   PenLine,
   Send,
   Share2,
+  SlidersHorizontal,
+  Sparkles,
+  SquareCheckBig,
   Star,
   Trash2,
   Video,
   Workflow,
   Link2,
+  X,
 } from "@/ui/icons";
 import { router, Stack, useLocalSearchParams } from "expo-router";
+import { goBack } from "@/lib/navigation";
 import { useInfiniteQuery, useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { displayCaption, formatPhotoDateGroup } from "@everlumen/shared";
+import { displayCaption, formatPhotoDateGroup, projectDisplayName } from "@everlumen/shared";
 import {
   listProjectPhotoPage,
   PHOTO_PAGE_SIZE,
@@ -45,6 +55,7 @@ import { formatAddress, getProject, type ProjectListItem } from "@/api/projects"
 import {
   archivePatch,
   draftToPatch,
+  labelsPatch,
   starPatch,
   trashProjectPatch,
   type ProjectDraft,
@@ -58,7 +69,42 @@ import {
   setProjectShareEnabled,
   isShareLive,
 } from "@/api/sharing";
+import { ActionRail } from "@/components/ActionRail";
 import { QueueBanner } from "@/components/QueueBanner";
+import { ProjectHero, ProjectHeroButton } from "@/components/ProjectHero";
+import { ProjectTabs, type ProjectTab } from "@/components/ProjectTabs";
+import { ProjectStatusChip } from "@/components/ProjectStatusChip";
+import { ProjectWorkflowStrip } from "@/components/ProjectWorkflowStrip";
+import { ProjectLabels } from "@/components/ProjectLabels";
+import { ProjectPhotoCalendar } from "@/components/ProjectPhotoCalendar";
+import { PhotoViewer, ThumbTagBadge, TileCaption } from "@/components/photo-viewer";
+import { ProjectVideos } from "@/components/ProjectVideos";
+import { PhotoFilterSheet } from "@/components/PhotoFilterSheet";
+import { listProjectVideos } from "@/api/project-videos";
+import { listProjectBoards } from "@/api/pipelines";
+import {
+  activeFilterCount,
+  filterPhotos,
+  PHASE_FILTER_LABELS,
+  phasePill,
+  photoGridColumns,
+  photoTagCounts,
+  toggleTag,
+  type MediaFilter,
+  type PhaseFilter,
+  type PhotoSize,
+  type TagLogic,
+} from "@/api/photo-filter-view";
+import { projectMapsUrl } from "@/api/project-actions";
+import { GenerateReportSheet } from "@/components/GenerateReportSheet";
+import { ProjectGroupSheet, ProjectMergeSheet } from "@/components/ProjectOrganizeSheets";
+import { MoreGlyph } from "@/components/ProjectGlyphs";
+import { listProjectChecklists } from "@/api/checklists";
+import { listProjectWorkflows } from "@/api/workflows";
+import { listProjectTasks } from "@/api/tasks";
+import { normaliseStatus } from "@/api/task-status";
+import { listSiteLogs } from "@/api/site-logs";
+import { listDocumentTree } from "@/api/pages";
 import { PhotoBulkBar, type PhotoBulkAction } from "@/components/PhotoBulkBar";
 import { generateSummaryFromPhotos } from "@/api/summaries";
 import { photoSelectionError } from "@/api/summary-view";
@@ -73,39 +119,76 @@ import {
 import { useQueue } from "@/offline/use-queue";
 import { enqueue } from "@/offline/outbox";
 import { refreshQueue, requestSync } from "@/offline/sync";
-import { gridColumns, HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
+import { HIT_TARGET, radius, spacing, useLayout, useTheme } from "@/theme";
 import {
   DailyLogCard,
-  PhotoSharesSheet,
   ProjectBlueprint,
   ProjectCrew,
   ActionSheet,
-  Badge,
-  Button,
+  Chip,
   ChipGroup,
   Icon,
-  IconButton,
   EmptyState,
   ErrorState,
-  ListGroup,
-  ListRow,
   PhotoThumb,
-  RowDivider,
   SkeletonList,
   Text as UIText,
   type ChipOption,
 } from "@/ui";
 
-type PhaseFilter = "all" | "before" | "after" | "untagged";
+/* The web's chips and words: All captures, Before work, After work, Needs review. */
+const FILTERS: ChipOption<PhaseFilter>[] = PHASE_FILTER_LABELS;
 
-const FILTERS: ChipOption<PhaseFilter>[] = [
-  { id: "all", label: "All" },
-  { id: "before", label: "Before" },
-  { id: "after", label: "After" },
-  { id: "untagged", label: "Untagged" },
+const GRID_GAP = spacing.sm;
+
+/** Tabs drawn on this screen. */
+type InPlaceTab = "photos" | "calendar";
+/** Tabs that open the section's own screen, which already exists as a route. */
+type LinkedTab =
+  | "documents"
+  | "reports"
+  | "checklists"
+  | "workflows"
+  | "tasks"
+  | "site-logs"
+  | "walkthroughs";
+type DetailTab = InPlaceTab | LinkedTab;
+
+/*
+ * The tab row. Photos and Calendar render here; the others push the page
+ * that section has, each built on the same project sub-page header, so every
+ * tab lands somewhere that looks like part of this screen.
+ *
+ * There is no Details tab any more (Jon, 2026-09-28): it listed these same
+ * tabs a second time. What it held that nothing else did now sits in the
+ * header card above the tabs: the address, the crew and the blueprint.
+ *
+ * Documents and Site logs draw different glyphs. Both used `FileText` once,
+ * which is the same as neither having one; `NotebookPen` is what the Daily
+ * Log card already uses for a day written up.
+ */
+const TAB_DEFS: ProjectTab<DetailTab>[] = [
+  { id: "photos", label: "Photos", icon: Images },
+  { id: "documents", label: "Documents", icon: FileText },
+  { id: "reports", label: "Reports", icon: Send },
+  { id: "checklists", label: "Checklists", icon: ClipboardCheck },
+  { id: "workflows", label: "Workflows", icon: Workflow },
+  { id: "tasks", label: "Tasks", icon: ListTodo },
+  { id: "site-logs", label: "Site logs", icon: NotebookPen },
+  { id: "walkthroughs", label: "Walkthroughs", icon: Video },
+  // This job's photos by day, as the web project page's Calendar tab.
+  { id: "calendar", label: "Calendar", icon: Calendar },
 ];
 
-const GRID_GAP = spacing.xs;
+const LINKED_TABS: Record<LinkedTab, (id: string) => void> = {
+  documents: (id) => router.push(`/project/${id}/documents`),
+  reports: (id) => router.push(`/project/${id}/reports`),
+  checklists: (id) => router.push(`/project/${id}/checklists`),
+  workflows: (id) => router.push(`/project/${id}/workflows`),
+  tasks: (id) => router.push(`/project/${id}/tasks`),
+  "site-logs": (id) => router.push(`/project/${id}/site-logs`),
+  walkthroughs: (id) => router.push(`/project/${id}/walkthroughs`),
+};
 
 /** One rendered row of the grid. Sections hold rows, not photos. */
 type PhotoRow = { key: string; photos: PhotoListItem[] };
@@ -133,11 +216,16 @@ export default function ProjectDetailScreen() {
    * Computed here rather than beside `tileSize` below because the section memo
    * chunks photos into fixed rows, so the count has to exist before it runs.
    */
-  const { width: screenWidth } = useWindowDimensions();
+  const layout = useLayout();
+  const screenWidth = layout.width;
+  // The photo grid's gutter, plus the notch of a phone on its side (zero upright).
+  const gridSide = spacing.lg + layout.safeSide;
   // Photos still in the outbox: the Daily Log for them has not been written
   // yet, because on a phone a capture session finishes when the queue does.
   const { outstanding: queued } = useQueue();
-  const columns = gridColumns(screenWidth - spacing.lg * 2);
+  /* The web Filters popover's Photo size. Medium is the grid phones always drew. */
+  const [photoSize, setPhotoSize] = useState<PhotoSize>("md");
+  const columns = photoGridColumns(screenWidth - gridSide * 2, photoSize);
   /*
    * `photo` is a deep link, not something this screen ever sets.
    *
@@ -150,10 +238,30 @@ export default function ProjectDetailScreen() {
   const { id, photo: deepLinkPhoto } = useLocalSearchParams<{ id: string; photo?: string }>();
   const theme = useTheme();
   const [filter, setFilter] = useState<PhaseFilter>("all");
+  /*
+   * The web grid's other filters: tags (any-of or all-of), photos against
+   * videos, and whether the tag row is showing at all. Hiding the row clears
+   * the tag filter, so a filter nobody can see never narrows the grid.
+   */
+  const [tagFilter, setTagFilter] = useState<string[]>([]);
+  const [tagLogic, setTagLogic] = useState<TagLogic>("or");
+  const [showTags, setShowTags] = useState(false);
+  const [media, setMedia] = useState<MediaFilter>("all");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  /*
+   * A day opened from the Calendar tab. Its photos may not be in the loaded
+   * grid, so the viewer pages through that day rather than the grid, as web's
+   * calendar viewer does.
+   */
+  const [calendarPick, setCalendarPick] = useState<{
+    photos: PhotoListItem[];
+    urls: Record<string, string>;
+  } | null>(null);
+  const [tab, setTab] = useState<InPlaceTab>("photos");
+  const [sort, setSort] = useState<"newest" | "oldest">("newest");
   // Seeded from the param rather than set in an effect, so the lightbox is
   // already open on the first render instead of flashing the grid first.
   const [lightboxId, setLightboxId] = useState<string | null>(deepLinkPhoto ?? null);
-  const [sharing, setSharing] = useState<{ photoId: string; caption: string } | null>(null);
   /*
    * Selection lives as a Set of ids rather than a flag plus a list, so a photo
    * scrolled far out of view cannot fall out of the selection when the list
@@ -163,6 +271,16 @@ export default function ProjectDetailScreen() {
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
+  /*
+   * The web header's Create menu (AI Summary, the two reports, templates, a
+   * blank page) and the kebab's organise sheets. Each is mounted only while in
+   * use, so every open starts from the top.
+   */
+  const [createOpen, setCreateOpen] = useState(false);
+  const [groupOpen, setGroupOpen] = useState(false);
+  const [mergeOpen, setMergeOpen] = useState(false);
+  /* Select mode, as the web's Select button: taps pick rather than open. */
+  const [selectMode, setSelectMode] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
   /*
    * Kept apart from `shareError` rather than reusing it. They surface in
@@ -173,7 +291,11 @@ export default function ProjectDetailScreen() {
   const [bulkError, setBulkError] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
-  const selecting = selected.size > 0;
+  const selecting = selectMode || selected.size > 0;
+  const endSelection = useCallback(() => {
+    setSelectMode(false);
+    setSelected(new Set());
+  }, []);
 
   const projectQuery = useQuery({
     queryKey: ["project", id],
@@ -206,10 +328,45 @@ export default function ProjectDetailScreen() {
     return merged;
   }, [photosQuery.data]);
 
+  /*
+   * Pages arrive newest first, so "oldest first" is the loaded list reversed.
+   * That is only honest once every page is here, which the effect below sees
+   * to: otherwise the "oldest" photo shown would just be the oldest one that
+   * happened to be fetched.
+   */
   const filtered = useMemo(() => {
-    if (filter === "all") return photos;
-    return photos.filter((photo) => (photo.phase ?? "untagged") === filter);
-  }, [photos, filter]);
+    const phased = filterPhotos(photos, { phase: filter, tags: tagFilter, logic: tagLogic });
+    return sort === "newest" ? phased : [...phased].reverse();
+  }, [photos, filter, tagFilter, tagLogic, sort]);
+
+  const tagCounts = useMemo(() => photoTagCounts(photos), [photos]);
+
+  const videosQuery = useQuery({
+    queryKey: ["project-videos", id],
+    queryFn: () => listProjectVideos(String(id)),
+    enabled: Boolean(id),
+  });
+  const videos = videosQuery.data ?? [];
+  const showPhotos = media !== "videos";
+  const moreFilters = activeFilterCount({ tags: tagFilter, media });
+
+  /*
+   * The stage name, for the edit sheet: where a stage owns the status, the
+   * sheet says so rather than offering a status that would contradict it.
+   * Same key as the status chip, so this is not a second fetch.
+   */
+  const boardsQuery = useQuery({
+    queryKey: ["project-boards"],
+    queryFn: listProjectBoards,
+    staleTime: 60_000,
+  });
+
+  useEffect(() => {
+    if (sort !== "oldest") return;
+    if (photosQuery.hasNextPage && !photosQuery.isFetchingNextPage) {
+      void photosQuery.fetchNextPage();
+    }
+  }, [sort, photosQuery]);
 
   /** Photos bucketed by capture day, newest day first, each day chunked into rows. */
   const sections = useMemo(() => {
@@ -231,13 +388,65 @@ export default function ProjectDetailScreen() {
   }, [filtered, columns]);
 
   const project = projectQuery.data;
+
+  /*
+   * How much is in each section, for the counts on the tab row. The same keys
+   * and fetchers the section pages use, so opening a tab is a cache read and
+   * its list is already there when the page slides in.
+   */
+  const countsEnabled = Boolean(id);
+  const checklistsQuery = useQuery({
+    queryKey: ["project-checklists", id],
+    queryFn: () => listProjectChecklists(id!),
+    enabled: countsEnabled,
+    staleTime: 60_000,
+  });
+  const workflowsQuery = useQuery({
+    queryKey: ["project-workflows", id],
+    queryFn: () => listProjectWorkflows(id!),
+    enabled: countsEnabled,
+    staleTime: 60_000,
+  });
+  const tasksQuery = useQuery({
+    queryKey: ["project-tasks", id],
+    queryFn: () => listProjectTasks(id!),
+    enabled: countsEnabled,
+    staleTime: 60_000,
+  });
+  const siteLogsQuery = useQuery({
+    queryKey: ["site-logs", id],
+    queryFn: () => listSiteLogs(id!),
+    enabled: countsEnabled,
+    staleTime: 60_000,
+  });
+  const documentsQuery = useQuery({
+    queryKey: ["document-tree", id],
+    queryFn: () => listDocumentTree(id!),
+    enabled: countsEnabled,
+    staleTime: 60_000,
+  });
+
   const address = project ? formatAddress(project) : null;
+  const mapsUrl = project ? projectMapsUrl(project) : null;
   const loading = projectQuery.isLoading || photosQuery.isLoading;
   const error = projectQuery.error ?? photosQuery.error;
 
-  const tileSize = (screenWidth - spacing.lg * 2 - GRID_GAP * (columns - 1)) / columns;
+  const tileSize = (screenWidth - gridSide * 2 - GRID_GAP * (columns - 1)) / columns;
+  /*
+   * The header card and the calendar centre on a tablet rather than running
+   * a line of status and labels a metre across. The photo grid stays full
+   * width: it is a contact sheet, and wider means more photographs. On its
+   * side the page spreads instead of centring (see `cardPageInsetFor`).
+   */
+  const headerInset = layout.cardInset(spacing.xl);
+  const calendarInset = layout.cardInset(spacing.lg);
 
-  const lightboxPhoto = filtered.find((photo) => photo.id === lightboxId) ?? null;
+  /*
+   * What the photo viewer pages through: the day picked on the Calendar tab,
+   * or the grid as filtered and sorted on screen.
+   */
+  const viewerPhotos = calendarPick?.photos ?? filtered;
+  const viewerUrls = calendarPick?.urls ?? urls;
 
   const loadMore = useCallback(() => {
     /*
@@ -354,25 +563,6 @@ export default function ProjectDetailScreen() {
     }
   }, [id, project?.name]);
 
-  /**
-   * Show the links already open on this photograph, and offer another.
-   *
-   * A share link is a jobsite photograph on the open internet with no login in
-   * front of it, so the sheet leads with what already exists rather than
-   * quietly adding to it.
-   */
-  const sharePhoto = useCallback((photoId: string, caption: string | null) => {
-    /*
-     * Opens the links sheet rather than minting one on the spot.
-     *
-     * The old path created a FRESH token per tap and showed nothing, so three
-     * taps left three independently live URLs on the open internet with nothing
-     * on the phone able to count or withdraw them.
-     */
-    setShareError(null);
-    setSharing({ photoId, caption: displayCaption(caption, "Photo") });
-  }, []);
-
   const toggle = useCallback((photoId: string) => {
     setSelected((current) => {
       const next = new Set(current);
@@ -421,7 +611,7 @@ export default function ProjectDetailScreen() {
             // legitimate, a retry after a dropped response is not.
             idempotencyKey: randomUUID(),
           });
-          setSelected(new Set());
+          endSelection();
           setBulkError(null);
           if (summaryId) {
             router.push({ pathname: "/summary/[summaryId]", params: { summaryId } });
@@ -493,63 +683,95 @@ export default function ProjectDetailScreen() {
 
       await refreshQueue();
       requestSync();
-      setSelected(new Set());
+      endSelection();
       setBusy(false);
     },
-    [selected, photos, queryClient, id],
+    [selected, photos, queryClient, id, endSelection],
   );
+
+  /*
+   * The hero's second line: the client, then where the job is. The street is
+   * usually the project's name already, so it is not repeated here.
+   */
+  const place = project
+    ? [project.city, project.state].filter(Boolean).join(", ") || project.location || null
+    : null;
+  const heroSubtitle = project
+    ? [project.client_name?.trim(), place].filter(Boolean).join(" · ") || null
+    : null;
+  // Newest loaded photo, which is what the project list and the web card use
+  // as a job's cover. No photo falls back to the gradient.
+  const coverUri = photos.length > 0 ? (urls[photos[0].id] ?? null) : null;
+  const photoCount = showPhotos
+    ? `${photos.length}${photosQuery.hasNextPage ? "+" : ""} photo${photos.length === 1 ? "" : "s"}`
+    : `${videos.length} video${videos.length === 1 ? "" : "s"}`;
+  const stageName = useMemo(() => {
+    const stageId = project?.pipeline_stage_id;
+    if (!stageId) return null;
+    for (const board of boardsQuery.data ?? []) {
+      const stage = (board.stages ?? []).find((s) => s.id === stageId);
+      if (stage) return stage.name;
+    }
+    return null;
+  }, [boardsQuery.data, project?.pipeline_stage_id]);
+
+  /*
+   * A stage move is written by the status chip itself (the server derives the
+   * status from the stage); this only keeps both caches showing it meanwhile.
+   */
+  const onStageChanged = useCallback(
+    (next: { status: string; stageId: string | null }) => {
+      queryClient.setQueryData<ProjectListItem | null>(["project", id], (current) =>
+        current ? { ...current, status: next.status, pipeline_stage_id: next.stageId } : current,
+      );
+      queryClient.setQueryData<ProjectListItem[]>(["projects"], (current) =>
+        (current ?? []).map((row) => (row.id === id ? { ...row, status: next.status } : row)),
+      );
+    },
+    [id, queryClient],
+  );
+
+  /*
+   * Counts that say what is left to do where there is such a thing (open
+   * tasks, unfinished checklists) and how many there are otherwise.
+   */
+  const tabs = useMemo<ProjectTab<DetailTab>[]>(() => {
+    const counts: Partial<Record<DetailTab, number | string | null>> = {
+      photos: photos.length > 0 ? `${photos.length}${photosQuery.hasNextPage ? "+" : ""}` : null,
+      checklists: checklistsQuery.data?.filter((row) => row.total === 0 || row.done < row.total)
+        .length,
+      workflows: workflowsQuery.data?.filter((row) => !row.completed_at).length,
+      tasks: tasksQuery.data?.filter((task) => normaliseStatus(task.status) !== "done").length,
+      "site-logs": siteLogsQuery.data?.length,
+      documents: documentsQuery.data
+        ? documentsQuery.data.pages.length + documentsQuery.data.files.length
+        : null,
+    };
+    return TAB_DEFS.map((tab) => ({ ...tab, count: counts[tab.id] ?? null }));
+  }, [
+    photos.length,
+    photosQuery.hasNextPage,
+    checklistsQuery.data,
+    workflowsQuery.data,
+    tasksQuery.data,
+    siteLogsQuery.data,
+    documentsQuery.data,
+  ]);
+
+  const onTab = (next: DetailTab) => {
+    const go = LINKED_TABS[next as LinkedTab];
+    if (go) go(String(id));
+    else setTab(next as InPlaceTab);
+  };
 
   return (
     <>
-      <Stack.Screen
-        options={{
-          title: selecting ? `${selected.size} selected` : (project?.name ?? "Project"),
-          headerRight: () =>
-            selecting ? (
-              <IconButton
-                icon={CheckCheck}
-                accessibilityLabel="Select all loaded photos"
-                surface={false}
-                tone="primary"
-                onPress={() => setSelected(new Set(filtered.map((photo) => photo.id)))}
-              />
-            ) : (
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
-                {/*
-                  A filled star for starred, an outline for not. Colour alone
-                  would not carry it: the header is the one place the app draws
-                  on the chrome background, where a tinted glyph reads as
-                  "tappable" rather than as "on".
-                */}
-                <IconButton
-                  icon={Star}
-                  accessibilityLabel={project?.starred ? "Remove star" : "Star this project"}
-                  surface={false}
-                  tone={project?.starred ? "safety" : "muted"}
-                  onPress={() => void patchProject("starred", starPatch(!project?.starred))}
-                />
-                <IconButton
-                  icon={PenLine}
-                  accessibilityLabel="Project actions"
-                  surface={false}
-                  tone="primary"
-                  onPress={() => setActionsOpen(true)}
-                />
-              </View>
-            ),
-        }}
-      />
+      {/*
+        No navigator header: the hero runs under the status bar and carries
+        its own back and overflow buttons.
+      */}
+      <Stack.Screen options={{ headerShown: false, title: project?.name ?? "Project" }} />
       <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
-        <QueueBanner />
-        {shareError ? (
-          <UIText
-            variant="caption"
-            tone="destructive"
-            style={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.sm }}
-          >
-            {shareError}
-          </UIText>
-        ) : null}
         {loading ? (
           <SkeletonList rows={5} />
         ) : error ? (
@@ -562,11 +784,11 @@ export default function ProjectDetailScreen() {
           />
         ) : (
           <SectionList
-            sections={sections}
+            sections={tab === "photos" && showPhotos ? sections : []}
             keyExtractor={(row) => row.key}
             stickySectionHeadersEnabled={false}
-            contentContainerStyle={{ padding: spacing.lg, paddingBottom: 120 }}
-            onEndReached={loadMore}
+            contentContainerStyle={{ paddingBottom: 140 }}
+            onEndReached={tab === "photos" && showPhotos ? loadMore : undefined}
             onEndReachedThreshold={0.6}
             // The grid is fixed-height rows, so windowing can be tighter than
             // the default without blank space appearing during a fast scroll.
@@ -582,161 +804,377 @@ export default function ProjectDetailScreen() {
             }
             ListHeaderComponent={
               <View>
-                <View style={{ gap: spacing.md, marginBottom: spacing.lg }}>
-                  {address ? (
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.xs }}>
-                      <MapPin size={14} color={theme.colors.mutedForeground} strokeWidth={2.25} />
-                      <UIText variant="caption" tone="muted" style={{ flex: 1 }}>
-                        {address}
-                      </UIText>
+                <ProjectHero
+                  title={selecting ? `${selected.size} selected` : projectDisplayName(project)}
+                  subtitle={selecting ? "Tap photos to add or remove them" : heroSubtitle}
+                  coverUri={coverUri}
+                  left={
+                    selecting ? (
+                      <ProjectHeroButton
+                        accessibilityLabel="Cancel selection"
+                        onPress={endSelection}
+                      >
+                        <Icon icon={X} size="md" color="#ffffff" />
+                      </ProjectHeroButton>
+                    ) : (
+                      <ProjectHeroButton
+                        accessibilityLabel="Back"
+                        onPress={() => goBack("/projects")}
+                      >
+                        <Icon icon={ChevronLeft} size="md" color="#ffffff" />
+                      </ProjectHeroButton>
+                    )
+                  }
+                  right={
+                    selecting ? (
+                      <ProjectHeroButton
+                        accessibilityLabel="Select all loaded photos"
+                        onPress={() => setSelected(new Set(filtered.map((photo) => photo.id)))}
+                      >
+                        <Icon icon={CheckCheck} size="md" color="#ffffff" />
+                      </ProjectHeroButton>
+                    ) : (
+                      <>
+                        {/*
+                          The web header's orange Create button, labelled
+                          because a bare sparkle names nothing. It sits at the
+                          right end of the hero, where the thumb already is on
+                          a phone and where a tablet's right hand rests.
+                        */}
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel="Create"
+                          accessibilityHint="AI summary, reports, templates or a blank page for this job"
+                          onPress={() => setCreateOpen(true)}
+                          style={({ pressed }) => ({
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: spacing.xs,
+                            height: HIT_TARGET,
+                            paddingHorizontal: spacing.lg,
+                            borderRadius: radius.pill,
+                            backgroundColor: theme.colors.primary,
+                            opacity: pressed ? 0.8 : 1,
+                          })}
+                        >
+                          <Sparkles size={18} strokeWidth={2.25} color="#ffffff" />
+                          <UIText variant="bodyStrong" style={{ color: "#ffffff" }}>
+                            Create
+                          </UIText>
+                        </Pressable>
+                        {/*
+                          A filled amber star for starred, a white outline for
+                          not. Colour alone would not carry it on a photograph,
+                          so the fill does the work.
+                        */}
+                        <ProjectHeroButton
+                          accessibilityLabel={
+                            project?.starred ? "Remove star" : "Star this project"
+                          }
+                          onPress={() => void patchProject("starred", starPatch(!project?.starred))}
+                        >
+                          <Star
+                            size={20}
+                            strokeWidth={2.25}
+                            color={project?.starred ? theme.colors.safety : "#ffffff"}
+                            fill={project?.starred ? theme.colors.safety : "transparent"}
+                          />
+                        </ProjectHeroButton>
+                        <ProjectHeroButton
+                          accessibilityLabel="Project actions"
+                          onPress={() => setActionsOpen(true)}
+                        >
+                          <MoreGlyph color="#ffffff" />
+                        </ProjectHeroButton>
+                      </>
+                    )
+                  }
+                />
+
+                {/*
+                  The job at a glance, in one card under the cover: status,
+                  the blueprint that set it up, who is on it, where it is,
+                  what it is and how it is filed. The blueprint and crew are
+                  the same controls the old Details tab had, drawn compact:
+                  each still opens its sheet to change it.
+                */}
+                <View
+                  style={{
+                    gap: spacing.md,
+                    paddingHorizontal: headerInset,
+                    paddingVertical: spacing.lg,
+                    backgroundColor: theme.colors.card,
+                    borderBottomWidth: StyleSheet.hairlineWidth,
+                    borderBottomColor: theme.colors.border,
+                  }}
+                >
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.md }}>
+                    {project?.status ? (
+                      <ProjectStatusChip
+                        projectId={String(id)}
+                        status={project.status}
+                        stageId={project.pipeline_stage_id}
+                        onSetStatus={(status) => void patchProject("status", { status })}
+                        onStageChanged={onStageChanged}
+                      />
+                    ) : null}
+                    <View style={{ flex: 1, flexDirection: "row" }}>
+                      <ProjectBlueprint
+                        compact
+                        projectId={String(id)}
+                        projectName={project?.name ?? ""}
+                        projectAddress={address}
+                      />
                     </View>
-                  ) : null}
-
-                  {/*
-                    Who is on the job, directly under the address. It is the
-                    same kind of fact: where this is and who is there. The row
-                    shows for everybody and only offers "Change" to a role the
-                    server would actually accept a write from.
-                  */}
-                  <ProjectCrew projectId={String(id)} />
-
-                  {/*
-                    Next to the crew, because they are the same act: setting a
-                    job up is deciding who is on it and what it needs. The row
-                    reads as provenance once a blueprint has been applied.
-                  */}
-                  <ProjectBlueprint
-                    projectId={String(id)}
-                    projectName={project?.name ?? ""}
-                    projectAddress={address}
-                  />
-
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
-                    <Badge
-                      label={`${photos.length}${photosQuery.hasNextPage ? "+" : ""} photo${photos.length === 1 ? "" : "s"}`}
-                      tone="primary"
-                    />
-                    {project?.status ? <Badge label={project.status} tone="neutral" /> : null}
+                    <ProjectCrew compact projectId={String(id)} />
                   </View>
 
-                  {/*
-                   * The four ways deeper into a job, as one grouped block.
-                   *
-                   * These were four separate bordered rows, each drawn inline
-                   * with a text chevron, and they carried no icons at all: on a
-                   * screen whose whole job is to be scanned quickly they were
-                   * four identical grey rectangles differing only by a word.
-                   */}
-                  <ListGroup>
-                    <ListRow
-                      icon={ClipboardCheck}
-                      title="Checklists"
-                      subtitle="Run the checks for this site"
-                      onPress={() => router.push(`/project/${id}/checklists`)}
-                    />
-                    <RowDivider />
-                    <ListRow
-                      icon={ListTodo}
-                      title="Tasks"
-                      subtitle="Punch list and assignments"
-                      onPress={() => router.push(`/project/${id}/tasks`)}
-                    />
-                    <RowDivider />
-                    <ListRow
-                      icon={Workflow}
-                      title="Workflows"
-                      subtitle="Phases and progress"
-                      onPress={() => router.push(`/project/${id}/workflows`)}
-                    />
-                    <RowDivider />
-                    <ListRow
-                      icon={FileText}
-                      title="Documents"
-                      subtitle="Pages and files on this job"
-                      onPress={() => router.push(`/project/${id}/documents`)}
-                    />
-                    <RowDivider />
-                    <ListRow
-                      icon={Send}
-                      title="Reports"
-                      subtitle="What the client receives"
-                      onPress={() => router.push(`/project/${id}/reports`)}
-                    />
-                    <RowDivider />
-                    <ListRow
-                      // Not `FileText`: that is the Documents row above, and two
-                      // rows in one list drawing the same glyph is the same as
-                      // neither having one. `NotebookPen` is what `DailyLogCard`
-                      // already uses for the same idea, a day written up.
-                      icon={NotebookPen}
-                      title="Site logs"
-                      subtitle="The day's photos, written up"
-                      onPress={() => router.push(`/project/${id}/site-logs`)}
-                    />
-                    <RowDivider />
-                    <ListRow
-                      icon={Video}
-                      title="Walkthroughs"
-                      subtitle="Recorded site walks"
-                      onPress={() => router.push(`/project/${id}/walkthroughs`)}
-                    />
-                    <RowDivider />
-                    <ListRow
-                      icon={Trash2}
-                      iconTone="muted"
-                      title="Trash"
-                      subtitle="Restore deleted photos"
-                      onPress={() => router.push(`/project/${id}/trash`)}
-                    />
-                  </ListGroup>
-                </View>
+                  {address ? (
+                    <Pressable
+                      accessibilityRole={mapsUrl ? "link" : "text"}
+                      accessibilityLabel={mapsUrl ? `${address}, open in Maps` : address}
+                      disabled={!mapsUrl}
+                      onPress={() => (mapsUrl ? void Linking.openURL(mapsUrl) : undefined)}
+                      hitSlop={6}
+                      style={({ pressed }) => ({
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: spacing.xs,
+                        opacity: pressed ? 0.6 : 1,
+                      })}
+                    >
+                      <MapPin size={14} color={theme.colors.mutedForeground} strokeWidth={2.25} />
+                      <UIText variant="caption" tone="muted" numberOfLines={1} style={{ flex: 1 }}>
+                        {address}
+                      </UIText>
+                      {mapsUrl ? (
+                        <Navigation size={14} color={theme.colors.primary} strokeWidth={2.25} />
+                      ) : null}
+                    </Pressable>
+                  ) : null}
 
-                {/*
-                  Was a hand-rolled row of Pressables with its own chip style.
-                  The same control exists on the gallery and the task list, so
-                  it lives in the kit now and all three agree on height.
-                */}
-                <View style={{ marginHorizontal: -spacing.lg, marginBottom: spacing.lg }}>
-                  <ChipGroup
-                    options={FILTERS}
-                    value={filter}
-                    onChange={setFilter}
-                    label="Filter photos by phase"
+                  {project?.description?.trim() ? (
+                    <UIText variant="body" tone="muted" numberOfLines={6}>
+                      {project.description.trim()}
+                    </UIText>
+                  ) : null}
+                  <ProjectLabels
+                    labels={project?.labels ?? []}
+                    onChange={(next) => void patchProject("labels", labelsPatch(next))}
                   />
                 </View>
 
-                {/*
-                  Directly above the grid it was written from. The log is the
-                  prose version of these photographs, and putting it anywhere
-                  else makes it a report somebody has to go and find, which is
-                  the exact thing it exists not to be.
-                */}
-                <DailyLogCard projectId={String(id)} pending={queued > 0} />
+                <ProjectWorkflowStrip
+                  projectId={String(id)}
+                  onOpen={() => router.push(`/project/${id}/workflows`)}
+                />
+
+                <ProjectTabs tabs={tabs} value={tab} onChange={onTab} />
+
+                <QueueBanner />
+                {shareError ? (
+                  <UIText
+                    variant="caption"
+                    tone="destructive"
+                    style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.sm }}
+                  >
+                    {shareError}
+                  </UIText>
+                ) : null}
+
+                {tab === "photos" ? (
+                  <View style={{ paddingHorizontal: gridSide, paddingTop: spacing.lg }}>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        marginBottom: spacing.md,
+                      }}
+                    >
+                      <UIText variant="heading" style={{ fontWeight: "700" }}>
+                        {photoCount}
+                      </UIText>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.lg }}>
+                        {showPhotos && photos.length > 0 ? (
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel={selecting ? "Done selecting" : "Select photos"}
+                            onPress={() => (selecting ? endSelection() : setSelectMode(true))}
+                            hitSlop={12}
+                            style={{ flexDirection: "row", alignItems: "center", gap: 4 }}
+                          >
+                            <SquareCheckBig
+                              size={16}
+                              strokeWidth={2.25}
+                              color={theme.colors.primary}
+                            />
+                            <UIText
+                              variant="bodyStrong"
+                              tone="primary"
+                              style={{ fontWeight: "700" }}
+                            >
+                              {selecting ? "Done" : "Select"}
+                            </UIText>
+                          </Pressable>
+                        ) : null}
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={
+                            moreFilters > 0 ? `Filters, ${moreFilters} on` : "Filters"
+                          }
+                          accessibilityHint="Tags, photos or videos, photo size and order"
+                          onPress={() => setFiltersOpen(true)}
+                          hitSlop={12}
+                          style={{ flexDirection: "row", alignItems: "center", gap: 4 }}
+                        >
+                          <SlidersHorizontal
+                            size={16}
+                            strokeWidth={2.25}
+                            color={theme.colors.primary}
+                          />
+                          <UIText variant="bodyStrong" tone="primary" style={{ fontWeight: "700" }}>
+                            {moreFilters > 0 ? `Filters (${moreFilters})` : "Filters"}
+                          </UIText>
+                        </Pressable>
+                        {/* Newest or oldest first is set in Filters, as on the web. */}
+                      </View>
+                    </View>
+
+                    {/*
+                      Was a hand-rolled row of Pressables with its own chip
+                      style. The same control exists on the gallery and the
+                      task list, so it lives in the kit now and all three agree
+                      on height.
+                    */}
+                    {showPhotos ? (
+                      <View style={{ marginHorizontal: -spacing.lg, marginBottom: spacing.md }}>
+                        <ChipGroup
+                          options={FILTERS}
+                          value={filter}
+                          onChange={setFilter}
+                          label="Filter photos by phase"
+                        />
+                      </View>
+                    ) : null}
+
+                    {/*
+                      The photo tags, as the web's tag panel: tap to filter,
+                      tap again to drop it. Any or all is set in Filters.
+                    */}
+                    {showPhotos && showTags ? (
+                      <View style={{ gap: spacing.sm, marginBottom: spacing.md }}>
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                          }}
+                        >
+                          <UIText variant="overline" tone="muted">
+                            {`PHOTO TAGS · MATCH ${tagLogic === "and" ? "ALL" : "ANY"}`}
+                          </UIText>
+                          {tagFilter.length > 0 ? (
+                            <Pressable
+                              accessibilityRole="button"
+                              onPress={() => setTagFilter([])}
+                              hitSlop={12}
+                            >
+                              <UIText
+                                variant="caption"
+                                tone="primary"
+                                style={{ fontWeight: "700" }}
+                              >
+                                Clear
+                              </UIText>
+                            </Pressable>
+                          ) : null}
+                        </View>
+                        {tagCounts.length === 0 ? (
+                          <UIText variant="caption" tone="muted">
+                            None of the loaded photos are tagged yet.
+                          </UIText>
+                        ) : (
+                          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }}>
+                            {tagCounts.map(({ tag, count }) => (
+                              <Chip
+                                key={tag}
+                                label={tag}
+                                count={count}
+                                selected={tagFilter.includes(tag)}
+                                onPress={() => setTagFilter((current) => toggleTag(current, tag))}
+                              />
+                            ))}
+                          </View>
+                        )}
+                      </View>
+                    ) : null}
+
+                    {media !== "photos" && videos.length > 0 ? (
+                      <View style={{ marginBottom: spacing.md }}>
+                        <ProjectVideos videos={videos} />
+                      </View>
+                    ) : null}
+
+                    {/*
+                      Directly above the grid it was written from. The log is
+                      the prose version of these photographs, and putting it
+                      anywhere else makes it a report somebody has to go and
+                      find, which is the exact thing it exists not to be.
+                    */}
+                    {showPhotos ? (
+                      <DailyLogCard projectId={String(id)} pending={queued > 0} />
+                    ) : null}
+                  </View>
+                ) : tab === "calendar" ? (
+                  <View style={{ paddingVertical: spacing.lg, paddingHorizontal: calendarInset }}>
+                    <ProjectPhotoCalendar
+                      projectId={String(id)}
+                      width={screenWidth - calendarInset * 2}
+                      onOpenPhoto={(photo, _url, day) => {
+                        setCalendarPick(day ?? null);
+                        setLightboxId(photo.id);
+                      }}
+                    />
+                  </View>
+                ) : null}
               </View>
             }
             ListEmptyComponent={
-              photos.length === 0 ? (
+              tab !== "photos" ? null : !showPhotos ? (
+                videos.length > 0 ? null : (
+                  <EmptyState
+                    icon={Video}
+                    title="No site videos"
+                    body="Videos recorded on this job show here. Switch the filter back to see its photos."
+                    action={{ label: "Show photos", onPress: () => setMedia("all") }}
+                  />
+                )
+              ) : photos.length === 0 ? (
                 <EmptyState
                   icon={Camera}
                   title="No photos yet"
-                  body="Photos taken here upload on their own, and keep queueing when there is no signal."
-                  action={{
-                    label: "Take photos",
-                    icon: Camera,
-                    onPress: () => router.push(`/project/${id}/capture`),
-                  }}
+                  body="Tap the camera button to take the first photos. They upload on their own, and keep queueing when there is no signal."
                 />
               ) : (
                 <EmptyState
                   icon={ImageOff}
-                  title="Nothing in this phase"
+                  title={
+                    tagFilter.length > 0 ? "Nothing matches these filters" : "Nothing in this phase"
+                  }
                   body="Switch the filter above, or tag some photos as you shoot them."
-                  action={{ label: "Show all", onPress: () => setFilter("all") }}
+                  action={{
+                    label: "Show all",
+                    onPress: () => {
+                      setFilter("all");
+                      setTagFilter([]);
+                    },
+                  }}
                 />
               )
             }
             ListFooterComponent={
-              photosQuery.isFetchingNextPage ? (
+              tab === "photos" && showPhotos && photosQuery.isFetchingNextPage ? (
                 <ActivityIndicator
                   style={{ marginVertical: spacing.lg }}
                   color={theme.colors.primary}
@@ -747,13 +1185,19 @@ export default function ProjectDetailScreen() {
               <UIText
                 variant="overline"
                 tone="muted"
-                style={{ marginBottom: spacing.sm, marginTop: spacing.md }}
+                style={{
+                  marginBottom: spacing.sm,
+                  marginTop: spacing.md,
+                  paddingHorizontal: gridSide,
+                }}
               >
                 {section.title.toUpperCase()}
               </UIText>
             )}
             renderItem={({ item }) => (
-              <View style={[styles.gridRow, { marginBottom: GRID_GAP }]}>
+              <View
+                style={[styles.gridRow, { marginBottom: GRID_GAP, paddingHorizontal: gridSide }]}
+              >
                 {item.photos.map((photo) => {
                   const picked = selected.has(photo.id);
                   return (
@@ -775,28 +1219,45 @@ export default function ProjectDetailScreen() {
                           : "Opens the photo full screen"
                       }
                       accessibilityState={{ selected: picked }}
-                      style={{ width: tileSize, height: tileSize }}
+                      style={{ width: tileSize }}
                     >
-                      <PhotoThumb uri={urls[photo.id]} width="100%" height="100%" />
-                      {selecting ? (
-                        <View
-                          style={[
-                            styles.tileOverlay,
-                            {
-                              borderColor: picked ? theme.colors.primary : "transparent",
-                              // Unpicked tiles dim so the chosen ones read at a
-                              // glance across a three-column grid.
-                              backgroundColor: picked ? "transparent" : "rgba(0,0,0,0.35)",
-                            },
-                          ]}
-                        >
-                          {picked ? (
-                            <View style={styles.tileCheck}>
-                              <Icon icon={CircleCheck} size="lg" tone="inverse" />
-                            </View>
-                          ) : null}
-                        </View>
-                      ) : null}
+                      <View style={{ width: tileSize, height: tileSize }}>
+                        <PhotoThumb
+                          uri={urls[photo.id]}
+                          width="100%"
+                          height="100%"
+                          rounded={radius.lg}
+                        />
+                        {/*
+                        The web grid's corner pill: Before, After, Walkthrough
+                        or Needs review. Left off the smallest tiles, where it
+                        would cover most of the photo.
+                      */}
+                        {tileSize >= 90 ? <PhasePill phase={photo.phase} /> : null}
+                        {/* The photo's tags on the photo, as the web grid shows them. */}
+                        {tileSize >= 72 ? <ThumbTagBadge tags={photo.tags} /> : null}
+                        {selecting ? (
+                          <View
+                            style={[
+                              styles.tileOverlay,
+                              {
+                                borderColor: picked ? theme.colors.primary : "transparent",
+                                // Unpicked tiles dim so the chosen ones read at a
+                                // glance across a three-column grid.
+                                backgroundColor: picked ? "transparent" : "rgba(0,0,0,0.35)",
+                              },
+                            ]}
+                          >
+                            {picked ? (
+                              <View style={styles.tileCheck}>
+                                <Icon icon={CircleCheck} size="lg" tone="inverse" />
+                              </View>
+                            ) : null}
+                          </View>
+                        ) : null}
+                      </View>
+                      {/* The photo's note, as a caption under it (Jon, 2026-09-29). */}
+                      <TileCaption caption={photo.caption} tileWidth={tileSize} />
                     </Pressable>
                   );
                 })}
@@ -812,12 +1273,10 @@ export default function ProjectDetailScreen() {
           each other.
         */}
         {/*
-          No floating Capture button while the grid is empty.
-          The empty state already offers the action ("Take photos", or "Show
-          all" when a filter hid everything), and on device the button sat over
-          the empty state body: "tag some photos as you shoot them" ran
-          underneath it. Two controls for one intent, one of them obscuring the
-          other.
+          The Capture button stays on the right even while the grid is empty,
+          so a new job's first photo is taken from the same thumb-reach spot as
+          every other (Jon, 2026-09-27). The empty state carries no button of
+          its own, so there is still one control for the intent.
         */}
         {selecting && bulkError ? (
           <View
@@ -833,25 +1292,26 @@ export default function ProjectDetailScreen() {
           </View>
         ) : null}
 
-        {selecting ? (
+        {selected.size > 0 ? (
           <PhotoBulkBar
             count={selected.size}
             busy={busy}
             currentProjectId={id}
-            onCancel={() => setSelected(new Set())}
+            onCancel={endSelection}
             onAction={(action) => void applyBulk(action)}
           />
-        ) : filtered.length === 0 ? null : (
-          <View style={styles.fab}>
-            <Button
-              label="Capture"
-              icon={Camera}
-              size="lg"
-              onPress={() => router.push(`/project/${id}/capture`)}
-              accessibilityHint="Opens the camera for this project"
-              style={{ borderRadius: radius.pill }}
-            />
-          </View>
+        ) : selecting ? null : (
+          <ActionRail
+            actions={[
+              {
+                key: "capture",
+                icon: Camera,
+                label: "Capture",
+                hint: "Opens the camera for this project",
+                onPress: () => router.push(`/project/${id}/capture`),
+              },
+            ]}
+          />
         )}
       </View>
 
@@ -859,11 +1319,63 @@ export default function ProjectDetailScreen() {
         visible={editing}
         onClose={() => setEditing(false)}
         project={project ?? null}
+        stageName={stageName}
         onSave={(draft: ProjectDraft) => {
           setEditing(false);
-          void patchProject("details", draftToPatch(draft));
+          void patchProject(
+            "details",
+            draftToPatch(draft, { statusFromStage: Boolean(project?.pipeline_stage_id) }),
+          );
         }}
       />
+
+      <PhotoFilterSheet
+        visible={filtersOpen}
+        onClose={() => setFiltersOpen(false)}
+        showTags={showTags}
+        onShowTags={(next) => {
+          setShowTags(next);
+          if (!next) setTagFilter([]);
+        }}
+        logic={tagLogic}
+        onLogic={setTagLogic}
+        media={media}
+        onMedia={setMedia}
+        hasVideos={videos.length > 0}
+        size={photoSize}
+        onSize={setPhotoSize}
+        order={sort}
+        onOrder={setSort}
+      />
+
+      {createOpen ? (
+        <GenerateReportSheet
+          projectId={String(id)}
+          projectName={project?.name ?? ""}
+          scope="all"
+          title="Create"
+          onClose={() => setCreateOpen(false)}
+        />
+      ) : null}
+
+      <ProjectGroupSheet
+        visible={groupOpen}
+        projectId={String(id)}
+        onClose={() => setGroupOpen(false)}
+      />
+
+      {mergeOpen ? (
+        <ProjectMergeSheet
+          visible
+          projectId={String(id)}
+          projectName={project?.name ?? "this project"}
+          onClose={() => setMergeOpen(false)}
+          onMerged={(targetId) => {
+            setMergeOpen(false);
+            router.replace({ pathname: "/project/[id]", params: { id: targetId } });
+          }}
+        />
+      ) : null}
 
       <ActionSheet
         visible={actionsOpen}
@@ -871,7 +1383,32 @@ export default function ProjectDetailScreen() {
         title="Project"
         actions={[
           { label: "Edit details", icon: PenLine, onPress: () => setEditing(true) },
-          { label: "Share project", icon: Share2, onPress: () => void shareProject() },
+          {
+            label: project?.archived ? "Move out of archive" : "Move to archive",
+            icon: Archive,
+            onPress: () => void patchProject("archived", archivePatch(!project?.archived)),
+          },
+          { label: "File under a group", icon: FolderPlus, onPress: () => setGroupOpen(true) },
+          {
+            label: "Merge into another project",
+            icon: GitMerge,
+            onPress: () => setMergeOpen(true),
+          },
+          ...(mapsUrl
+            ? [
+                {
+                  label: "Open location in Maps",
+                  icon: Navigation,
+                  onPress: () => void Linking.openURL(mapsUrl),
+                },
+              ]
+            : []),
+          /*
+            The web's QR code dialog hands out this same public link: the job's
+            name, address and photos, no sign-in. The phone shares the link
+            itself, which is what a customer standing next to the tech needs.
+          */
+          { label: "Share public link", icon: Share2, onPress: () => void shareProject() },
           /*
             Only when there is something to switch off. Offering "Stop sharing"
             on a job that was never shared invites somebody to press it and
@@ -905,9 +1442,9 @@ export default function ProjectDetailScreen() {
             onPress: () => void patchProject("starred", starPatch(!project?.starred)),
           },
           {
-            label: project?.archived ? "Unarchive" : "Archive",
-            icon: Archive,
-            onPress: () => void patchProject("archived", archivePatch(!project?.archived)),
+            label: "Deleted photos",
+            icon: History,
+            onPress: () => router.push(`/project/${id}/trash`),
           },
           {
             /*
@@ -915,164 +1452,85 @@ export default function ProjectDetailScreen() {
              * a project that is no longer in the list reads as the delete
              * having failed.
              */
-            label: "Move project to trash",
+            label: "Delete this project",
             icon: Trash2,
             destructive: true,
-            onPress: () => {
-              void patchProject("deleted", trashProjectPatch());
-              router.back();
-            },
+            onPress: () =>
+              Alert.alert(
+                "Delete this project?",
+                "It goes to Trash and can be recovered for 60 days.",
+                [
+                  { text: "Cancel", style: "cancel" as const },
+                  {
+                    text: "Delete",
+                    style: "destructive" as const,
+                    onPress: () => {
+                      void patchProject("deleted", trashProjectPatch());
+                      goBack("/projects");
+                    },
+                  },
+                ],
+              ),
           },
         ]}
       />
 
-      <Modal
-        visible={Boolean(lightboxPhoto)}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setLightboxId(null)}
-      >
-        <Pressable
-          accessibilityRole="button"
-          /*
-           * Labelled, like the gallery's lightbox. Without this the scrim takes
-           * its accessible name from the caption text inside it, so a screen
-           * reader announces the photograph's caption as a button - which says
-           * nothing about what tapping does, and tapping closes the photo.
-           */
-          accessibilityLabel="Close photo"
-          style={styles.lightbox}
-          onPress={() => setLightboxId(null)}
-        >
-          {lightboxPhoto ? (
-            <>
-              <PhotoThumb
-                uri={urls[lightboxPhoto.id]}
-                width="100%"
-                height="70%"
-                contentFit="contain"
-                rounded={0}
-                showLabel
-                onDark
-              />
-              <View style={styles.lightboxActions}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Annotate this photo"
-                  onPress={() => {
-                    const photo = lightboxPhoto;
-                    setLightboxId(null);
-                    router.push({
-                      pathname: "/photo/[id]/annotate",
-                      params: {
-                        id: photo.id,
-                        uri: urls[photo.id] ?? "",
-                        projectId: String(id),
-                        caption: photo.caption ?? "",
-                        phase: photo.phase ?? "untagged",
-                      },
-                    });
-                  }}
-                  style={styles.lightboxAction}
-                >
-                  <Text style={[typography.bodyStrong, { color: "#fff" }]}>Annotate</Text>
-                </Pressable>
-
-                {/*
-                  Analyse sits next to Annotate because they are the same kind
-                  of act: both take this one photograph and add to it. It reads
-                  the equipment plate and finds visible defects, which is worth
-                  doing while still standing in front of the thing.
-                */}
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Analyse this photo"
-                  onPress={() => {
-                    const photo = lightboxPhoto;
-                    setLightboxId(null);
-                    router.push({
-                      pathname: "/photo/[id]/analysis",
-                      params: {
-                        id: photo.id,
-                        uri: urls[photo.id] ?? "",
-                        caption: photo.caption ?? "",
-                      },
-                    });
-                  }}
-                  style={styles.lightboxAction}
-                >
-                  <Text style={[typography.bodyStrong, { color: "#fff" }]}>Analyse</Text>
-                </Pressable>
-
-                {/*
-                  Comments last, because the first three change the photograph
-                  and this one talks about it. `photo_comments` has been in the
-                  database since July and the web has had a panel for it all
-                  along; the phone could not read a word of it.
-                */}
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Comment on this photo"
-                  onPress={() => {
-                    const photo = lightboxPhoto;
-                    setLightboxId(null);
-                    router.push({
-                      pathname: "/photo/[id]/comments",
-                      params: {
-                        id: photo.id,
-                        uri: urls[photo.id] ?? "",
-                        projectId: String(id),
-                        caption: photo.caption ?? "",
-                      },
-                    });
-                  }}
-                  style={styles.lightboxAction}
-                >
-                  <Text style={[typography.bodyStrong, { color: "#fff" }]}>Comments</Text>
-                </Pressable>
-
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Share this photo"
-                  onPress={() => {
-                    const photo = lightboxPhoto;
-                    setLightboxId(null);
-                    sharePhoto(photo.id, photo.caption);
-                  }}
-                  style={styles.lightboxAction}
-                >
-                  <Text style={[typography.bodyStrong, { color: "#fff" }]}>Share</Text>
-                </Pressable>
-              </View>
-
-              <View style={styles.lightboxMeta}>
-                <Text style={[typography.bodyStrong, { color: "#fff" }]} numberOfLines={2}>
-                  {displayCaption(lightboxPhoto.caption, "Photo")}
-                </Text>
-                <Text style={[typography.caption, { color: "rgba(255,255,255,0.75)" }]}>
-                  {formatPhotoDateGroup(lightboxPhoto.taken_at ?? lightboxPhoto.created_at)}
-                  {lightboxPhoto.phase ? ` · ${lightboxPhoto.phase}` : ""}
-                </Text>
-              </View>
-            </>
-          ) : null}
-        </Pressable>
-      </Modal>
-
-      {sharing ? (
-        <PhotoSharesSheet
-          visible
-          onClose={() => setSharing(null)}
-          photoId={sharing.photoId}
-          caption={sharing.caption}
-        />
-      ) : null}
+      {/*
+        The shared photo viewer: the web lightbox and its details panel, with
+        Annotate, Share, tags, description, tasks and comments on
+        the photo itself. Opens on the deep-linked photo when there is one.
+      */}
+      <PhotoViewer
+        photos={viewerPhotos}
+        urls={viewerUrls}
+        photoId={lightboxId}
+        onChangePhoto={setLightboxId}
+        onClose={() => {
+          setLightboxId(null);
+          setCalendarPick(null);
+        }}
+        projectId={String(id)}
+        onEndReached={calendarPick ? undefined : loadMore}
+        inProject
+      />
     </>
   );
 }
 
+/** The corner pill on a grid tile, in the web grid's colours. */
+function PhasePill({ phase }: { phase: string | null }) {
+  const theme = useTheme();
+  const pill = phasePill(phase);
+  const [background, color] =
+    pill.tone === "after"
+      ? [theme.colors.primary, theme.colors.primaryForeground]
+      : pill.tone === "before"
+        ? ["rgba(16, 150, 96, 0.92)", "#ffffff"]
+        : pill.tone === "walkthrough"
+          ? ["rgba(40, 36, 32, 0.8)", "#ffffff"]
+          : ["rgba(204, 240, 236, 0.95)", "#0b4f47"];
+  return (
+    <View
+      pointerEvents="none"
+      style={{
+        position: "absolute",
+        top: 6,
+        left: 6,
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: radius.pill,
+        backgroundColor: background,
+      }}
+    >
+      <UIText variant="caption" style={{ color, fontSize: 10, fontWeight: "700" }}>
+        {pill.label}
+      </UIText>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  gridRow: { flexDirection: "row", gap: GRID_GAP },
+  gridRow: { flexDirection: "row", gap: GRID_GAP, paddingHorizontal: spacing.lg },
   tile: { width: "100%", height: "100%", borderRadius: radius.sm },
   /* Sits over the whole tile so the ring reads as the tile being selected. */
   tileOverlay: {
@@ -1081,7 +1539,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    borderRadius: radius.sm,
+    borderRadius: radius.lg,
     borderWidth: 3,
     alignItems: "flex-end",
     justifyContent: "flex-start",
@@ -1091,65 +1549,4 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.45)",
     borderRadius: radius.pill,
   },
-  /*
-   * Positioning and lift only. The button itself is the kit's, so its height,
-   * radius and pressed state match every other primary action in the app.
-   */
-  fab: {
-    position: "absolute",
-    right: spacing.lg,
-    bottom: spacing.xl,
-    borderRadius: radius.pill,
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 6,
-  },
-  lightbox: { flex: 1, backgroundColor: "rgba(0,0,0,0.94)", justifyContent: "center" },
-  lightboxImage: { width: "100%", height: "78%" },
-  /*
-   * One right-anchored row, not two absolutely positioned pills.
-   *
-   * Share was originally placed with `right: spacing.xl + 150`, a number
-   * chosen to clear the word "Annotate" at the current font size. It happened
-   * to work and would have collided the first time either label changed or the
-   * OS font scale went up. A row cannot drift.
-   */
-  /*
-   * Bounded on both sides, and allowed to wrap.
-   *
-   * This was anchored to `right` only, with no left edge and no wrap, so the
-   * row grew leftwards off the screen. Three pills fitted; the fourth did not.
-   * Measured on a 1080px screen: Annotate ended at 1008, Analyse at 644,
-   * Comments at 0 - already flush against the left edge - which put Share at a
-   * negative x and made it unreachable. Not clipped visually and still in the
-   * layout, so it drew nothing, took no taps, and merged into the parent
-   * accessibility node, where the only trace of it was a screen-wide element
-   * labelled "Share this photo, Photo, Jul 17 . before".
-   *
-   * It went unnoticed because Share was the newest of the four and the row had
-   * fitted the previous three, so nothing about adding one more looked risky.
-   * With `left` set the row has a width to wrap inside, so a fifth action, a
-   * longer word, or a larger font size pushes a line down instead of off.
-   */
-  lightboxActions: {
-    position: "absolute",
-    top: 56,
-    left: spacing.xl,
-    right: spacing.xl,
-    flexDirection: "row-reverse",
-    flexWrap: "wrap",
-    justifyContent: "flex-start",
-    gap: spacing.sm,
-  },
-  lightboxAction: {
-    backgroundColor: "rgba(255,255,255,0.18)",
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-    minHeight: HIT_TARGET,
-    justifyContent: "center",
-  },
-  lightboxMeta: { position: "absolute", bottom: 56, left: spacing.xl, right: spacing.xl, gap: 4 },
 });

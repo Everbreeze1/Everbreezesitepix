@@ -3,7 +3,23 @@ import { chatEndpoint } from "../../lib/ai-provider";
 import { inlineRecordingAsBase64 } from "../../lib/inline-recording";
 import { getSupabaseAdmin } from "../../lib/supabase";
 import type { AuthedContext } from "../../lib/user-context";
-import { summarizePhotosReportService, transcribeAudio } from "../ai/service";
+import { summarizePhotosReportService, transcribeAudioTimed } from "../ai/service";
+import {
+  bufferSource,
+  extractAdtsPieces,
+  findAacTrack,
+  rangeSource,
+  type AdtsPiece,
+} from "../../lib/mp4-audio";
+import {
+  captionAround,
+  isPlaceholderCaption,
+  segmentsFromLines,
+  storedSegments,
+  transcriptFromSegments,
+  untimedSegments,
+  type TimedSegment,
+} from "./captions";
 import { assertAutoReportAllowed, releaseAutoReport, reserveAutoReport } from "./auto-report-quota";
 import { generateSummaryForWalkthroughService } from "./summaries";
 import {
@@ -1114,6 +1130,15 @@ export async function saveWalkthroughPhotoService(ctx: AuthedContext, data: any)
     photoId,
     position: data.position,
   });
+  await captionLateWalkthroughPhoto(data.walkthroughId, photoId, data.offsetSeconds ?? 0).catch(
+    (e) => {
+      console.warn("[walkthrough] late photo caption skipped", {
+        walkthroughId: data.walkthroughId,
+        photoId,
+        message: (e as Error)?.message,
+      });
+    },
+  );
   return { photoId };
 }
 
@@ -1652,6 +1677,252 @@ function estimateSpokenNote(
 }
 
 /**
+ * Seconds of narration sent per transcription call. Short enough that a piece
+ * is about a megabyte and the model's timestamps cannot drift far, long enough
+ * that a ten minute walk is ten calls.
+ */
+const TRANSCRIBE_PIECE_SECONDS = 60;
+/** Pieces transcribed at once. */
+const TRANSCRIBE_CONCURRENCY = 3;
+/** Over HTTP, join audio reads separated by less video than this. */
+const RANGE_MERGE_GAP_BYTES = 256 * 1024;
+
+/**
+ * Transcribe AAC pieces of one recording and put every line on the
+ * recording's clock.
+ *
+ * A piece that fails costs its own minute, not the walk: the others are kept,
+ * and only when every piece fails is the first error thrown.
+ */
+async function transcribePieces(pieces: AdtsPiece[]): Promise<TimedSegment[]> {
+  const results: Array<TimedSegment[] | null> = new Array(pieces.length).fill(null);
+  let firstError: unknown = null;
+  let next = 0;
+  async function worker() {
+    while (next < pieces.length) {
+      const index = next;
+      next += 1;
+      const piece = pieces[index];
+      try {
+        const lines = await transcribeAudioTimed(
+          Buffer.from(piece.bytes).toString("base64"),
+          "aac",
+          piece.durationSeconds,
+        );
+        results[index] = segmentsFromLines(
+          lines,
+          piece.startSeconds,
+          piece.startSeconds + piece.durationSeconds,
+        );
+      } catch (e) {
+        firstError ??= e;
+        console.error("[walkthrough] transcription piece failed", {
+          index,
+          startSeconds: Math.round(piece.startSeconds),
+          message: (e as Error)?.message,
+        });
+      }
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(TRANSCRIBE_CONCURRENCY, pieces.length) }, worker),
+  );
+  if (results.every((r) => r === null) && firstError) throw firstError;
+  return results.flatMap((r) => r ?? []);
+}
+
+/**
+ * Transcribe recording bytes already in memory: the AAC track when the bytes
+ * are an MP4 or QuickTime file, otherwise the bytes as they are (the web
+ * recorder's WAV sidecar).
+ */
+async function transcribeBytes(
+  bytes: Uint8Array,
+  mimeType: string,
+  durationSeconds: number,
+): Promise<TimedSegment[]> {
+  const source = bufferSource(bytes);
+  const track = await findAacTrack(source).catch(() => null);
+  if (track) {
+    const pieces = await extractAdtsPieces(source, track, {
+      pieceSeconds: TRANSCRIBE_PIECE_SECONDS,
+    });
+    if (!pieces.length) {
+      throw Object.assign(new Error("That recording had no audio in it."), { status: 400 });
+    }
+    return transcribePieces(pieces);
+  }
+  const lines = await transcribeAudioTimed(
+    Buffer.from(bytes).toString("base64"),
+    audioFormatForMime(mimeType),
+    durationSeconds || undefined,
+  );
+  const end = durationSeconds > 0 ? durationSeconds : (lines[lines.length - 1]?.start ?? 0) + 10;
+  return segmentsFromLines(lines, 0, end);
+}
+
+/**
+ * Transcribe a stored recording by URL.
+ *
+ * THE ROOT CAUSE THIS FIXES. The phone's recording is a video file, and it was
+ * sent whole to the model as `input_audio` with format "mp4". A 10 to 20
+ * Mbit/s video passes the 12 MB inline cap only for the first few seconds, so
+ * a real walk was refused as "too long"; and a video container is not an
+ * audio format the endpoint reads, so what did get through came back empty
+ * ("If nobody speaks, output nothing"). The narration was always in the file,
+ * which is why it can be heard on playback.
+ *
+ * Now only the file's index and its AAC sound track are downloaded, over range
+ * requests, and sent as ADTS audio a minute at a time with timestamps. Anything
+ * that is not an MP4 with an AAC track, or a store that ignores ranges, takes
+ * the old whole-file path with its size cap.
+ */
+async function transcribeRecording(
+  signedUrl: string,
+  mimeType: string,
+  durationSeconds: number,
+): Promise<TimedSegment[]> {
+  let pieces: AdtsPiece[] | null = null;
+  try {
+    const source = await rangeSource(signedUrl);
+    const track = source ? await findAacTrack(source) : null;
+    if (source && track) {
+      pieces = await extractAdtsPieces(source, track, {
+        pieceSeconds: TRANSCRIBE_PIECE_SECONDS,
+        mergeGap: RANGE_MERGE_GAP_BYTES,
+      });
+    }
+  } catch (e) {
+    throw Object.assign(e as Error, { status: 400 });
+  }
+  if (pieces) {
+    if (!pieces.length) {
+      throw Object.assign(new Error("That recording had no audio in it."), { status: 400 });
+    }
+    return transcribePieces(pieces);
+  }
+
+  let audioBase64: string;
+  try {
+    audioBase64 = await inlineRecordingAsBase64(signedUrl);
+  } catch (e) {
+    // Readable sentences already; keep them and mark them as the client's
+    // problem rather than a server fault.
+    throw Object.assign(e as Error, { status: 400 });
+  }
+  return transcribeBytes(Buffer.from(audioBase64, "base64"), mimeType, durationSeconds);
+}
+
+/**
+ * Keep the timed segments beside the narration, so a photo that lands after
+ * the transcript (queued on a phone with no signal) is captioned by time too.
+ * Best effort: a database without `narration_json` loses only that.
+ */
+async function saveTranscriptSegments(walkthroughId: string, segments: TimedSegment[]) {
+  const supabaseAdmin = getSupabaseAdmin();
+  const { data, error } = await supabaseAdmin
+    .from("walkthroughs" as any)
+    .select("narration_json")
+    .eq("id", walkthroughId)
+    .maybeSingle();
+  if (error) return;
+  const current = (data as any)?.narration_json;
+  const base = current && typeof current === "object" && !Array.isArray(current) ? current : {};
+  const rounded = segments.map((s) => ({
+    start: Math.round(s.start * 10) / 10,
+    end: Math.round(s.end * 10) / 10,
+    text: s.text,
+  }));
+  const { error: saveErr } = await supabaseAdmin
+    .from("walkthroughs" as any)
+    .update({ narration_json: { ...base, transcriptSegments: rounded } } as any)
+    .eq("id", walkthroughId);
+  if (saveErr) {
+    console.warn("[walkthrough] could not keep transcript timing", {
+      walkthroughId,
+      message: saveErr.message,
+    });
+  }
+}
+
+/**
+ * Write transcript captions onto walkthrough photos, but only over a
+ * recorder's placeholder ("Walkthrough +42s", "walkthrough-1755....jpg") or an
+ * empty caption. A caption somebody typed is theirs and is never replaced.
+ */
+async function captionPhotosFromTranscript(
+  entries: Array<{ photoId: string; caption: string | null }>,
+) {
+  const wanted = entries.filter((e) => e.caption && e.caption.trim());
+  if (!wanted.length) return;
+  const supabaseAdmin = getSupabaseAdmin();
+  const { data: photos, error } = await supabaseAdmin
+    .from("photos")
+    .select("id, caption")
+    .in(
+      "id",
+      wanted.map((e) => e.photoId),
+    );
+  if (error) {
+    console.warn("[walkthrough] could not read photo captions", { message: error.message });
+    return;
+  }
+  const current = new Map(
+    ((photos as any[]) ?? []).map((p) => [p.id as string, p.caption as string | null]),
+  );
+  await Promise.all(
+    wanted.map((e) => {
+      if (!current.has(e.photoId) || !isPlaceholderCaption(current.get(e.photoId))) {
+        return Promise.resolve(null);
+      }
+      return supabaseAdmin
+        .from("photos")
+        .update({ caption: e.caption } as any)
+        .eq("id", e.photoId);
+    }),
+  );
+}
+
+/**
+ * Caption a photo that arrived after its walkthrough was transcribed.
+ *
+ * The phone queues walkthrough snaps in its outbox, so on a weak signal the
+ * transcript can land first. Without this those photos would keep their
+ * placeholder caption for good.
+ */
+async function captionLateWalkthroughPhoto(
+  walkthroughId: string,
+  photoId: string,
+  offsetSeconds: number,
+) {
+  const supabaseAdmin = getSupabaseAdmin();
+  const { data: walk } = await supabaseAdmin
+    .from("walkthroughs" as any)
+    .select("transcript, duration_seconds")
+    .eq("id", walkthroughId)
+    .maybeSingle();
+  const transcript = ((walk as any)?.transcript ?? "").trim();
+  if (!transcript) return;
+  const { data: timing } = await supabaseAdmin
+    .from("walkthroughs" as any)
+    .select("narration_json")
+    .eq("id", walkthroughId)
+    .maybeSingle();
+  const segments =
+    storedSegments((timing as any)?.narration_json) ??
+    untimedSegments(transcript, Number((walk as any)?.duration_seconds ?? 0));
+  const caption = captionAround(segments, offsetSeconds);
+  if (!caption) return;
+  await supabaseAdmin
+    .from("walkthrough_photos" as any)
+    .update({ spoken_note: caption } as any)
+    .eq("walkthrough_id", walkthroughId)
+    .eq("photo_id", photoId)
+    .is("spoken_note", null);
+  await captionPhotosFromTranscript([{ photoId, caption }]);
+}
+
+/**
  * Either the bytes, or where to find them.
  *
  * The web recorder holds the MediaRecorder blob in the page and sends
@@ -1711,13 +1982,14 @@ export async function transcribeWalkthroughService(
     base64Chars: data.audioBase64?.length ?? 0,
   });
 
+  const durationSeconds = Number((walk as any).duration_seconds ?? 0) || 0;
+
   /*
-   * Resolve the recording to base64 whichever way it arrived. The storage path
-   * is signed with the admin client and read here, so the caller never has to
-   * hold the bytes; `inlineRecordingAsBase64` applies the size cap and the
-   * "no audio in it" floor.
+   * Resolve the recording to timed transcript segments whichever way it
+   * arrived. See `transcribeRecording` for why a phone's video is not sent as
+   * it is.
    */
-  let audioBase64: string;
+  let segments: TimedSegment[];
   if (data.storagePath) {
     const bucket = data.bucket ?? "site-videos";
     const { data: signed, error: signErr } = await supabaseAdmin.storage
@@ -1728,33 +2000,28 @@ export async function transcribeWalkthroughService(
         status: 404,
       });
     }
-    try {
-      audioBase64 = await inlineRecordingAsBase64(signed.signedUrl);
-    } catch (e) {
-      // Readable sentences already; keep them and mark them as the client's
-      // problem rather than a server fault.
-      throw Object.assign(e as Error, { status: 400 });
-    }
+    segments = await transcribeRecording(signed.signedUrl, data.mimeType, durationSeconds);
   } else {
-    audioBase64 = data.audioBase64 as string;
-    const bytes = Buffer.from(audioBase64, "base64");
+    const bytes = Buffer.from(data.audioBase64 as string, "base64");
     if (bytes.byteLength < 2048)
       throw Object.assign(new Error("That recording had no audio in it."), { status: 400 });
+    segments = await transcribeBytes(bytes, data.mimeType, durationSeconds);
   }
 
-  /*
-   * Audio understanding on the chat endpoint - NOT a Whisper-style transcribe
-   * endpoint, which Gemini does not have. The old code POSTed to
-   * /openai/audio/transcriptions, an endpoint that answers nothing (HTTP 000),
-   * so this call had never once returned a transcript in production. See
-   * transcribeAudio for the whole story.
-   */
-  const transcript = (await transcribeAudio(audioBase64, audioFormatForMime(data.mimeType)))
-    .replace(/\s+/g, " ")
-    .trim();
+  const transcript = normalizeDashesTrimmed(transcriptFromSegments(segments));
   const finalTranscript = transcript || ((walk as any).transcript ?? "").trim();
+  console.log("[walkthrough] server transcription finished", {
+    walkthroughId: data.walkthroughId,
+    segments: segments.length,
+    transcriptChars: transcript.length,
+  });
 
   if (finalTranscript) {
+    // Timed segments when this run produced them; otherwise the whole of an
+    // earlier transcript, spread across the recording.
+    const timing = segments.length ? segments : untimedSegments(finalTranscript, durationSeconds);
+    if (segments.length) await saveTranscriptSegments(data.walkthroughId, segments);
+
     const { data: links, error: linkErr } = await supabaseAdmin
       .from("walkthrough_photos" as any)
       .select("photo_id, offset_seconds, position, spoken_note")
@@ -1767,14 +2034,17 @@ export async function transcribeWalkthroughService(
       const existing = row.spoken_note?.trim();
       const note =
         existing ||
-        estimateSpokenNote(
-          finalTranscript,
-          row.offset_seconds ?? 0,
-          rows[i + 1]?.offset_seconds ?? null,
-          (walk as any).duration_seconds ?? 0,
-          i,
-          rows.length,
-        );
+        captionAround(timing, Number(row.offset_seconds ?? 0)) ||
+        (segments.length
+          ? null
+          : estimateSpokenNote(
+              finalTranscript,
+              row.offset_seconds ?? 0,
+              rows[i + 1]?.offset_seconds ?? null,
+              durationSeconds,
+              i,
+              rows.length,
+            ));
       return { ...row, spoken_note: note };
     });
     await Promise.all(
@@ -1787,10 +2057,16 @@ export async function transcribeWalkthroughService(
           .eq("photo_id", row.photo_id);
       }),
     );
+    await captionPhotosFromTranscript(
+      rows.map((row) => ({
+        photoId: row.photo_id,
+        caption: captionAround(timing, Number(row.offset_seconds ?? 0)),
+      })),
+    );
     const transcriptFallbackMarkdown = buildFallbackWalkthroughMarkdown({
       title: (walk as any).title,
       transcript: finalTranscript,
-      durationSeconds: (walk as any).duration_seconds ?? 0,
+      durationSeconds,
       links: rowsWithNotes,
     });
     await supabaseAdmin
@@ -1807,11 +2083,6 @@ export async function transcribeWalkthroughService(
       photos: rowsWithNotes.length,
       transcriptChars: finalTranscript.length,
     });
-  } else if (transcript) {
-    await supabaseAdmin
-      .from("walkthroughs" as any)
-      .update({ transcript })
-      .eq("id", data.walkthroughId);
   }
 
   return { transcript: finalTranscript };

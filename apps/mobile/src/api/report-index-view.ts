@@ -1,0 +1,280 @@
+/**
+ * The workspace's reports as one list, as rules.
+ *
+ * Import-free so it can be tested. Reports live in two tables, the same split
+ * the web's `/reports` page lists across: the older builder (`project_reports`,
+ * photos plus a written summary) and report pages (`project_pages` filed under
+ * Reports, which is what the whole-job report and report templates produce).
+ * The phone lists both, so a report written on the web is not missing here.
+ *
+ * Neither table has a review or sign-off state. What the data does say is
+ * whether a built report has a write-up yet, and whether its public link is
+ * live, so the sections and pills are drawn from exactly that and nothing
+ * more: "Draft" is a built report with no summary, "Shared" is a live link,
+ * "Link off" is a revoked one.
+ */
+
+export type ReportIndexStatus = "draft" | "shared" | "link_off";
+
+export type ReportIndexItem = {
+  kind: "report" | "page";
+  id: string;
+  projectId: string;
+  projectName: string | null;
+  title: string;
+  updatedAt: string;
+  status: ReportIndexStatus;
+  /** The write-up as one plain line for the card, or null. Built reports only. */
+  excerpt?: string | null;
+  /**
+   * The public link's token and switch, so the row's menu can copy the link
+   * or turn it off without opening the report first.
+   */
+  shareToken?: string | null;
+  revokedAt?: string | null;
+};
+
+/**
+ * A write-up as plain text for a list row.
+ *
+ * Summaries can carry markup the model or the editor left in: HTML comments
+ * such as `<!-- wid:90cce78e-... -->` that mark which walkthrough wrote them,
+ * and tags. The web Reports list printed those raw; this strips them, and
+ * decodes the few entities an editor writes, so the row reads as a sentence.
+ */
+export function reportExcerpt(summary: string | null | undefined, max = 180): string | null {
+  if (!summary) return null;
+  const text = summary
+    .replace(/<!--[\s\S]*?(-->|$)/g, " ")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/[#*_`>]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!text) return null;
+  return text.length > max ? `${text.slice(0, max - 1).trimEnd()}\u2026` : text;
+}
+
+/** A `project_reports` row, as much of it as the index needs. */
+export type BuiltReportInput = {
+  id: string;
+  project_id: string;
+  title: string;
+  summary: string | null;
+  share_token: string | null;
+  revoked_at: string | null;
+  updated_at: string;
+};
+
+/** A row from `listReportPages`, which answers in camelCase. */
+export type ReportPageInput = {
+  id: string;
+  projectId: string;
+  projectName: string | null;
+  title: string;
+  updatedAt: string;
+  shareToken: string | null;
+  revokedAt: string | null;
+};
+
+/**
+ * Status of a built report.
+ *
+ * Draft first: a report with no write-up is not finished whatever its link
+ * says, and every report's link is live from the moment it exists
+ * (`share_token` defaults on insert), so "shared" alone would call every blank
+ * report sent.
+ */
+export function builtReportStatus(
+  report: Pick<BuiltReportInput, "summary" | "share_token" | "revoked_at">,
+): ReportIndexStatus {
+  if (!report.summary?.trim()) return "draft";
+  return report.share_token && !report.revoked_at ? "shared" : "link_off";
+}
+
+/** Both tables folded into one list, newest change first. */
+export function mergeReportIndex(
+  built: BuiltReportInput[],
+  pages: ReportPageInput[],
+  projectNames: ReadonlyMap<string, string | null>,
+): ReportIndexItem[] {
+  const items: ReportIndexItem[] = [
+    ...built.map((report) => ({
+      kind: "report" as const,
+      id: report.id,
+      projectId: report.project_id,
+      projectName: projectNames.get(report.project_id) ?? null,
+      title: report.title,
+      updatedAt: report.updated_at,
+      status: builtReportStatus(report),
+      excerpt: reportExcerpt(report.summary),
+      shareToken: report.share_token,
+      revokedAt: report.revoked_at,
+    })),
+    ...pages.map((page) => ({
+      kind: "page" as const,
+      id: page.id,
+      projectId: page.projectId,
+      projectName: page.projectName,
+      title: page.title,
+      updatedAt: page.updatedAt,
+      status: (page.shareToken && !page.revokedAt ? "shared" : "link_off") as ReportIndexStatus,
+      shareToken: page.shareToken,
+      revokedAt: page.revokedAt,
+    })),
+  ];
+  return items.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+}
+
+export type ReportIndexSection = { key: string; title: string; items: ReportIndexItem[] };
+
+/**
+ * Drafts first, then this week's, then the rest.
+ *
+ * Drafts lead because they are the ones somebody still has to do something
+ * with; the rest is a record. "This week" is a rolling seven days rather than
+ * since Monday, so a report finished on Friday does not vanish into "Earlier"
+ * over the weekend. Empty sections are dropped rather than drawn as a heading
+ * with nothing under it.
+ */
+export function groupReportIndex(
+  items: ReportIndexItem[],
+  now: Date = new Date(),
+): ReportIndexSection[] {
+  const weekAgo = now.getTime() - 7 * 24 * 60 * 60 * 1000;
+  const drafts = items.filter((item) => item.status === "draft");
+  const rest = items.filter((item) => item.status !== "draft");
+  const recent = rest.filter((item) => Date.parse(item.updatedAt) >= weekAgo);
+  const earlier = rest.filter((item) => !(Date.parse(item.updatedAt) >= weekAgo));
+  return [
+    { key: "drafts", title: "Needs a write-up", items: drafts },
+    { key: "week", title: "Updated this week", items: recent },
+    { key: "earlier", title: "Earlier", items: earlier },
+  ].filter((section) => section.items.length > 0);
+}
+
+/** The pill's words. Short states only: a badge truncates to one line. */
+export function reportStatusLabel(status: ReportIndexStatus): string {
+  return status === "draft" ? "Draft" : status === "shared" ? "Shared" : "Link off";
+}
+
+/**
+ * The line under a report's title: the job, then when it last changed.
+ *
+ * "today" and "yesterday" in words, as the design has them, and a short date
+ * after that. Local time, because the person reading it is where the work is.
+ */
+export function reportIndexSubtitle(
+  item: Pick<ReportIndexItem, "projectName" | "updatedAt" | "status">,
+  now: Date = new Date(),
+): string {
+  const at = new Date(item.updatedAt);
+  const parts: string[] = [];
+  if (item.projectName?.trim()) parts.push(item.projectName.trim());
+  if (!Number.isNaN(at.getTime())) {
+    const day = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    const diff = Math.round((day(now) - day(at)) / (24 * 60 * 60 * 1000));
+    const when =
+      diff === 0
+        ? "today"
+        : diff === 1
+          ? "yesterday"
+          : at.toLocaleDateString(undefined, {
+              month: "short",
+              day: "numeric",
+              ...(at.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }),
+            });
+    parts.push(item.status === "draft" && diff <= 1 ? `drafted ${when}` : when);
+  }
+  return parts.join(" · ");
+}
+
+/**
+ * Narrow the list to a search, as the web's Reports page does: by title or
+ * job name, case-insensitive, every word must match somewhere.
+ */
+export function searchReportIndex(items: ReportIndexItem[], query: string): ReportIndexItem[] {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return items;
+  return items.filter((item) => {
+    const haystack = `${item.title} ${item.projectName ?? ""}`.toLowerCase();
+    return words.every((word) => haystack.includes(word));
+  });
+}
+
+/** One job's report pages, from the workspace-wide `listReportPages` answer. */
+export function pagesForProject(pages: ReportPageInput[], projectId: string): ReportIndexItem[] {
+  return mergeReportIndex(
+    [],
+    pages.filter((page) => page.projectId === projectId),
+    new Map(),
+  );
+}
+
+/** A report row as the thumbnail and blueprint lookups read it. */
+export type ReportCardSource = {
+  id: string;
+  project_id: string;
+  cover_photo_ids?: unknown;
+  source_template?: string | null;
+};
+
+/** A `project_report_sections` row, as much as the thumbnail lookup needs. */
+export type ReportSectionPhotos = { report_id: string; position: number; photos: unknown };
+
+/**
+ * Which photo stands for each report in the list, as the web picks it: the
+ * first cover photo, else the first photo of the earliest section that has
+ * one. A report with neither gets no entry, and the card draws its icon.
+ */
+export function reportThumbPhotoIds(
+  reports: ReportCardSource[],
+  sections: ReportSectionPhotos[],
+): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const report of reports) {
+    const cover = Array.isArray(report.cover_photo_ids) ? report.cover_photo_ids : [];
+    const first = cover.find((id): id is string => typeof id === "string" && id.length > 0);
+    if (first) out.set(report.id, first);
+  }
+  const ordered = [...sections].sort((a, b) => a.position - b.position);
+  for (const section of ordered) {
+    if (out.has(section.report_id)) continue;
+    const photos = Array.isArray(section.photos) ? section.photos : [];
+    const head = photos[0] as { photo_id?: unknown } | undefined;
+    if (head && typeof head.photo_id === "string" && head.photo_id) {
+      out.set(section.report_id, head.photo_id);
+    }
+  }
+  return out;
+}
+
+/** `listBlueprintItemSources`' answer: project, then source template, then blueprint. */
+export type BlueprintSources = Record<
+  string,
+  Record<string, { blueprintId: string | null; blueprintName: string | null }>
+>;
+
+/**
+ * The blueprint chip for each report, by report id.
+ *
+ * Only reports a blueprint actually produced get one. A report somebody built
+ * by hand has no `source_template`, and no chip is the right rendering for it.
+ */
+export function reportBlueprintNames(
+  reports: ReportCardSource[],
+  sources: BlueprintSources,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const report of reports) {
+    if (!report.source_template) continue;
+    const name = sources[report.project_id]?.[report.source_template]?.blueprintName?.trim();
+    if (name) out[report.id] = name;
+  }
+  return out;
+}

@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
-import { Alert, View } from "react-native";
-import { router, Stack, useLocalSearchParams } from "expo-router";
+import { ActionRail } from "@/components/ActionRail";
+import { Alert, RefreshControl, ScrollView, View } from "react-native";
+import { router, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { relativeTime, titleWithinProject } from "@everlumen/shared";
 import {
@@ -12,7 +13,7 @@ import {
   listDocumentTree,
   moveDocument,
   renameDocumentFolder,
-  type DocumentFolder,
+  type DocumentFile,
   type DocumentPage,
 } from "@/api/pages";
 import { getProject } from "@/api/projects";
@@ -25,35 +26,47 @@ import {
   moveTargets,
   type FolderGroup,
 } from "@/api/folders-view";
+import { ProjectSubPageHeader } from "@/components/ProjectSubPageHeader";
 import { TemplatePickerSheet } from "@/ui/TemplatePickerSheet";
-import { spacing } from "@/theme";
+import { spacing, useTheme } from "@/theme";
 import {
   Copy,
   FileText,
   FolderInput,
   FolderPlus,
+  Folders,
   LayoutTemplate,
   Paperclip,
   PenLine,
   Plus,
+  RefreshCw,
   Trash2,
 } from "@/ui/icons";
 import {
-  Badge,
+  ActionSheet,
   Button,
   ButtonRow,
+  Card,
+  CardGrid,
   EmptyState,
   ErrorState,
   Field,
-  IconButton,
-  ListGroup,
-  ListRow,
-  RowDivider,
-  Screen,
-  SectionHeader,
+  Icon,
+  ItemCard,
+  KebabButton,
   SkeletonList,
+  StatusChip,
   Text,
+  useCardPage,
+  type SheetAction,
 } from "@/ui";
+
+/** Which kebab is open: the page's own, or one document's, file's or folder's. */
+type MenuTarget =
+  | { kind: "screen" }
+  | { kind: "page"; page: DocumentPage }
+  | { kind: "file"; file: DocumentFile }
+  | { kind: "folder"; group: FolderGroup };
 
 /**
  * A project's documents.
@@ -65,6 +78,9 @@ import {
  * documents is worse than one that says "6 files, open them on the web".
  */
 export default function ProjectDocumentsScreen() {
+  const theme = useTheme();
+  const { inset } = useCardPage();
+  const [menu, setMenu] = useState<MenuTarget | null>(null);
   const { id } = useLocalSearchParams<{ id: string }>();
   const queryClient = useQueryClient();
   const [failure, setFailure] = useState<string | null>(null);
@@ -93,23 +109,13 @@ export default function ProjectDocumentsScreen() {
   });
 
   const tree = query.data;
-  const pages = tree?.pages ?? [];
-  const files = tree?.files ?? [];
-
-  /**
-   * Folder name by id, so a page can say where it lives without a second read.
-   *
-   * The `?? []` lives inside the memo rather than above it: a fresh array
-   * literal per render changes the memo's dependency identity every time, which
-   * rebuilds the map on every keystroke anywhere on the screen.
+  /*
+   * Memoised on the tree so `?? []` does not mint a new array each render and
+   * rebuild the grouping below on every keystroke in a folder name field.
    */
-  const folderName = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const folder of query.data?.folders ?? []) map.set(folder.id, folder.name);
-    return map;
-  }, [query.data]);
-
-  const folders = tree?.folders ?? [];
+  const pages = useMemo(() => tree?.pages ?? [], [tree]);
+  const files = useMemo(() => tree?.files ?? [], [tree]);
+  const folders = useMemo(() => tree?.folders ?? [], [tree]);
 
   /**
    * Documents arranged under their folders.
@@ -305,95 +311,181 @@ export default function ProjectDocumentsScreen() {
     [remove],
   );
 
+  const summary =
+    pages.length + files.length === 0
+      ? null
+      : [
+          `${pages.length} page${pages.length === 1 ? "" : "s"}`,
+          files.length > 0 ? `${files.length} file${files.length === 1 ? "" : "s"}` : null,
+          folders.length > 0 ? `${folders.length} folder${folders.length === 1 ? "" : "s"}` : null,
+        ]
+          .filter(Boolean)
+          .join(" · ");
+
+  const openPage = (pageId: string) =>
+    router.push({ pathname: "/page/[pageId]", params: { pageId } });
+
+  /** The sheet behind whichever kebab was tapped: the page's, a file's or a folder's. */
+  const menuActions: SheetAction[] =
+    menu?.kind === "page"
+      ? [
+          {
+            label: "Move to a folder",
+            icon: FolderInput,
+            onPress: () => promptMove("page", menu.page.id, menu.page.folderId, menu.page.title),
+          },
+          { label: "Make a copy", icon: Copy, onPress: () => confirmDuplicate(menu.page) },
+          {
+            label: "Delete this page",
+            icon: Trash2,
+            destructive: true,
+            onPress: () => confirmDelete(menu.page),
+          },
+        ]
+      : menu?.kind === "file"
+        ? [
+            {
+              label: "Move to a folder",
+              icon: FolderInput,
+              onPress: () =>
+                promptMove("file", menu.file.id, menu.file.folderId, menu.file.fileName),
+            },
+          ]
+        : menu?.kind === "folder"
+          ? [
+              {
+                label: "Rename",
+                icon: PenLine,
+                onPress: () => startRename(menu.group.id!, menu.group.name),
+              },
+              {
+                label: "Delete folder",
+                icon: Trash2,
+                destructive: true,
+                onPress: () => confirmDeleteFolder(menu.group),
+              },
+            ]
+          : [
+              {
+                label: "Start from a template",
+                icon: LayoutTemplate,
+                onPress: () => setTemplatePicker(true),
+              },
+              { label: "New folder", icon: FolderPlus, onPress: startNewFolder },
+              { label: "Refresh", icon: RefreshCw, onPress: () => void query.refetch() },
+            ];
+
+  const menuTitle =
+    menu?.kind === "page"
+      ? titleWithinProject(menu.page.title, projectQuery.data?.name)
+      : menu?.kind === "file"
+        ? menu.file.fileName
+        : menu?.kind === "folder"
+          ? menu.group.name
+          : "Documents";
+
   return (
     <>
-      <Stack.Screen
-        options={{
-          title: "Documents",
-          /*
-           * In the header, not under the list. The action's reach must not
-           * shrink as the list grows: below the rows, the cost of creating one
-           * more rises with how many you already have.
-           *
-           * "New page" is the frequent one and takes the header. "New folder"
-           * stays below, because filing is something you do once a job rather
-           * than every visit, and it opens an inline field that needs the room.
-           */
-          headerRight: () => (
-            <View style={{ flexDirection: "row", alignItems: "center" }}>
+      <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+        <ProjectSubPageHeader
+          projectId={id}
+          title="Documents"
+          summary={summary}
+          actions={<KebabButton onPress={() => setMenu({ kind: "screen" })} />}
+        />
+
+        <ScrollView
+          contentContainerStyle={{
+            paddingHorizontal: inset,
+            paddingTop: spacing.lg,
+            // Room for the floating New page button.
+            paddingBottom: 120,
+            gap: spacing.md,
+            flexGrow: 1,
+          }}
+          keyboardShouldPersistTaps="handled"
+          refreshControl={
+            <RefreshControl
+              refreshing={query.isRefetching}
+              onRefresh={() => void query.refetch()}
+              tintColor={theme.colors.mutedForeground}
+              colors={[theme.colors.primary]}
+            />
+          }
+        >
+          {failure ? (
+            <Text variant="caption" tone="destructive">
+              {failure}
+            </Text>
+          ) : null}
+
+          {/*
+            Making a folder opens a field here, at the top where the kebab that
+            asked for it is, rather than under a list it would scroll away with.
+          */}
+          {newFolder !== null ? (
+            <Card>
+              <View style={{ gap: spacing.sm }}>
+                <Field
+                  label="New folder"
+                  value={newFolder}
+                  onChangeText={setNewFolder}
+                  placeholder="Certificates"
+                />
+                <ButtonRow>
+                  <Button
+                    label="Cancel"
+                    variant="secondary"
+                    size="sm"
+                    onPress={() => setNewFolder(null)}
+                  />
+                  <Button
+                    label={addFolder.isPending ? "Making" : "Make folder"}
+                    size="sm"
+                    disabled={addFolder.isPending}
+                    onPress={saveNewFolder}
+                  />
+                </ButtonRow>
+              </View>
+            </Card>
+          ) : null}
+
+          {query.isLoading ? (
+            <SkeletonList rows={5} />
+          ) : query.error ? (
+            <ErrorState
+              title="Could not load documents"
+              message={query.error instanceof Error ? query.error.message : undefined}
+              onRetry={() => void query.refetch()}
+            />
+          ) : pages.length === 0 && files.length === 0 ? (
+            <EmptyState
+              icon={FileText}
+              title="No documents yet"
+              body="A page is the write-up that stays with the job: a method statement, a handover note, a running site diary you add to as you go."
+              action={{ label: "New page", onPress: () => create.mutate(), icon: Plus }}
+              secondaryAction={{
+                label: "Start from a template",
+                onPress: () => setTemplatePicker(true),
+              }}
+            />
+          ) : (
+            <>
               {/*
-                Two actions rather than one that opens a chooser. Starting a
-                blank page is the frequent one and must stay a single tap;
-                starting from a template is the deliberate one, and it is what
-                somebody standing on site reaches for when the job needs a
-                handover certificate rather than a note.
+                Grouped by folder rather than one flat list.
+
+                `groupByFolder` decides the arrangement and is tested in
+                `folders-view.ts`: the top level always exists, an empty
+                folder still shows (otherwise making one looks like it
+                failed), and a document whose folder was deleted falls back to
+                the top rather than disappearing off the only screen it could
+                be filed from again.
               */}
-              <IconButton
-                icon={LayoutTemplate}
-                accessibilityLabel="Start from a template"
-                surface={false}
-                tone="primary"
-                onPress={() => setTemplatePicker(true)}
-              />
-              <IconButton
-                icon={Plus}
-                accessibilityLabel="New page"
-                surface={false}
-                tone="primary"
-                disabled={create.isPending}
-                onPress={() => create.mutate()}
-              />
-            </View>
-          ),
-        }}
-      />
-
-      <Screen
-        scroll
-        padded={false}
-        refreshing={query.isRefetching}
-        onRefresh={() => void query.refetch()}
-        bottomInset={spacing.xxl}
-      >
-        {query.isLoading ? (
-          <SkeletonList rows={5} />
-        ) : query.error ? (
-          <ErrorState
-            title="Could not load documents"
-            message={query.error instanceof Error ? query.error.message : undefined}
-            onRetry={() => void query.refetch()}
-          />
-        ) : (
-          <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.lg, gap: spacing.md }}>
-            {failure ? (
-              <Text variant="caption" tone="destructive">
-                {failure}
-              </Text>
-            ) : null}
-
-            {pages.length === 0 && files.length === 0 ? (
-              <EmptyState
-                icon={FileText}
-                title="No documents yet"
-                body="A page is the write-up that stays with the job: a method statement, a handover note, a running site diary you add to as you go."
-                action={{ label: "New page", onPress: () => create.mutate(), icon: Plus }}
-              />
-            ) : (
-              <>
-                {/*
-                  Grouped by folder rather than one flat list.
-
-                  `groupByFolder` decides the arrangement and is tested in
-                  `folders-view.ts`: the top level always exists, an empty
-                  folder still shows (otherwise making one looks like it
-                  failed), and a document whose folder was deleted falls back to
-                  the top rather than disappearing off the only screen it could
-                  be filed from again.
-                */}
-                {groups.map((group) => (
-                  <View key={group.id ?? "top"} style={{ gap: spacing.sm }}>
-                    {group.id ? (
-                      editingFolder?.id === group.id ? (
+              {groups.map((group) => (
+                <View key={group.id ?? "top"} style={{ gap: spacing.sm }}>
+                  {group.id ? (
+                    editingFolder?.id === group.id ? (
+                      <Card>
                         <View style={{ gap: spacing.sm }}>
                           <Field
                             label="Folder name"
@@ -412,182 +504,94 @@ export default function ProjectDocumentsScreen() {
                             <Button label="Save" size="sm" onPress={saveRename} />
                           </ButtonRow>
                         </View>
-                      ) : (
-                        <View
-                          style={{ flexDirection: "row", alignItems: "center", gap: spacing.xs }}
-                        >
-                          <SectionHeader
-                            title={group.name}
-                            count={groupCount(group) || undefined}
-                          />
-                          <View style={{ flex: 1 }} />
-                          <IconButton
-                            icon={PenLine}
-                            surface={false}
-                            size="sm"
-                            accessibilityLabel={`Rename ${group.name}`}
-                            onPress={() => startRename(group.id!, group.name)}
-                          />
-                          <IconButton
-                            icon={Trash2}
-                            tone="destructive"
-                            surface={false}
-                            size="sm"
-                            accessibilityLabel={`Delete ${group.name}`}
-                            onPress={() => confirmDeleteFolder(group)}
-                          />
-                        </View>
-                      )
-                    ) : groups.length > 1 ? (
-                      <SectionHeader title={group.name} count={groupCount(group) || undefined} />
-                    ) : null}
-
-                    {group.pages.length === 0 && group.files.length === 0 ? (
-                      <Text variant="caption" tone="muted">
-                        Empty
-                      </Text>
+                      </Card>
                     ) : (
-                      <ListGroup>
-                        {group.pages.map((page, index) => (
-                          <View key={page.id}>
-                            {index > 0 ? <RowDivider /> : null}
-                            <ListRow
-                              icon={FileText}
-                              title={titleWithinProject(page.title, projectQuery.data?.name)}
-                              subtitle={relativeTime(page.updatedAt)}
-                              right={
-                                <View style={{ flexDirection: "row", alignItems: "center" }}>
-                                  <IconButton
-                                    icon={FolderInput}
-                                    surface={false}
-                                    accessibilityLabel={`Move ${page.title}`}
-                                    onPress={() =>
-                                      promptMove("page", page.id, page.folderId, page.title)
-                                    }
-                                  />
-                                  <IconButton
-                                    icon={Copy}
-                                    surface={false}
-                                    accessibilityLabel={`Copy ${page.title}`}
-                                    onPress={() => confirmDuplicate(page)}
-                                  />
-                                  <IconButton
-                                    icon={Trash2}
-                                    tone="destructive"
-                                    surface={false}
-                                    accessibilityLabel={`Delete ${page.title}`}
-                                    onPress={() => confirmDelete(page)}
-                                  />
-                                </View>
-                              }
-                              onPress={() =>
-                                router.push({
-                                  pathname: "/page/[pageId]",
-                                  params: { pageId: page.id },
-                                })
-                              }
-                              /*
-                               * No chevron: the row already shows duplicate and
-                               * delete, and the title is the part that was
-                               * losing the argument for width. Document names
-                               * share a long project prefix, so the half that
-                               * gets truncated is the half that identifies them.
-                               */
-                              chevron={false}
-                            />
-                          </View>
-                        ))}
-
-                        {group.files.map((file, index) => (
-                          <View key={file.id}>
-                            {index > 0 || group.pages.length > 0 ? <RowDivider /> : null}
-                            <ListRow
-                              icon={Paperclip}
-                              title={file.fileName}
-                              subtitle={relativeTime(file.createdAt)}
-                              right={
-                                <IconButton
-                                  icon={FolderInput}
-                                  surface={false}
-                                  accessibilityLabel={`Move ${file.fileName}`}
-                                  onPress={() =>
-                                    promptMove("file", file.id, file.folderId, file.fileName)
-                                  }
-                                />
-                              }
-                            />
-                          </View>
-                        ))}
-                      </ListGroup>
-                    )}
-                  </View>
-                ))}
-
-                {newFolder !== null ? (
-                  <View style={{ gap: spacing.sm }}>
-                    <Field
-                      label="New folder"
-                      value={newFolder}
-                      onChangeText={setNewFolder}
-                      placeholder="Certificates"
-                    />
-                    <ButtonRow>
-                      <Button
-                        label="Cancel"
-                        variant="secondary"
-                        size="sm"
-                        onPress={() => setNewFolder(null)}
+                      <FolderHeading
+                        name={group.name}
+                        count={groupCount(group)}
+                        onMenu={() => setMenu({ kind: "folder", group })}
                       />
-                      <Button
-                        label={addFolder.isPending ? "Making" : "Make folder"}
-                        size="sm"
-                        disabled={addFolder.isPending}
-                        onPress={saveNewFolder}
-                      />
-                    </ButtonRow>
-                  </View>
-                ) : (
-                  <Button
-                    label="New folder"
-                    icon={FolderPlus}
-                    variant="secondary"
-                    fullWidth
-                    onPress={startNewFolder}
-                  />
-                )}
-              </>
-            )}
+                    )
+                  ) : groups.length > 1 ? (
+                    <FolderHeading name={group.name} count={groupCount(group)} />
+                  ) : null}
 
-            {files.length > 0 ? (
-              <>
-                <SectionHeader title={`Files (${files.length})`} />
-                {/*
-                  Listed, not opened. These are PDFs and spreadsheets and a
-                  viewer is separate work, but omitting them would make this
-                  screen quietly disagree with the web about what is on the job.
-                */}
-                <ListGroup>
-                  {files.map((file, index) => (
-                    <View key={file.id}>
-                      {index > 0 ? <RowDivider /> : null}
-                      <ListRow
-                        icon={Paperclip}
-                        iconTone="muted"
-                        title={file.fileName}
-                        subtitle={relativeTime(file.createdAt)}
-                        right={<Badge label="Web" tone="neutral" variant="outline" />}
-                      />
-                    </View>
-                  ))}
-                </ListGroup>
+                  {group.pages.length === 0 && group.files.length === 0 ? (
+                    <Text variant="caption" tone="muted">
+                      Empty
+                    </Text>
+                  ) : (
+                    <CardGrid>
+                      {group.pages.map((page) => (
+                        <ItemCard
+                          key={page.id}
+                          icon={FileText}
+                          /*
+                           * Names share a long project prefix, so the half a
+                           * narrow title truncates is the half that identifies
+                           * them. `titleWithinProject` drops the prefix.
+                           */
+                          title={titleWithinProject(page.title, projectQuery.data?.name)}
+                          meta={`Edited ${relativeTime(page.updatedAt)}`}
+                          onPress={() => openPage(page.id)}
+                          onMenu={() => setMenu({ kind: "page", page })}
+                          menuLabel={`More actions for ${page.title}`}
+                        />
+                      ))}
+                      {group.files.map((file) => (
+                        <ItemCard
+                          key={file.id}
+                          icon={Paperclip}
+                          iconTone="muted"
+                          title={file.fileName}
+                          meta={`Uploaded ${relativeTime(file.createdAt)}`}
+                          /*
+                            Listed, not opened. These are PDFs and spreadsheets
+                            and a viewer is separate work, but omitting them
+                            would make this screen quietly disagree with the
+                            web about what is on the job.
+                          */
+                          status={<StatusChip label="Web" />}
+                          onMenu={() => setMenu({ kind: "file", file })}
+                          menuLabel={`More actions for ${file.fileName}`}
+                        />
+                      ))}
+                    </CardGrid>
+                  )}
+                </View>
+              ))}
+
+              {files.length > 0 ? (
                 <Text variant="caption" tone="muted">
                   Uploaded files open on the web for now.
                 </Text>
-              </>
-            ) : null}
-          </View>
-        )}
-      </Screen>
+              ) : null}
+            </>
+          )}
+        </ScrollView>
+      </View>
+
+      {/* Hidden while the empty state offers New page. */}
+      {query.isLoading || pages.length + files.length === 0 ? null : (
+        <ActionRail
+          actions={[
+            {
+              key: "new-page",
+              icon: Plus,
+              label: "New page",
+              disabled: create.isPending,
+              onPress: () => create.mutate(),
+            },
+          ]}
+        />
+      )}
+
+      <ActionSheet
+        visible={menu !== null}
+        onClose={() => setMenu(null)}
+        title={menuTitle}
+        actions={menuActions}
+      />
 
       <TemplatePickerSheet
         visible={templatePicker}
@@ -602,5 +606,46 @@ export default function ProjectDocumentsScreen() {
         }}
       />
     </>
+  );
+}
+
+/** A folder's name over its cards, with its own kebab for rename and delete. */
+function FolderHeading({
+  name,
+  count,
+  onMenu,
+}: {
+  name: string;
+  count: number;
+  onMenu?: () => void;
+}) {
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        gap: spacing.sm,
+        marginTop: spacing.sm,
+        minHeight: 32,
+      }}
+    >
+      <Icon icon={Folders} size="sm" tone="muted" />
+      <Text variant="overline" tone="muted" numberOfLines={1} style={{ flexShrink: 1 }}>
+        {name.toUpperCase()}
+      </Text>
+      {count > 0 ? (
+        <Text variant="overline" tone="muted">
+          {count}
+        </Text>
+      ) : null}
+      <View style={{ flex: 1 }} />
+      {onMenu ? (
+        <KebabButton
+          accessibilityLabel={`Folder actions for ${name}`}
+          onPress={onMenu}
+          surface={false}
+        />
+      ) : null}
+    </View>
   );
 }

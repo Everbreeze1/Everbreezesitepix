@@ -2,6 +2,27 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  defaultGoogleApply,
+  DEFAULT_EMBED_OPTIONS,
+  gallerySnippet,
+  htmlToPlain,
+  mapSnippet,
+  movedIds,
+  parseList,
+  plainToHtml,
+  portfolioPageUrl,
+  portfolioSiteUrl,
+  reviewLinksToSave,
+  sectionWithError,
+  SITE_SECTIONS,
+  siteDraftErrors,
+  siteSectionDone,
+  siteSectionProgress,
+  siteSectionSummary,
+  siteListingLabel,
+  sitePatch,
+  toSiteDraft,
+  type PortfolioSite,
   isPortfolioProjectEmpty,
   isPublished,
   LAYOUTS,
@@ -229,5 +250,254 @@ describe("vocabulary", () => {
     );
 
     expect(offenders).toEqual([]);
+  });
+});
+
+describe("the site, as the web's Portfolio page has it", () => {
+  const site: PortfolioSite = {
+    id: "p1",
+    slug: "acme-roofing",
+    business_name: "Acme",
+    logo_url: null,
+    accent_color: "#2563eb",
+    hero_headline: null,
+    hero_subhead: null,
+    hero_photo_id: null,
+    hero_image_url: null,
+    about_html: "<p>We <strong>fix</strong> roofs.</p><p>Since 1990.</p>",
+    services: ["Roofing"],
+    service_areas: [],
+    phone: null,
+    email: null,
+    address: null,
+    website_url: null,
+    cta_label: null,
+    cta_url: null,
+    show_map: true,
+    show_reviews: false,
+    published: true,
+    embed_key: "key-1",
+    seo_title: null,
+    seo_description: null,
+    google_place_id: null,
+    google_name: null,
+    google_rating: null,
+    google_review_count: null,
+    google_synced_at: null,
+  };
+
+  it("opens the same public address the web's View site button does", () => {
+    const web = readFileSync(
+      join(process.cwd(), "apps/web/src/features/showcases/pages/PortfolioPage.tsx"),
+      "utf8",
+    );
+    expect(web).toContain("/p/${p.slug}");
+    expect(portfolioSiteUrl("https://everlumen.co/", "acme-roofing")).toBe(
+      "https://everlumen.co/p/acme-roofing",
+    );
+    expect(portfolioPageUrl("https://everlumen.co", "acme-roofing", "barn")).toBe(
+      "https://everlumen.co/p/acme-roofing/barn",
+    );
+    expect(portfolioSiteUrl(null, "acme-roofing")).toBeNull();
+  });
+
+  it("sends nothing for an untouched form", () => {
+    const draft = toSiteDraft(site);
+    expect(sitePatch(draft, draft)).toEqual({});
+  });
+
+  it("sends only what changed, and leaves the About formatting alone unless edited", () => {
+    const before = toSiteDraft(site);
+    const patch = sitePatch(before, { ...before, phone: " 0113 ", showReviews: true });
+    expect(patch).toEqual({ phone: "0113", showReviews: true });
+    expect(patch).not.toHaveProperty("aboutHtml");
+
+    const edited = sitePatch(before, { ...before, about: "New words.\n\nSecond <b>para</b>." });
+    expect(edited.aboutHtml).toBe("<p>New words.</p><p>Second &lt;b&gt;para&lt;/b&gt;.</p>");
+  });
+
+  it("reads About back as paragraphs", () => {
+    expect(htmlToPlain(site.about_html)).toBe("We fix roofs.\n\nSince 1990.");
+    // Round trip: the same paragraphs come back.
+    expect(plainToHtml(htmlToPlain(site.about_html))).toBe(
+      "<p>We fix roofs.</p><p>Since 1990.</p>",
+    );
+  });
+
+  it("parses comma lists without duplicates", () => {
+    expect(parseList("Roofing, gutters,roofing\nSiding,")).toEqual([
+      "Roofing",
+      "gutters",
+      "Siding",
+    ]);
+  });
+
+  it("checks the address the way the server does", () => {
+    const draft = toSiteDraft(site);
+    expect(siteDraftErrors(draft)).toEqual({});
+    expect(siteDraftErrors({ ...draft, slug: "A B" }).slug).toBeTruthy();
+    expect(siteDraftErrors({ ...draft, slug: "ab" }).slug).toBeTruthy();
+    expect(siteDraftErrors({ ...draft, accentColor: "blue" }).accentColor).toBeTruthy();
+    expect(siteDraftErrors({ ...draft, ctaUrl: "example.com" }).ctaUrl).toBeTruthy();
+  });
+
+  it("builds the web's embed snippets", () => {
+    const g = gallerySnippet("https://everlumen.co", "key-1", {
+      ...DEFAULT_EMBED_OPTIONS,
+      filters: false,
+    });
+    expect(g).toContain('src="https://everlumen.co/embed.js"');
+    expect(g).toContain('data-key="key-1"');
+    expect(g).toContain('data-filters="0"');
+    const m = mapSnippet("https://everlumen.co", "key-1", "#2563eb", DEFAULT_EMBED_OPTIONS);
+    expect(m).toContain('data-everlumen="map"');
+    expect(m).toContain('data-pin="#2563eb"');
+  });
+
+  it("moves a page one place for the reorder buttons", () => {
+    expect(movedIds(["a", "b", "c"], "b", -1)).toEqual(["b", "a", "c"]);
+    expect(movedIds(["a", "b", "c"], "c", 1)).toEqual(["a", "b", "c"]);
+  });
+
+  it("labels a card the way the web grid does", () => {
+    expect(siteListingLabel({ on_site: true, revoked_at: "x" })).toBe("Draft");
+    expect(siteListingLabel({ on_site: true, revoked_at: null })).toBe("On site");
+    expect(siteListingLabel({ on_site: false, revoked_at: null })).toBe("Hidden");
+  });
+
+  it("offers Google fields only where the site is empty", () => {
+    const apply = defaultGoogleApply(site);
+    expect(apply).not.toContain("businessName");
+    expect(apply).not.toContain("services");
+    expect(apply).toContain("phone");
+  });
+
+  it("drops review links that are not web addresses", () => {
+    expect(
+      reviewLinksToSave([
+        { platform: "custom", url: " https://yelp.com/x ", label: " Yelp " },
+        { platform: "custom", url: "yelp", label: null },
+      ]),
+    ).toEqual([{ platform: "custom", url: "https://yelp.com/x", label: "Yelp" }]);
+  });
+
+  it("draws the web's three tabs and its publish controls", () => {
+    const screen = readFileSync(join(process.cwd(), "apps/mobile/app/(app)/portfolio.tsx"), "utf8");
+    for (const label of ['label: "Site"', 'label: "Projects"', 'label: "Embeds"']) {
+      expect(screen).toContain(label);
+    }
+    expect(screen).toContain('label="View website"');
+    expect(screen).toContain('label="Publish site"');
+    expect(screen).toContain("WebBrowser.openBrowserAsync(url)");
+  });
+});
+
+describe("laid out the way the web's Portfolio page is", () => {
+  /*
+   * Jon, 2026-09-29: the phone's portfolio "feels cumbersome" and does not
+   * look like the website. The web (`PortfolioPage.tsx`, the page the sidebar
+   * links to at /showcases) is a publish band, three tabs, and a site editor
+   * that shows one section at a time behind a trail of ticks. The phone had
+   * the tabs but put every field of the site into one long form.
+   */
+  const read = (p: string) => readFileSync(join(process.cwd(), p), "utf8");
+  const site = {
+    hero_photo_id: null,
+    google_place_id: null,
+    google_rating: null,
+  } as const;
+  const blank = toSiteDraft({
+    id: "p1",
+    slug: "acme-roofing",
+    business_name: null,
+    logo_url: null,
+    accent_color: null,
+    hero_headline: null,
+    hero_subhead: null,
+    hero_photo_id: null,
+    hero_image_url: null,
+    about_html: null,
+    services: [],
+    service_areas: [],
+    phone: null,
+    email: null,
+    address: null,
+    website_url: null,
+    cta_label: null,
+    cta_url: null,
+    show_map: true,
+    show_reviews: false,
+    published: false,
+    embed_key: "k",
+    seo_title: null,
+    seo_description: null,
+    google_place_id: null,
+    google_name: null,
+    google_rating: null,
+    google_review_count: null,
+    google_synced_at: null,
+  } as PortfolioSite);
+
+  it("names the site's sections as the web's editor does, in its order", () => {
+    const web = read("apps/web/src/features/showcases/components/PortfolioSiteSteps.tsx");
+    const webLabels = [...web.matchAll(/^\s{4}label: "([^"]+)",$/gm)].map((m) => m[1]);
+    expect(SITE_SECTIONS.map((s) => s.label)).toEqual(webLabels);
+  });
+
+  it("files every draft field under exactly one section", () => {
+    const all = SITE_SECTIONS.flatMap((s) => s.fields).sort();
+    expect(all).toEqual(Object.keys(blank).sort());
+    expect(new Set(all).size).toBe(all.length);
+  });
+
+  it("ticks sections by the web's rules and counts all but the address", () => {
+    expect(siteSectionProgress(blank, site)).toEqual({ done: 0, total: 7 });
+    const filled = { ...blank, businessName: "Acme", services: "Roofing", phone: "0113" };
+    expect(siteSectionProgress(filled, site).done).toBe(3);
+    expect(siteSectionDone("cover", blank, { ...site, hero_photo_id: "ph" })).toBe(true);
+    expect(siteSectionDone("reviews", blank, { ...site, google_place_id: "g" })).toBe(true);
+  });
+
+  it("says what is in each section, so nobody opens one to find out", () => {
+    expect(siteSectionSummary("business", blank, site)).toBe("Not named yet");
+    expect(siteSectionSummary("services", { ...blank, services: "A, B, C, D, E" }, site)).toBe(
+      "A, B, C and 2 more",
+    );
+    expect(siteSectionSummary("address", blank, site)).toBe("/p/acme-roofing");
+    expect(
+      siteSectionSummary("reviews", blank, { ...site, google_place_id: "g", google_rating: 4.84 }),
+    ).toBe("Google, 4.8 stars");
+  });
+
+  it("points Save at the section holding the error", () => {
+    expect(sectionWithError({})).toBeNull();
+    expect(sectionWithError({ slug: "bad" })).toBe("address");
+    expect(sectionWithError({ ctaUrl: "bad" })).toBe("contact");
+  });
+
+  it("opens one section at a time instead of one long form", () => {
+    const editor = read("apps/mobile/src/components/portfolio/SiteEditor.tsx");
+    expect(editor).toContain("SITE_SECTIONS.map(");
+    expect(editor).toContain("<Sheet");
+    // The old form listed every section as a header down one scroll.
+    expect(editor).not.toContain('<SectionHeader title="Business" />');
+  });
+
+  it("puts each embed behind its own row", () => {
+    const embeds = read("apps/mobile/src/components/portfolio/EmbedsPanel.tsx");
+    expect(embeds).toContain('title="Website gallery"');
+    expect(embeds).toContain('title="Project map"');
+    expect(embeds).toContain("<Sheet");
+  });
+
+  it("lists projects as compact rows and keeps their controls in a sheet", () => {
+    const screen = read("apps/mobile/app/(app)/portfolio.tsx");
+    expect(screen).toContain("setSelectedId(project.id)");
+    expect(screen).toContain('label="Featured"');
+    expect(screen).toContain('label="On site"');
+    // Building from a job floats at the lower right, a labelled pill on a tablet.
+    expect(screen).toContain("<ActionRail");
+    expect(screen).toContain('label: "Build from a job"');
+    expect(screen).toContain("useRightRail()");
   });
 });

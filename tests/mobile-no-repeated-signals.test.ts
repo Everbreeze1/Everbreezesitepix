@@ -20,25 +20,26 @@ import { describe, expect, it } from "vitest";
 const ROOT = process.cwd();
 const read = (p: string) => readFileSync(join(ROOT, p), "utf8");
 
-describe("the home notifications row", () => {
+describe("the home notifications bell", () => {
   const home = () => read("apps/mobile/app/(app)/(tabs)/index.tsx");
 
-  it("states the count once, in the subtitle", () => {
+  it("states the count once, in the label", () => {
     /*
      * It used to carry "9 unread" in the subtitle, a "9" count badge, and the
      * unread dot. The badge was the third copy of a number the subtitle
-     * already gives in words.
+     * already gave in words. The redesign moved notifications from a row to a
+     * bell in the header; the count now lives only in its spoken label.
      */
     const s = home().replace(/\s+/g, " ");
-    expect(s).toContain('subtitle={unread === 0 ? "Nothing unread" : `${unread} unread`}');
+    expect(s).toContain(
+      'unread === 0 ? "Notifications, nothing unread" : `Notifications, ${unread} unread`',
+    );
     expect(s).not.toContain("<CountBadge count={unread}");
   });
 
-  it("keeps the dot and tint, which are a documented pair", () => {
-    // Removing these instead would have been the wrong half to cut.
-    expect(home()).toContain("unread={unread > 0}");
-    const row = read("apps/mobile/src/ui/ListRow.tsx");
-    expect(row).toContain("Not yet read: a dot and a tinted ground.");
+  it("keeps a visible dot when something is unread", () => {
+    // The label is for a screen reader; somebody looking needs the dot.
+    expect(home()).toContain("{unread > 0 ? (");
   });
 });
 
@@ -76,7 +77,8 @@ describe("the write-up actions", () => {
     expect(s).toContain('label="Rename" icon={PenLine}');
 
     for (const [file, needle] of [
-      ["apps/mobile/app/(app)/project/[id]/documents.tsx", "icon={PenLine}"],
+      // A folder's Rename now sits in its kebab sheet, so it is an object prop.
+      ["apps/mobile/app/(app)/project/[id]/documents.tsx", "icon: PenLine"],
       ["apps/mobile/src/ui/SnippetSheet.tsx", "icon={PenLine}"],
     ] as const) {
       expect(read(file), file).toContain(needle);
@@ -116,7 +118,15 @@ describe("the pipeline stage list", () => {
      */
     const s = read("apps/mobile/app/(app)/pipelines.tsx").replace(/\s+/g, " ");
     expect(s).not.toContain('title={stage ? `${stage.name} (${inStage.length})` : "Stages"}');
-    expect(s).toContain('{stage ? null : <SectionHeader title="Stages" />}');
+    /*
+     * The chip row and its list became the web's board: a stage is now a
+     * column, and its header is the one place the stage's name and count
+     * appear. No section header above the columns says either again.
+     */
+    expect(s).not.toContain("<SectionHeader");
+    const column = read("apps/mobile/src/components/PipelineBoard.tsx").replace(/\s+/g, " ");
+    expect(column).toContain("accessibilityLabel={stageCountLabel(title, count)}");
+    expect(column).not.toContain("{title} ({count})");
   });
 });
 
@@ -191,27 +201,46 @@ describe("every display name goes through one helper", () => {
 describe("a screen offers each action once", () => {
   it("the walkthroughs FAB hides while the empty state offers the same thing", () => {
     /*
-     * With nothing recorded, `ListEmptyComponent` draws "Record one" and the
-     * FAB drew "Record" directly beside it. Same destination, same colour,
-     * abutting. The project photo grid already hid its FAB on this condition;
-     * this screen had not followed it.
+     * With nothing recorded, `ListEmptyComponent` draws "Record walkthrough"
+     * (it said "Record one" before the tab was reworked around the video and
+     * its AI Summary) and the FAB drew the same action directly beside it.
+     * Same destination, same colour, abutting. The project photo grid already
+     * hid its FAB on this condition; this screen had not followed it.
      */
     const s = read("apps/mobile/app/(app)/project/[id]/walkthroughs.tsx").replace(/\s+/g, " ");
     expect(s).toContain("{isLoading || walkthroughs.length === 0 ? null : (");
     // The empty state's action is an object prop, not a JSX attribute.
-    expect(s).toContain('label: "Record one"');
+    expect(s).toContain('label: "Record walkthrough"');
   });
 
-  it("and so does the project photo FAB, which set the precedent", () => {
+  it("and the project photo FAB is the only capture control, even on an empty job", () => {
+    /*
+     * Jon (2026-09-27) wants the first photo of a new job taken from the same
+     * right-hand spot as every other, so the rail stays up on an empty grid
+     * and the "No photos yet" empty state no longer carries its own button.
+     */
     const s = read("apps/mobile/app/(app)/project/[id]/index.tsx").replace(/\s+/g, " ");
-    expect(s).toContain("filtered.length === 0 ? null : (");
+    expect(s).toContain(") : selecting ? null : ( <ActionRail");
+    expect(s).not.toContain('label: "Take photos"');
   });
 
   it("no other screen floats an unguarded action", () => {
     /*
-     * Only two screens have a FAB. If a third appears, it has to answer the
-     * same question, so this fails rather than quietly letting it through.
+     * Every floating action is now the shared `ActionRail`, which keeps them
+     * all in the lower right where a right-handed thumb rests. Any screen that
+     * floats one has to answer the same question the first two did: is the
+     * empty state already offering this? So each file drawing a rail must
+     * guard it on an empty list, or be listed here with its reason.
+     *
+     * Home is exempt: its rail is tablet-only and replaces the New project
+     * button in the hero row, which is not drawn there, so nothing on the
+     * screen offers the action twice.
      */
+    const EXEMPT = new Set([
+      join(ROOT, "apps/mobile/app/(app)/(tabs)/index.tsx"),
+      // Its empty state has no capture button; see the test above.
+      join(ROOT, "apps/mobile/app/(app)/project/[id]/index.tsx"),
+    ]);
     const walk = (dir: string, out: string[] = []): string[] => {
       for (const name of readdirSync(dir)) {
         const full = join(dir, name);
@@ -220,11 +249,15 @@ describe("a screen offers each action once", () => {
       }
       return out;
     };
-    const withFab = walk(join(ROOT, "apps/mobile/app")).filter((f) =>
-      readFileSync(f, "utf8").includes("styles.fab"),
-    );
-    expect(withFab).toHaveLength(2);
-    for (const f of withFab) {
+    const floating = walk(join(ROOT, "apps/mobile/app")).filter((f) => {
+      const s = readFileSync(f, "utf8");
+      return s.includes("styles.fab") || s.includes("<ActionRail");
+    });
+    // The two that set the rule are still among them.
+    expect(floating.some((f) => f.endsWith("walkthroughs.tsx"))).toBe(true);
+    expect(floating.some((f) => f.endsWith(join("[id]", "index.tsx")))).toBe(true);
+    for (const f of floating) {
+      if (EXEMPT.has(f)) continue;
       expect(readFileSync(f, "utf8").replace(/\s+/g, " "), f).toMatch(/length === 0 \? null : \(/);
     }
   });
@@ -238,9 +271,13 @@ describe("two rows in one list do not share a glyph", () => {
      * which is what `NotebookPen` already means on the Daily Log card - so the
      * two places a site log appears now look like each other too.
      */
+    /*
+     * The list they shared was the Details tab, which is gone (Jon,
+     * 2026-09-28). The same two now sit side by side in the tab row.
+     */
     const s = read("apps/mobile/app/(app)/project/[id]/index.tsx").replace(/\s+/g, " ");
-    expect(s).toContain('icon={FileText} title="Documents"');
-    expect(s).toContain('icon={NotebookPen} title="Site logs"');
+    expect(s).toContain('label: "Documents", icon: FileText');
+    expect(s).toContain('label: "Site logs", icon: NotebookPen');
     expect(read("apps/mobile/src/ui/DailyLogCard.tsx")).toContain("icon={NotebookPen}");
   });
 });
@@ -261,7 +298,6 @@ describe("rows with their own controls drop the chevron", () => {
   const OVERLOADED = [
     "apps/mobile/app/(app)/template/[id].tsx",
     "apps/mobile/app/(app)/workflow-template/[templateId].tsx",
-    "apps/mobile/app/(app)/project/[id]/documents.tsx",
   ];
 
   for (const file of OVERLOADED) {
@@ -269,6 +305,16 @@ describe("rows with their own controls drop the chevron", () => {
       expect(read(file)).toContain("chevron={false}");
     });
   }
+
+  it("documents.tsx went further: one kebab per card instead of three buttons", () => {
+    /*
+     * Move, copy and delete moved into each document card's kebab sheet, so
+     * the title has the whole line and there is no chevron to suppress.
+     */
+    const s = read("apps/mobile/app/(app)/project/[id]/documents.tsx");
+    expect(s).not.toContain("<ListRow");
+    expect(s).toContain('onMenu={() => setMenu({ kind: "page", page })}');
+  });
 
   it("the opt-out exists and defaults to showing it", () => {
     /*
@@ -324,26 +370,27 @@ describe("rows with their own controls drop the chevron", () => {
  * This slipped past an earlier sweep of mine that accepted a role OR a label.
  * A role without a name is not accessible; it is a button called nothing.
  */
-describe("the lightbox scrims are named", () => {
-  const SCRIMS = [
+describe("the photo viewer names its close control", () => {
+  /*
+   * The two hand-rolled lightboxes this used to check are gone; both screens
+   * open the shared viewer now. A tap on the photo there hides the chrome (web's
+   * full-screen), so closing is an explicit, labelled button rather than a scrim.
+   */
+  const SCREENS = [
     "apps/mobile/app/(app)/(tabs)/gallery.tsx",
     "apps/mobile/app/(app)/project/[id]/index.tsx",
   ];
 
-  for (const file of SCRIMS) {
-    it(`${file.split("/").pop()} labels its close target`, () => {
+  for (const file of SCREENS) {
+    it(`${file.split("/").pop()} opens the shared viewer and can close it`, () => {
       const s = read(file).replace(/\s+/g, " ");
-      const at = s.indexOf("setLightboxId(null)");
-      expect(at, "no lightbox in this file any more").toBeGreaterThan(-1);
-      expect(s).toContain('accessibilityLabel="Close photo"');
+      expect(s).toContain("<PhotoViewer");
+      expect(s).toMatch(/onClose=\{\(\) => \{? ?setLightboxId\(null\)/);
     });
   }
 
-  it("both still close on a tap, which is the gesture that matters", () => {
-    for (const file of SCRIMS) {
-      expect(read(file).replace(/\s+/g, " "), file).toContain(
-        "onPress={() => setLightboxId(null)}",
-      );
-    }
+  it("labels the close button for what it does", () => {
+    const s = read("apps/mobile/src/components/photo-viewer/PhotoViewer.tsx");
+    expect(s).toContain('label="Close photo"');
   });
 });

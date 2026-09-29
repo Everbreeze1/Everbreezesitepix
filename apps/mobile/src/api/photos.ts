@@ -2,6 +2,7 @@ import { photoObjectPaths, thumbPathFor } from "@everlumen/shared";
 import { randomUUID } from "expo-crypto";
 import { File } from "expo-file-system";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
+import { dateRangeOrFilter, type GalleryFilters } from "./gallery-filters";
 import { readExifMeta, resolvePhotoMeta, type Coords } from "./photo-meta";
 import { supabase } from "@/lib/supabase";
 
@@ -220,7 +221,45 @@ export type UploadPhotoOptions = {
    * producing a second copy of the photo.
    */
   uploadId?: string;
+  /**
+   * When the shutter fired (ISO), for a photo whose EXIF carries no time.
+   *
+   * A queued photo can land minutes or hours after it was taken (no signal,
+   * or held for its Before/After pill), and "now" at upload time would file
+   * it out of order on the project timeline.
+   */
+  capturedAt?: string;
 };
+
+/**
+ * Where a queued upload's photo is stored, derived from its outbox row id.
+ *
+ * The same path `uploadProjectPhoto` writes, so a later edit to a photo that
+ * was queued (and has since landed) can find its row without ever having been
+ * told the photo's id.
+ */
+export function queuedPhotoStoragePath(
+  userId: string,
+  projectId: string,
+  uploadId: string,
+): string {
+  return `${userId}/${projectId}/${uploadId}.jpg`;
+}
+
+/** The id of the photo a queued upload wrote, or null while it has not landed. */
+export async function findQueuedPhotoId(
+  userId: string,
+  projectId: string,
+  uploadId: string,
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("photos")
+    .select("id")
+    .eq("storage_path", queuedPhotoStoragePath(userId, projectId, uploadId))
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data?.id ?? null;
+}
 
 /**
  * Upload one capture into `site-photos` plus a `photos` row.
@@ -234,8 +273,9 @@ export async function uploadProjectPhoto(options: UploadPhotoOptions): Promise<{
   const source = new File(asset.uri);
   if (!source.exists) throw new Error("Could not read image from device");
 
+  const exifMeta = readExifMeta(asset.exif);
   const meta = resolvePhotoMeta(
-    readExifMeta(asset.exif),
+    exifMeta.takenAt ? exifMeta : { ...exifMeta, takenAt: options.capturedAt ?? null },
     options.deviceCoords ?? null,
     options.projectCoords ?? null,
   );
@@ -249,7 +289,7 @@ export async function uploadProjectPhoto(options: UploadPhotoOptions): Promise<{
    * longer describes the bytes is how a PNG-named JPEG ends up in the bucket.
    */
   const uploadId = options.uploadId ?? randomUUID();
-  const path = `${userId}/${projectId}/${uploadId}.jpg`;
+  const path = queuedPhotoStoragePath(userId, projectId, uploadId);
 
   /*
    * A retry may be finishing an attempt that already wrote the row. There is no
@@ -534,6 +574,7 @@ export type GalleryPage = {
 export async function listGalleryPhotoPage(
   cursor: string | null,
   limit = PHOTO_PAGE_SIZE,
+  filters?: GalleryFilters,
 ): Promise<GalleryPage> {
   let query = supabase
     .from("photos")
@@ -547,6 +588,21 @@ export async function listGalleryPhotoPage(
     .limit(limit);
 
   if (cursor) query = query.lt("created_at", cursor);
+
+  /*
+   * The web gallery's filters, applied at the database so the keyset paging
+   * still walks the whole matching set. Each `or` is its own query parameter,
+   * and PostgREST ANDs separate parameters, so a date range and "needs review"
+   * together mean both.
+   */
+  if (filters) {
+    if (filters.projectIds.length > 0) query = query.in("project_id", filters.projectIds);
+    if (filters.uploaders.length > 0) query = query.in("uploaded_by", filters.uploaders);
+    if (filters.tags.length > 0) query = query.overlaps("tags", filters.tags);
+    if (filters.needsReview) query = query.or("tags.is.null,tags.eq.{}");
+    const dates = dateRangeOrFilter(filters.from, filters.to);
+    if (dates) query = query.or(dates);
+  }
 
   const { data, error } = await query;
   if (error) throw new Error(error.message);
@@ -680,4 +736,21 @@ export async function listProjectCovers(projectIds: string[]): Promise<Record<st
     if (url) out[row.project_id] = url;
   }
   return out;
+}
+
+/**
+ * The workspace's tag catalogue, for the library's tag filter.
+ *
+ * The same `tags` table the web gallery lists. A failure returns an empty list
+ * rather than throwing: the tag section of the filter sheet is worth losing,
+ * the rest of the sheet is not.
+ */
+export async function listTagNames(): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("tags")
+    .select("name")
+    .order("name", { ascending: true });
+  if (error) return [];
+  const names = ((data as { name: string }[]) ?? []).map((row) => row.name).filter(Boolean);
+  return Array.from(new Set(names));
 }

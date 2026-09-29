@@ -61,7 +61,12 @@ export async function getMyTeam(): Promise<MyTeam> {
   };
 }
 
-export async function inviteMember(email: string, role: "admin" | "member"): Promise<void> {
+/**
+ * Invite by email with any role the plan and the inviter's own role allow:
+ * the server normalises it and checks `canManageMember`, the same rule the
+ * picker filters on, so a Manager inviting an Admin is refused there too.
+ */
+export async function inviteMember(email: string, role: string): Promise<void> {
   await api.rpc("inviteMember", { email, role }, { idempotencyKey: randomUUID() });
 }
 

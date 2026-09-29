@@ -1,12 +1,13 @@
 import { useCallback, useMemo, useState } from "react";
 import { Alert, View } from "react-native";
 import { router, Stack, useLocalSearchParams } from "expo-router";
+import { goBack } from "@/lib/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { relativeTime } from "@everlumen/shared";
 import {
   deleteSummary,
+  generateSummaryForWalkthrough,
   getSummary,
-  regenerateSummary,
   setSummaryShare,
   summaryShareUrl,
   updateSummary,
@@ -14,10 +15,6 @@ import {
 import {
   bodyError,
   deleteWarning,
-  isNarrated,
-  offsetLabel,
-  orderedNotes,
-  plainBody,
   REGENERATE_WARNING,
   stateMessage,
   summaryOrigin,
@@ -25,12 +22,12 @@ import {
   titleError,
 } from "@/api/summary-view";
 import { openShareSheet } from "@/api/sharing";
-import { radius, spacing, useTheme } from "@/theme";
+import { SummaryReport } from "@/components/walkthrough/SummaryReport";
+import { spacing } from "@/theme";
 import {
   Link2,
   NotebookPen,
   PenLine,
-  Quote,
   RefreshCw,
   Sparkles,
   Trash2,
@@ -44,7 +41,6 @@ import {
   ErrorState,
   Field,
   Icon,
-  PhotoThumb,
   Screen,
   SectionHeader,
   SkeletonList,
@@ -66,7 +62,6 @@ import {
  */
 export default function SummaryScreen() {
   const { summaryId } = useLocalSearchParams<{ summaryId: string }>();
-  const theme = useTheme();
   const queryClient = useQueryClient();
 
   const [editingTitle, setEditingTitle] = useState(false);
@@ -95,8 +90,6 @@ export default function SummaryScreen() {
   const summary = query.data?.summary ?? null;
   const photos = query.data?.photos ?? [];
   const state = summary ? summaryState(summary) : "pending";
-  const notes = useMemo(() => (summary ? orderedNotes(summary.photoNotes) : []), [summary]);
-  const photoById = useMemo(() => new Map(photos.map((p) => [p.photoId, p])), [photos]);
 
   const rename = useMutation({
     mutationFn: () => updateSummary({ summaryId: String(summaryId), title }),
@@ -109,9 +102,26 @@ export default function SummaryScreen() {
       setFormError(error instanceof Error ? error.message : "That did not save."),
   });
 
+  /*
+   * Through `generateSummaryForWalkthrough` with `force`, the op the web uses.
+   * This called `regenerateWalkthroughSummary`, which the service refuses for
+   * any recorded walk ("use Regenerate report instead"), so the button could
+   * only ever fail. The forced op writes a NEW summary and keeps this one, so
+   * the screen moves to the new write-up once it exists.
+   */
   const regenerate = useMutation({
-    mutationFn: () => regenerateSummary(summary?.walkthroughId ?? ""),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey }),
+    mutationFn: () => generateSummaryForWalkthrough(summary?.walkthroughId ?? "", true),
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: ["project-summaries"] });
+      if (result.summaryId && result.summaryId !== summaryId) {
+        router.replace({
+          pathname: "/summary/[summaryId]",
+          params: { summaryId: result.summaryId },
+        });
+      } else {
+        void queryClient.invalidateQueries({ queryKey });
+      }
+    },
     onError: (error: unknown) =>
       Alert.alert(
         "Could not write it again",
@@ -145,7 +155,7 @@ export default function SummaryScreen() {
     mutationFn: () => deleteSummary(String(summaryId)),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["project-summaries"] });
-      router.back();
+      goBack("/reports");
     },
     onError: (error: unknown) =>
       Alert.alert("Could not delete", error instanceof Error ? error.message : "Please try again."),
@@ -339,70 +349,16 @@ export default function SummaryScreen() {
               />
             </ButtonRow>
           </>
-        ) : summary.markdown ? (
+        ) : summary.markdown || photos.length > 0 ? (
           <>
             <SectionHeader title="Summary" />
             {/*
-              Rendered as plain text. The body is markdown and the phone has no
-              renderer for it, so showing the source would put `##` and `**` in
-              front of somebody reading a finished document.
+              The same renderer the walkthrough screen uses under its video:
+              the write-up in its headed sections (Overview, Findings), then
+              every photo with its note and what was said near it. The body is
+              markdown and the phone has no renderer, so it is shown stripped.
             */}
-            <Text variant="body">{plainBody(summary.markdown)}</Text>
-          </>
-        ) : null}
-
-        {notes.length > 0 ? (
-          <>
-            <SectionHeader title="Photos" count={notes.length} />
-            <View style={{ gap: spacing.md }}>
-              {notes.map((note) => {
-                const photo = photoById.get(note.photoId);
-                const time = offsetLabel(note, Boolean(summary.walkthroughId));
-                return (
-                  <Card key={note.photoId} style={{ gap: spacing.sm }}>
-                    <PhotoThumb
-                      uri={photo?.imageUrl}
-                      width="100%"
-                      height={180}
-                      contentFit="cover"
-                      rounded={radius.sm}
-                      showLabel
-                    />
-
-                    {time ? (
-                      <Text variant="caption" tone="muted">
-                        {time} into the walk
-                      </Text>
-                    ) : null}
-
-                    <Text variant="body">{note.note}</Text>
-
-                    {/*
-                      What was SAID, kept apart from what was done. The service
-                      is explicit that this distinction is load-bearing, and it
-                      is the more valuable half: the model wrote the note, the
-                      person on site said this.
-                    */}
-                    {isNarrated(note) ? (
-                      <View
-                        style={{
-                          flexDirection: "row",
-                          gap: spacing.sm,
-                          paddingTop: spacing.xs,
-                          borderTopWidth: 1,
-                          borderTopColor: theme.colors.border,
-                        }}
-                      >
-                        <Icon icon={Quote} size="sm" tone="primary" />
-                        <Text variant="body" tone="muted" style={{ flex: 1 }}>
-                          {note.spoken}
-                        </Text>
-                      </View>
-                    ) : null}
-                  </Card>
-                );
-              })}
-            </View>
+            <SummaryReport summary={summary} photos={photos} />
           </>
         ) : null}
 

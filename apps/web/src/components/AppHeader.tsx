@@ -84,6 +84,10 @@ export function AppHeader() {
         <BrandLogo size={28} />
       </div>
 
+      {/* From md up the sidebar is docked, so this folds it to the icon rail
+          and back. Without it a tablet had no way to reclaim the width. */}
+      <SidebarTrigger className="hidden md:inline-flex" />
+
       {/* Search box (md and up). Submitting lands on the Projects list filtered
           by the query; ⌘K / Ctrl+K focuses it. */}
       <form

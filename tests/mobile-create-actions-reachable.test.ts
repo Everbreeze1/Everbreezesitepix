@@ -26,10 +26,7 @@ const read = (p: string) => readFileSync(p, "utf8");
 
 /** Screens whose main create action now lives in the navigation header. */
 const FIXED: [string, string][] = [
-  ["project/[id]/reports.tsx", "Start a report"],
-  ["project/[id]/site-logs.tsx", "Start a log"],
-  ["project/[id]/documents.tsx", "New page"],
-  ["project/[id]/checklists.tsx", "Start a checklist from a template"],
+  ["project/[id]/reports.tsx", "New report"],
   ["templates.tsx", "New template"],
   ["groups.tsx", "New group"],
   ["labels.tsx", "New label"],
@@ -60,15 +57,41 @@ describe("the create action is in the header", () => {
   });
 });
 
+/*
+ * The pages inside a project put the same action on the floating rail
+ * instead (Jon, 2026-09-28: one pattern for every tab, "New ..." at the lower
+ * right where the thumb is). That answers the same complaint the header did:
+ * the rail floats over the list, so it cannot be scrolled away either.
+ */
+const ON_THE_RAIL: [string, string][] = [
+  ["project/[id]/site-logs.tsx", "Start a log"],
+  ["project/[id]/documents.tsx", "New page"],
+  ["project/[id]/checklists.tsx", "New checklist"],
+  ["project/[id]/workflows.tsx", "New workflow"],
+  ["project/[id]/tasks.tsx", "New task"],
+];
+
+describe("the project pages float their create action", () => {
+  for (const [file, label] of ON_THE_RAIL) {
+    it(`${file} offers "${label}" on the action rail, on a phone too`, () => {
+      const s = read(join(APP, file)).replace(/\s+/g, " ");
+      expect(s).toContain("<ActionRail");
+      expect(s).toContain(`label: "${label}"`);
+      // `railOnly` would hide it on a phone, which is where it was missing.
+      expect(s).not.toContain("railOnly");
+      expect(s, `${file} still has a button under the list`).not.toContain(`label="${label}"`);
+    });
+  }
+});
+
 describe("the exemptions are deliberate", () => {
   /*
    * Recorded so they are not "fixed" later. Each is an action below a list
    * that belongs there.
    */
   const EXEMPT: [string, string][] = [
-    // Rare, expensive, once per job, and it needs room to say "Writing the
-    // report" while several LLM calls run. An icon cannot say that.
-    ["project/[id]/reports.tsx", "Write a whole-job report"],
+    // The whole-job report now lives in the New report menu (GenerateReportSheet),
+    // where its row says "Writing the report" while several LLM calls run.
     // Scoped to ONE phase. A single header button could not know which.
     ["workflow-template/[templateId].tsx", "Add a step"],
     // Opens an inline field that needs the width, and filing happens once a

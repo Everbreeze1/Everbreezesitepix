@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
-import { Alert, View } from "react-native";
-import { router, Stack, useLocalSearchParams } from "expo-router";
+import { ActionRail } from "@/components/ActionRail";
+import { Alert, RefreshControl, ScrollView, View } from "react-native";
+import { router, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { relativeTime } from "@everlumen/shared";
 import { createSiteLog, deleteSiteLog, listSiteLogs } from "@/api/site-logs";
@@ -10,20 +11,19 @@ import {
   siteLogSummary,
   type SiteLogRow,
 } from "@/api/site-log-notes";
-import { spacing } from "@/theme";
-import { FileText, Plus, Trash2 } from "@/ui/icons";
+import { ProjectSubPageHeader } from "@/components/ProjectSubPageHeader";
+import { spacing, useTheme } from "@/theme";
+import { NotebookPen, Plus, Trash2 } from "@/ui/icons";
 import {
-  Button,
-  CountBadge,
+  ActionSheet,
+  CardGrid,
   EmptyState,
   ErrorState,
-  IconButton,
-  ListGroup,
-  ListRow,
-  RowDivider,
-  Screen,
+  ItemCard,
   SkeletonList,
+  StatusChip,
   Text,
+  useCardPage,
 } from "@/ui";
 
 /**
@@ -38,9 +38,12 @@ import {
  * This screen is the list. Everything about one log lives in `site-log/[logId]`.
  */
 export default function ProjectSiteLogsScreen() {
+  const theme = useTheme();
+  const { inset } = useCardPage();
   const { id } = useLocalSearchParams<{ id: string }>();
   const queryClient = useQueryClient();
   const [failure, setFailure] = useState<string | null>(null);
+  const [menuFor, setMenuFor] = useState<SiteLogRow | null>(null);
 
   const queryKey = useMemo(() => ["site-logs", id], [id]);
 
@@ -92,115 +95,132 @@ export default function ProjectSiteLogsScreen() {
     [remove],
   );
 
+  const openTodos = logs.reduce((sum, log) => sum + openTodoCount(log), 0);
+  const summary =
+    logs.length === 0
+      ? null
+      : [
+          `${logs.length} log${logs.length === 1 ? "" : "s"}`,
+          openTodos > 0 ? `${openTodos} open to-do${openTodos === 1 ? "" : "s"}` : "No open to-dos",
+          `updated ${relativeTime(logs[0].updated_at)}`,
+        ].join(" · ");
+
+  const openLog = (logId: string) =>
+    router.push({ pathname: "/site-log/[logId]", params: { logId, projectId: id! } });
+
   return (
     <>
-      <Stack.Screen
-        options={{
-          title: "Site logs",
-          /*
-           * In the header, not under the list. The action's reach must not
-           * shrink as the list grows: below the rows, the cost of creating one
-           * more rises with how many you already have.
-           */
-          headerRight: () => (
-            <IconButton
-              icon={Plus}
-              accessibilityLabel="Start a log"
-              surface={false}
-              tone="primary"
-              disabled={create.isPending}
-              onPress={() => create.mutate()}
+      <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+        <ProjectSubPageHeader projectId={id} title="Site logs" summary={summary} />
+
+        <ScrollView
+          contentContainerStyle={{
+            paddingHorizontal: inset,
+            paddingTop: spacing.lg,
+            // Room for the floating Start a log button.
+            paddingBottom: 120,
+            gap: spacing.md,
+            flexGrow: 1,
+          }}
+          refreshControl={
+            <RefreshControl
+              refreshing={query.isRefetching}
+              onRefresh={() => void query.refetch()}
+              tintColor={theme.colors.mutedForeground}
+              colors={[theme.colors.primary]}
             />
-          ),
-        }}
+          }
+        >
+          {failure ? (
+            <Text variant="caption" tone="destructive">
+              {failure}
+            </Text>
+          ) : null}
+
+          {query.isLoading ? (
+            <SkeletonList rows={4} />
+          ) : query.error ? (
+            <ErrorState
+              title="Could not load site logs"
+              message={query.error instanceof Error ? query.error.message : undefined}
+              onRetry={() => void query.refetch()}
+            />
+          ) : logs.length === 0 ? (
+            <EmptyState
+              icon={NotebookPen}
+              title="No site logs yet"
+              /*
+                No PDF claim here: the list cannot export, only an open log
+                can, and promising it from an empty screen oversells it.
+              */
+              body="Pick the day's photos, write a line against each, and add anything that still needs doing before you leave."
+              action={{ label: "Start a log", onPress: () => create.mutate(), icon: Plus }}
+            />
+          ) : (
+            <CardGrid>
+              {logs.map((log) => {
+                const open = openTodoCount(log);
+                return (
+                  <ItemCard
+                    key={log.id}
+                    icon={NotebookPen}
+                    title={log.title}
+                    meta={`${siteLogSummary(log)} · ${relativeTime(log.updated_at)}`}
+                    /*
+                      The open to-do count, not the total. It is the only
+                      number on this card anybody acts on.
+                    */
+                    status={
+                      open > 0 ? (
+                        <StatusChip label={`${open} to do`} tone="warning" />
+                      ) : (
+                        <StatusChip label="Clear" tone="success" />
+                      )
+                    }
+                    onPress={() => openLog(log.id)}
+                    onMenu={() => setMenuFor(log)}
+                    menuLabel={`More actions for ${log.title}`}
+                  />
+                );
+              })}
+            </CardGrid>
+          )}
+        </ScrollView>
+      </View>
+
+      {/* Hidden while the empty state offers the same thing. */}
+      {query.isLoading || logs.length === 0 ? null : (
+        <ActionRail
+          actions={[
+            {
+              key: "new-log",
+              icon: Plus,
+              label: "Start a log",
+              disabled: create.isPending,
+              onPress: () => create.mutate(),
+            },
+          ]}
+        />
+      )}
+
+      <ActionSheet
+        visible={menuFor !== null}
+        onClose={() => setMenuFor(null)}
+        title={menuFor?.title}
+        actions={
+          menuFor
+            ? [
+                { label: "Open", icon: NotebookPen, onPress: () => openLog(menuFor.id) },
+                {
+                  label: "Delete this log",
+                  icon: Trash2,
+                  destructive: true,
+                  onPress: () => confirmDelete(menuFor),
+                },
+              ]
+            : []
+        }
       />
-
-      <Screen
-        scroll
-        padded={false}
-        refreshing={query.isRefetching}
-        onRefresh={() => void query.refetch()}
-        bottomInset={spacing.xxl}
-      >
-        {query.isLoading ? (
-          <SkeletonList rows={4} />
-        ) : query.error ? (
-          <ErrorState
-            title="Could not load site logs"
-            message={query.error instanceof Error ? query.error.message : undefined}
-            onRetry={() => void query.refetch()}
-          />
-        ) : (
-          <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.lg, gap: spacing.md }}>
-            {failure ? (
-              <Text variant="caption" tone="destructive">
-                {failure}
-              </Text>
-            ) : null}
-
-            {logs.length === 0 ? (
-              <EmptyState
-                icon={FileText}
-                title="No site logs yet"
-                /*
-                  No PDF claim. Export calls `generateSiteLogPdf`, which returns
-                  a file the phone would then have to save or share, and that
-                  half is not built. Advertising it here is the app promising
-                  something it cannot do, which is worse than not mentioning it.
-                */
-                body="Pick the day's photos, write a line against each, and add anything that still needs doing before you leave."
-                action={{ label: "Start a log", onPress: () => create.mutate(), icon: Plus }}
-              />
-            ) : (
-              <>
-                <ListGroup>
-                  {logs.map((log, index) => {
-                    const open = openTodoCount(log);
-                    return (
-                      <View key={log.id}>
-                        {index > 0 ? <RowDivider /> : null}
-                        <ListRow
-                          icon={FileText}
-                          title={log.title}
-                          subtitle={`${siteLogSummary(log)} · ${relativeTime(log.updated_at)}`}
-                          right={
-                            <View
-                              style={{
-                                flexDirection: "row",
-                                alignItems: "center",
-                                gap: spacing.sm,
-                              }}
-                            >
-                              {/*
-                                The open to-do count, not the total. It is the
-                                only number on this row anybody acts on.
-                              */}
-                              {open > 0 ? <CountBadge count={open} tone="primary" /> : null}
-                              <IconButton
-                                icon={Trash2}
-                                tone="destructive"
-                                surface={false}
-                                accessibilityLabel={`Delete ${log.title}`}
-                                onPress={() => confirmDelete(log)}
-                              />
-                            </View>
-                          }
-                          onPress={() =>
-                            router.push({
-                              pathname: "/site-log/[logId]",
-                              params: { logId: log.id, projectId: id! },
-                            })
-                          }
-                        />
-                      </View>
-                    );
-                  })}
-                </ListGroup>
-              </>
-            )}
-          </View>
-        )}
-      </Screen>
     </>
   );
 }

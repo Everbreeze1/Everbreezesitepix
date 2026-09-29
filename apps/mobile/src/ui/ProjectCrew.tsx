@@ -16,7 +16,7 @@ import {
   sortedRoster,
   toggled,
 } from "@/api/project-assignees-view";
-import { radius, spacing, useTheme } from "@/theme";
+import { radius, spacing, useLayout, useTheme } from "@/theme";
 import { Check, HardHat, Users } from "./icons";
 import { Avatar, AvatarStack } from "./Avatar";
 import { Button } from "./Button";
@@ -38,8 +38,21 @@ import { Text } from "./Text";
  * useful on its own, and hiding it from a Restricted member would leave them
  * thinking the job is unstaffed rather than knowing they may not staff it.
  */
-export function ProjectCrew({ projectId }: { projectId: string }) {
+export function ProjectCrew({
+  projectId,
+  compact = false,
+}: {
+  projectId: string;
+  /**
+   * Draw only the faces (or an Assign pill), for the project header's status
+   * row. The full row with its caption was the Details tab's; the sheet it
+   * opens is the same either way.
+   */
+  compact?: boolean;
+}) {
   const theme = useTheme();
+  // Inner lists shrink on a phone held on its side, so they fit in the sheet.
+  const layout = useLayout();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
@@ -58,7 +71,9 @@ export function ProjectCrew({ projectId }: { projectId: string }) {
     // Only when the sheet is open: the row itself renders from the roster it
     // already has cached on most screens, and a solo account has no roster to
     // fetch at all.
-    enabled: open,
+    // The compact trigger draws faces, so it needs the names as soon as there
+    // is anybody to draw.
+    enabled: open || (compact && (crewQuery.data?.assigned.length ?? 0) > 0),
     staleTime: 5 * 60 * 1000,
   });
 
@@ -98,49 +113,90 @@ export function ProjectCrew({ projectId }: { projectId: string }) {
     return null;
   }
 
-  return (
-    <>
+  const faces = assigned.map((id) => {
+    const person = people.find((p) => p.userId === id);
+    return { name: person ? crewName(person) : null, uri: person?.avatarUrl };
+  });
+
+  const trigger = compact ? (
+    assigned.length === 0 && !canAssign ? null : (
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={canAssign ? "Change who is on this job" : "Who is on this job"}
         onPress={() => setOpen(true)}
+        hitSlop={8}
         style={({ pressed }) => ({
           flexDirection: "row",
           alignItems: "center",
-          gap: spacing.sm,
-          paddingVertical: spacing.sm,
+          gap: spacing.xs,
+          minHeight: 32,
           opacity: pressed ? 0.6 : 1,
         })}
       >
-        <Icon icon={HardHat} size="md" tone="muted" />
         {assigned.length > 0 ? (
-          <AvatarStack
-            people={assigned.map((id) => {
-              const person = people.find((p) => p.userId === id);
-              return { name: person ? crewName(person) : null, uri: person?.avatarUrl };
-            })}
-            max={3}
-            size="sm"
-          />
-        ) : null}
-        <Text variant="caption" tone="muted" style={{ flex: 1 }} numberOfLines={1}>
-          {/*
+          <AvatarStack people={faces} max={3} size="md" />
+        ) : (
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: spacing.xs,
+              paddingHorizontal: spacing.md,
+              height: 32,
+              borderRadius: radius.pill,
+              borderWidth: 1,
+              borderStyle: "dashed",
+              borderColor: theme.colors.border,
+            }}
+          >
+            <Icon icon={HardHat} size="sm" tone="muted" />
+            <Text variant="caption" tone="primary">
+              Assign crew
+            </Text>
+          </View>
+        )}
+      </Pressable>
+    )
+  ) : null;
+
+  return (
+    <>
+      {compact ? (
+        trigger
+      ) : (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={canAssign ? "Change who is on this job" : "Who is on this job"}
+          onPress={() => setOpen(true)}
+          style={({ pressed }) => ({
+            flexDirection: "row",
+            alignItems: "center",
+            gap: spacing.sm,
+            paddingVertical: spacing.sm,
+            opacity: pressed ? 0.6 : 1,
+          })}
+        >
+          <Icon icon={HardHat} size="md" tone="muted" />
+          {assigned.length > 0 ? <AvatarStack people={faces} max={3} size="sm" /> : null}
+          <Text variant="caption" tone="muted" style={{ flex: 1 }} numberOfLines={1}>
+            {/*
             Names once the roster is loaded, a count before that. A count is a
             poor substitute, but "3 on this job" is honest and does not make the
             row jump as names arrive.
           */}
-          {people.length > 0
-            ? summary
-            : assigned.length === 0
-              ? "Nobody assigned"
-              : `${assigned.length} on this job`}
-        </Text>
-        {canAssign ? (
-          <Text variant="caption" tone="primary">
-            Change
+            {people.length > 0
+              ? summary
+              : assigned.length === 0
+                ? "Nobody assigned"
+                : `${assigned.length} on this job`}
           </Text>
-        ) : null}
-      </Pressable>
+          {canAssign ? (
+            <Text variant="caption" tone="primary">
+              Change
+            </Text>
+          ) : null}
+        </Pressable>
+      )}
 
       <Sheet
         visible={open}
@@ -190,7 +246,7 @@ export function ProjectCrew({ projectId }: { projectId: string }) {
             body="Invite people to your team and you can put them on a job."
           />
         ) : (
-          <ScrollView style={{ maxHeight: 400 }}>
+          <ScrollView style={{ maxHeight: layout.listMaxHeight(400) }}>
             <View style={{ gap: spacing.xs }}>
               {roster.map((person) => (
                 <CrewRow

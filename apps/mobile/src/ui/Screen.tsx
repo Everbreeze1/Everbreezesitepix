@@ -1,14 +1,7 @@
 import type { ReactNode } from "react";
-import {
-  RefreshControl,
-  ScrollView,
-  useWindowDimensions,
-  View,
-  type StyleProp,
-  type ViewStyle,
-} from "react-native";
+import { RefreshControl, ScrollView, View, type StyleProp, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { contentInset, spacing, useTheme } from "@/theme";
+import { spacing, useLayout, useTheme } from "@/theme";
 
 /**
  * The screen scaffold.
@@ -52,7 +45,7 @@ export function Screen({
 }: ScreenProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const layout = useLayout();
 
   /*
    * On a tablet the content is centred in a column rather than stretched.
@@ -68,8 +61,13 @@ export function Screen({
    * full width of the column. A fixed width would need `alignSelf` on every
    * screen, which is the kind of change that gets applied to nine and missed on
    * the tenth.
+   *
+   * Upright only. On its side the page spreads to the window (`pageInset`),
+   * because a 640pt island in the middle of a landscape iPad is what Jon saw
+   * on the Portfolio and called "too centered". The gutter there is never
+   * less than the side safe area, so nothing sits under a landscape notch.
    */
-  const horizontal = contentInset(width, padded ? spacing.lg : 0);
+  const horizontal = layout.inset(padded ? spacing.lg : 0);
 
   const padding: StyleProp<ViewStyle> = {
     paddingHorizontal: horizontal,
@@ -121,7 +119,8 @@ export function ScreenFooter({ children }: { children: ReactNode }) {
     <View
       style={[
         {
-          paddingHorizontal: spacing.lg,
+          // Clear of the notch when the phone is on its side; zero extra upright.
+          paddingHorizontal: spacing.lg + Math.max(insets.left, insets.right),
           paddingTop: spacing.md,
           paddingBottom: insets.bottom + spacing.md,
           gap: spacing.sm,

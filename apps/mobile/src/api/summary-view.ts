@@ -163,7 +163,7 @@ export function photoSelectionError(count: number): string | null {
 
 /** What the confirmation says before a summary is regenerated. */
 export const REGENERATE_WARNING =
-  "This writes the summary again from the original recording and replaces what is here now, including any edits.";
+  "This writes a new summary from the original recording. The one here now is kept, with any edits, under Earlier summaries on the walkthrough.";
 
 /** What the confirmation says before a summary is deleted. */
 export function deleteWarning(summary: { walkthroughId: string | null }): string {

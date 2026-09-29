@@ -1,11 +1,24 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  cardPageColumns,
+  cardPageInset,
+  cardPageInsetFor,
   CONTENT_MAX_WIDTH,
   contentInset,
   contentWidth,
   gridColumns,
   isWide,
+  listMaxHeight,
+  pageColumns,
+  pageInset,
+  pageWidth,
+  splitsPane,
+  spreads,
   TARGET_TILE,
+  usesRightRail,
+  WIDE_PAGE_MAX_WIDTH,
 } from "../apps/mobile/src/theme/layout";
 
 /*
@@ -162,5 +175,194 @@ describe("isWide", () => {
     // A phone in landscape is wide, and correctly so: an 844pt line of body
     // text is unreadable whatever device it is on.
     expect(isWide(844)).toBe(true);
+  });
+});
+
+describe("usesRightRail", () => {
+  it("keeps every phone in portrait on the bottom bar", () => {
+    for (const width of PHONES) expect(usesRightRail(width, 800), `${width}`).toBe(false);
+  });
+
+  it("moves tablets to the right edge in either orientation, bar the iPad mini upright", () => {
+    expect(usesRightRail(744, 1133)).toBe(false);
+    for (const width of [820, 1024]) expect(usesRightRail(width, 1180), `${width}`).toBe(true);
+    for (const width of [1024, 1180, 1366, 1280]) expect(usesRightRail(width, 800)).toBe(true);
+  });
+
+  it("moves any screen held on its side, phones included", () => {
+    expect(usesRightRail(667, 375)).toBe(true);
+    expect(usesRightRail(844, 390)).toBe(true);
+  });
+});
+
+/*
+ * Landscape. Jon, 2026-09-29, on the Portfolio with the tablet on its side:
+ * "it looks weird and too centered. it doesnt spread out", and "make all pages
+ * both vertical and horizontally optimized". Portrait was approved as it is,
+ * so every rule below leaves an upright screen exactly where it was.
+ */
+
+/** Real devices, width x height in points, upright. */
+const UPRIGHT: [number, number][] = [
+  [360, 780],
+  [390, 844],
+  [430, 932],
+  [744, 1133],
+  [820, 1180],
+  [1024, 1366],
+];
+const ON_ITS_SIDE: [number, number][] = UPRIGHT.map(([w, h]) => [h, w]);
+
+describe("spreads", () => {
+  it("is false for every screen held upright", () => {
+    for (const [w, h] of UPRIGHT) expect(spreads(w, h), `${w}x${h}`).toBe(false);
+  });
+
+  it("is true for every phone and tablet on its side", () => {
+    for (const [w, h] of ON_ITS_SIDE) expect(spreads(w, h), `${w}x${h}`).toBe(true);
+  });
+
+  it("leaves a narrow split-screen window as a column", () => {
+    expect(spreads(600, 500)).toBe(false);
+  });
+});
+
+describe("pageInset", () => {
+  it("is contentInset exactly when upright", () => {
+    for (const [w, h] of UPRIGHT) {
+      expect(pageInset(w, h, 16), `${w}x${h}`).toBe(contentInset(w, 16));
+      expect(pageInset(w, h, 0), `${w}x${h}`).toBe(contentInset(w, 0));
+    }
+  });
+
+  it("uses the width on its side instead of a centred 640pt island", () => {
+    // The screen Jon saw: a 10th-gen iPad on its side had 192pt of empty
+    // margin either side of the Portfolio.
+    expect(contentInset(1180, 16)).toBeGreaterThan(200);
+    expect(pageInset(1180, 820, 16)).toBe(16);
+    for (const [w, h] of ON_ITS_SIDE) {
+      if (w <= WIDE_PAGE_MAX_WIDTH) {
+        expect(pageWidth(w, h, 16), `${w}x${h}`).toBe(w - 32);
+      }
+      expect(pageWidth(w, h, 16), `${w}x${h}`).toBeGreaterThan(CONTENT_MAX_WIDTH);
+    }
+  });
+
+  it("stops growing on a very wide window", () => {
+    expect(pageWidth(1920, 1080, 16)).toBeLessThanOrEqual(WIDE_PAGE_MAX_WIDTH);
+  });
+
+  it("keeps content out from under a landscape notch", () => {
+    // An iPhone on its side reports 47pt either side.
+    expect(pageInset(844, 390, 16, 47)).toBe(63);
+    expect(pageInset(844, 390, 0, 47)).toBe(47);
+    // And an upright phone, whose side insets are zero, is unchanged.
+    expect(pageInset(390, 844, 16, 0)).toBe(16);
+  });
+});
+
+describe("pageColumns", () => {
+  it("is always one upright, so portrait layouts cannot move", () => {
+    for (const [w, h] of UPRIGHT) {
+      expect(pageColumns(w, h, pageWidth(w, h, 16)), `${w}x${h}`).toBe(1);
+    }
+  });
+
+  it("puts sections side by side on its side", () => {
+    // A phone on its side and a 10 inch iPad get two, a 12.9 inch three.
+    expect(pageColumns(844, 390, pageWidth(844, 390, 16, 47))).toBe(2);
+    expect(pageColumns(1180, 820, pageWidth(1180, 820, 16))).toBe(3);
+    expect(pageColumns(1366, 1024, pageWidth(1366, 1024, 16))).toBe(3);
+    expect(pageColumns(1366, 1024, pageWidth(1366, 1024, 16), 320, 2)).toBe(2);
+  });
+
+  it("never returns zero", () => {
+    expect(pageColumns(700, 300, 0)).toBe(1);
+  });
+});
+
+describe("splitsPane", () => {
+  it("shows list and detail together only on its side with room for both", () => {
+    for (const [w, h] of UPRIGHT) expect(splitsPane(w, h, pageWidth(w, h, 16))).toBe(false);
+    expect(splitsPane(1180, 820, pageWidth(1180, 820, 16))).toBe(true);
+    expect(splitsPane(844, 390, pageWidth(844, 390, 16, 47))).toBe(false);
+  });
+});
+
+describe("the project sub-pages' board", () => {
+  it("is unchanged upright", () => {
+    for (const [w, h] of UPRIGHT) {
+      expect(cardPageInsetFor(w, h, 16), `${w}x${h}`).toBe(cardPageInset(w, 16));
+    }
+  });
+
+  it("spreads and gains a column on a large tablet on its side", () => {
+    expect(cardPageInset(1366, 16)).toBeGreaterThan(200);
+    expect(cardPageInsetFor(1366, 1024, 16)).toBeLessThan(50);
+    expect(cardPageColumns(1366, 1024, 16)).toBe(3);
+    // A phone on its side gets two cards across.
+    expect(cardPageColumns(844, 390, 16, 47)).toBe(2);
+    // Never fewer than an upright tablet already had.
+    expect(cardPageColumns(820, 1180, 16)).toBe(2);
+    expect(cardPageColumns(390, 844, 16)).toBe(1);
+  });
+});
+
+describe("listMaxHeight", () => {
+  it("keeps the fixed caps upright", () => {
+    for (const [w, h] of UPRIGHT) expect(listMaxHeight(w, h, 380), `${w}x${h}`).toBe(380);
+  });
+
+  it("shrinks inside a sheet on a phone held on its side", () => {
+    expect(listMaxHeight(844, 390, 380)).toBe(160);
+    expect(listMaxHeight(844, 390, 380)).toBeLessThan(390 * 0.85 - 120);
+    // A tablet on its side has the room to keep most of it.
+    expect(listMaxHeight(1180, 820, 380)).toBe(328);
+  });
+});
+
+describe("the screens use it", () => {
+  const read = (p: string) => readFileSync(join(process.cwd(), p), "utf8");
+
+  it("spreads every Screen on its side through one helper", () => {
+    const screen = read("apps/mobile/src/ui/Screen.tsx");
+    expect(screen).toContain("layout.inset(padded ? spacing.lg : 0)");
+    expect(screen).not.toContain("contentInset(");
+    const subPage = read("apps/mobile/src/ui/SubPage.tsx");
+    expect(subPage).toContain("layout.cardInset(spacing.lg)");
+  });
+
+  it("lays the Portfolio out across the width on its side", () => {
+    const screen = read("apps/mobile/app/(app)/portfolio.tsx");
+    expect(screen).toContain("useLayout()");
+    expect(screen).toContain("projectColumns > 1");
+    const editor = read("apps/mobile/src/components/portfolio/SiteEditor.tsx");
+    expect(editor).toContain("useLayout().split()");
+    expect(editor).toContain("<SplitPane");
+    const embeds = read("apps/mobile/src/components/portfolio/EmbedsPanel.tsx");
+    expect(embeds).toContain("sideBySide");
+  });
+
+  it("puts multi-section screens in columns on its side", () => {
+    for (const path of [
+      "apps/mobile/app/(app)/(tabs)/account.tsx",
+      "apps/mobile/app/(app)/(tabs)/index.tsx",
+      "apps/mobile/app/(app)/admin/index.tsx",
+      "apps/mobile/app/(app)/admin/health.tsx",
+      "apps/mobile/app/(app)/settings/security.tsx",
+    ]) {
+      expect(read(path), path).toContain("<Columns");
+    }
+  });
+
+  it("keeps the full-bleed grids and headers clear of a landscape notch", () => {
+    for (const path of [
+      "apps/mobile/app/(app)/(tabs)/gallery.tsx",
+      "apps/mobile/app/(app)/(tabs)/projects.tsx",
+      "apps/mobile/app/(app)/project/[id]/index.tsx",
+    ]) {
+      expect(read(path), path).toContain("safeSide");
+    }
+    expect(read("apps/mobile/src/ui/PageHeader.tsx")).toContain("paddingLeft: insets.left");
   });
 });

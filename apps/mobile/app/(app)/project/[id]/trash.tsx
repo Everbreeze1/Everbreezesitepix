@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, useWindowDimensions, View } from "react-native";
-import { Stack, useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { displayCaption, relativeTime } from "@everlumen/shared";
 import {
@@ -13,18 +13,20 @@ import { signPhotoUrls } from "@/api/photos";
 import { photoPatchRowId, type PhotoPatchPayload } from "@/offline/handlers";
 import { enqueue } from "@/offline/outbox";
 import { refreshQueue, requestSync } from "@/offline/sync";
+import { ProjectSubPageHeader } from "@/components/ProjectSubPageHeader";
 import { gridColumns, radius, spacing, useTheme } from "@/theme";
-import { CheckCheck, CircleCheck, RotateCcw, Trash2 } from "@/ui/icons";
+import { CheckCheck, CircleCheck, RefreshCw, RotateCcw, Trash2, X } from "@/ui/icons";
 import {
+  ActionSheet,
   Badge,
   Button,
   EmptyState,
   ErrorState,
   Icon,
-  IconButton,
+  KebabButton,
   PhotoThumb,
   SkeletonList,
-  Text,
+  useCardPage,
 } from "@/ui";
 
 const GAP = spacing.xs;
@@ -49,6 +51,8 @@ export default function ProjectTrashScreen() {
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const { inset } = useCardPage();
 
   const queryKey = useMemo(() => ["project-trash", id], [id]);
 
@@ -123,27 +127,25 @@ export default function ProjectTrashScreen() {
    * showing nine photos where it could show twenty-five, and a width read once
    * never updates when an iPad rotates or is put into split screen.
    */
-  const columns = gridColumns(width - spacing.lg * 2);
-  const tile = (width - spacing.lg * 2 - GAP * (columns - 1)) / columns;
+  const inner = width - inset * 2;
+  const columns = gridColumns(inner);
+  const tile = (inner - GAP * (columns - 1)) / columns;
 
   return (
     <>
-      <Stack.Screen
-        options={{
-          title: selecting ? `${selected.size} selected` : "Trash",
-          headerRight: () =>
-            photos.length > 0 ? (
-              <IconButton
-                icon={CheckCheck}
-                accessibilityLabel="Select all"
-                surface={false}
-                tone="primary"
-                onPress={() => setSelected(new Set(photos.map((photo) => photo.id)))}
-              />
-            ) : null,
-        }}
-      />
       <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+        <ProjectSubPageHeader
+          projectId={id}
+          title={selecting ? `${selected.size} selected` : "Trash"}
+          summary={
+            photos.length === 0
+              ? null
+              : selecting
+                ? "Tap more photos, or restore the ones picked."
+                : `${photos.length} deleted ${photos.length === 1 ? "photo" : "photos"} · tap to select, then restore`
+          }
+          actions={photos.length > 0 ? <KebabButton onPress={() => setMenuOpen(true)} /> : null}
+        />
         {trashQuery.isLoading ? (
           <SkeletonList rows={4} />
         ) : trashQuery.error ? (
@@ -161,7 +163,11 @@ export default function ProjectTrashScreen() {
           />
         ) : (
           <ScrollView
-            contentContainerStyle={{ padding: spacing.lg, paddingBottom: 120 }}
+            contentContainerStyle={{
+              paddingHorizontal: inset,
+              paddingTop: spacing.lg,
+              paddingBottom: 120,
+            }}
             refreshControl={
               <RefreshControl
                 refreshing={trashQuery.isRefetching}
@@ -171,10 +177,6 @@ export default function ProjectTrashScreen() {
               />
             }
           >
-            <Text variant="caption" tone="muted" style={{ marginBottom: spacing.md }}>
-              {`${photos.length} ${photos.length === 1 ? "photo" : "photos"}. Tap to select, then restore.`}
-            </Text>
-
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: GAP }}>
               {photos.map((photo) => {
                 const picked = selected.has(photo.id);
@@ -187,7 +189,12 @@ export default function ProjectTrashScreen() {
                     onPress={() => toggle(photo.id)}
                     style={{ width: tile, height: tile }}
                   >
-                    <PhotoThumb uri={urls[photo.id]} width="100%" height="100%" />
+                    <PhotoThumb
+                      uri={urls[photo.id]}
+                      width="100%"
+                      height="100%"
+                      rounded={radius.lg}
+                    />
                     <View
                       style={{
                         position: "absolute",
@@ -195,7 +202,7 @@ export default function ProjectTrashScreen() {
                         left: 0,
                         right: 0,
                         bottom: 0,
-                        borderRadius: radius.sm,
+                        borderRadius: radius.lg,
                         borderWidth: 3,
                         borderColor: picked ? theme.colors.primary : "transparent",
                         // Everything here is deleted, so the whole grid is dimmed
@@ -248,6 +255,22 @@ export default function ProjectTrashScreen() {
           </View>
         ) : null}
       </View>
+      <ActionSheet
+        visible={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        title="Trash"
+        actions={[
+          {
+            label: "Select all",
+            icon: CheckCheck,
+            onPress: () => setSelected(new Set(photos.map((photo) => photo.id))),
+          },
+          ...(selecting
+            ? [{ label: "Clear selection", icon: X, onPress: () => setSelected(new Set()) }]
+            : []),
+          { label: "Refresh", icon: RefreshCw, onPress: () => void trashQuery.refetch() },
+        ]}
+      />
     </>
   );
 }

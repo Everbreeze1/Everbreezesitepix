@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { Alert, View } from "react-native";
 import { Image } from "expo-image";
-import { Stack } from "expo-router";
+import { router, Stack } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createProjectGroup,
@@ -80,6 +80,7 @@ export default function GroupsScreen() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["project-groups"] });
       void queryClient.invalidateQueries({ queryKey: ["project-group-members"] });
+      void queryClient.invalidateQueries({ queryKey: ["project-group"] });
       setFailure(null);
     },
     onError: (error: unknown) =>
@@ -197,7 +198,15 @@ export default function GroupsScreen() {
                   const count = memberCount(group);
                   const thumbs = covers(group);
                   return (
-                    <Card key={group.id}>
+                    /*
+                     * The card opens the group: every job in it with its
+                     * checklists and tasks, as the web group page shows.
+                     */
+                    <Card
+                      key={group.id}
+                      onPress={() => router.push(`/group/${group.id}`)}
+                      accessibilityLabel={`Open ${group.name}, ${groupSummary(count)}`}
+                    >
                       <View style={{ gap: spacing.md }}>
                         <View
                           style={{
@@ -254,6 +263,11 @@ export default function GroupsScreen() {
                         ) : null}
 
                         <View style={{ flexDirection: "row", gap: spacing.sm }}>
+                          <Button
+                            label="Open"
+                            size="sm"
+                            onPress={() => router.push(`/group/${group.id}`)}
+                          />
                           <Button
                             label="Projects"
                             icon={FolderKanban}

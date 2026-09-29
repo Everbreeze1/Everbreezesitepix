@@ -6,6 +6,7 @@ import { enqueue, newOutboxId } from "@/offline/outbox";
 import { persistCapture } from "@/offline/media";
 import { requestSync } from "@/offline/sync";
 import type { PhotoUploadPayload } from "@/offline/handlers";
+import { supabase } from "@/lib/supabase";
 
 /**
  * Flatten a marked-up photo and store it as a new one.
@@ -127,4 +128,23 @@ export async function saveAnnotatedPhoto(options: {
    * pretending to know what the server will call it.
    */
   return { queued: true as const };
+}
+
+/**
+ * When the photo being annotated was taken, for the Timestamp tool.
+ *
+ * Capture time rather than the moment of annotating: a stamp on a site photo
+ * is read as "this is when it looked like this". Null when the row cannot be
+ * read (offline, or a photo with no capture time), and the tool then stamps
+ * the current time, which is what web stamps.
+ */
+export async function getPhotoCapturedAt(photoId: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("photos")
+    .select("taken_at, created_at")
+    .eq("id", photoId)
+    .maybeSingle();
+  if (error || !data) return null;
+  const row = data as { taken_at: string | null; created_at: string | null };
+  return row.taken_at ?? row.created_at ?? null;
 }

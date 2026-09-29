@@ -207,16 +207,21 @@ describe("the phone and the server agree", () => {
     expect(client()).toContain("revokePhotoShare");
   });
 
-  it("no longer mints a token straight from the lightbox", () => {
+  it("no longer mints a token straight from the viewer", () => {
     /*
-     * The behaviour change this feature is really about: Share opens the list
-     * of what is already public instead of silently adding to it.
+     * The behaviour change this feature is really about: Share opens a sheet
+     * that says what is already public instead of silently adding to it. The
+     * sheet is now web's SharePhotoDialog shape: one switch, which mints a
+     * single non-expiring link when turned on and withdraws every live link
+     * when turned off.
      */
-    const screen = readFileSync(
-      join(process.cwd(), "apps/mobile/app/(app)/project/[id]/index.tsx"),
-      "utf8",
-    );
-    expect(screen).toContain("PhotoSharesSheet");
-    expect(screen).not.toContain("createPhotoShareToken");
+    const dir = join(process.cwd(), "apps/mobile/src/components/photo-viewer");
+    const viewer = readFileSync(join(dir, "PhotoViewer.tsx"), "utf8");
+    expect(viewer).toContain("<PhotoShareSheet");
+    expect(viewer).not.toContain("createPhotoShareToken");
+
+    const sheet = readFileSync(join(dir, "PhotoShareSheet.tsx"), "utf8");
+    expect(sheet).toContain("createPhotoShareToken(photoId, 0, true)");
+    expect(sheet).toContain("for (const row of live) await revokePhotoShare(row.id)");
   });
 });

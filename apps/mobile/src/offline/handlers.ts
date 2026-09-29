@@ -1,10 +1,13 @@
 import { applyItemPatch, attachPhotoToItem } from "@/api/checklists";
-import { uploadProjectPhoto, type PhotoPhase } from "@/api/photos";
+import { findQueuedPhotoId, uploadProjectPhoto, type PhotoPhase } from "@/api/photos";
 import type { Coords } from "@/api/photo-meta";
 import { applyPhotoPatch, type PhotoPatch } from "@/api/photo-edit";
 import { applyProjectPatch } from "@/api/projects";
+import { queuedSiteVideoPath, saveSiteVideo } from "@/api/project-videos";
+import { queryClient } from "@/lib/query";
 import { saveSiteLog } from "@/api/site-logs";
 import { setTaskPhotoStatus } from "@/api/task-photos";
+import { saveWalkthroughPhoto } from "@/api/walkthroughs";
 import type { ProjectPatch } from "@/api/project-patch";
 import {
   applyTaskEdit,
@@ -60,9 +63,16 @@ export type PhotoUploadPayload = {
   exif?: Record<string, unknown> | null;
   phase?: PhotoPhase;
   tags?: string[];
+  /**
+   * The photo's note: typed, or dictated with the keyboard's microphone, on
+   * the camera. Written to `photos.caption`, which is what the whole-job
+   * report, photo summaries and site-log descriptions read (`cleanCaption`).
+   */
   caption?: string;
   deviceCoords?: Coords | null;
   projectCoords?: Coords | null;
+  /** When the shutter fired (ISO): the timeline's order for a photo with no EXIF time. */
+  capturedAt?: string;
 };
 
 /**
@@ -94,6 +104,22 @@ export function isPermanent(error: unknown): boolean {
   if (error instanceof PermanentError) return true;
   return error instanceof Error ? classify(error.message) : false;
 }
+
+/**
+ * A site video recorded in the camera's Video mode, queued.
+ *
+ * Queued like a photo so the camera is back the moment Stop is pressed: the
+ * recording is moved into app storage and this row delivers it whenever the
+ * network allows, with the queue banner showing it is still on the phone. It
+ * used to upload inline behind a full-screen "Uploading video 42%" wait.
+ */
+export type VideoUploadPayload = {
+  userId: string;
+  projectId: string;
+  durationSeconds: number;
+  /** When it was recorded (ISO), so a late send still captions the real time. */
+  recordedAt: string;
+};
 
 export type ChecklistItemPatchPayload = {
   itemId: string;
@@ -212,6 +238,29 @@ export function photoPatchRowId(field: string, photoIds: string[]): string {
   return `photo-patch:${field}:${photoIds.join(",")}`;
 }
 
+/**
+ * A camera retag of a photo that was queued and may already have landed.
+ *
+ * The camera saves every shot the moment it is taken, so a Before/After,
+ * caption or tag changed afterwards can reach a row that is already on the
+ * server. The photo's id is not known on the phone, but its storage path is
+ * (derived from the upload's row id), so this finds the row by that.
+ *
+ * Carries the whole value of every column it sets, so it is idempotent, and
+ * it is keyed per upload so a second retag replaces the first.
+ */
+export type CapturedPhotoPatchPayload = {
+  userId: string;
+  projectId: string;
+  /** The `photo_upload` row id, which is the upload's idempotency key. */
+  uploadId: string;
+  patch: PhotoPatch;
+};
+
+export function capturedPhotoPatchRowId(uploadId: string): string {
+  return `captured-photo-patch:${uploadId}`;
+}
+
 export type TaskCreatePayload = {
   input: CreateTaskInput;
 };
@@ -269,6 +318,27 @@ export function workflowItemRowId(itemId: string): string {
 export function workflowPhaseRowId(phaseId: string, field: "signoff" | "notes"): string {
   return `workflow_phase_patch:${phaseId}:${field}`;
 }
+/**
+ * A photo snapped during a walkthrough recording, queued.
+ *
+ * Linked to its walkthrough at its offset into the recording, which is what
+ * the transcript captions it from. Queued rather than sent inline at Stop,
+ * where one failed upload used to lose every snap of the walk.
+ */
+export type WalkthroughPhotoPayload = {
+  userId: string;
+  projectId: string;
+  walkthroughId: string;
+  offsetSeconds: number;
+  position: number;
+  width?: number | null;
+  height?: number | null;
+  exif?: Record<string, unknown> | null;
+  /** When the snap was pressed (ISO). */
+  capturedAt?: string;
+  deviceCoords?: Coords | null;
+  projectCoords?: Coords | null;
+};
 
 type Handler = (row: OutboxRow) => Promise<void>;
 
@@ -294,6 +364,7 @@ const handlers: Record<OutboxKind, Handler> = {
       caption: payload.caption,
       deviceCoords: payload.deviceCoords,
       projectCoords: payload.projectCoords,
+      capturedAt: payload.capturedAt,
       // The row id is the idempotency key: same key, same storage path, same
       // duplicate check, so a repeat of a half-finished send converges.
       uploadId: row.id,
@@ -321,6 +392,55 @@ const handlers: Record<OutboxKind, Handler> = {
         completed_by: payload.userId,
       });
     }
+  },
+
+  video_upload: async (row) => {
+    const payload = JSON.parse(row.payload) as VideoUploadPayload;
+
+    if (!row.local_uri) {
+      throw new PermanentError("Queued video has no file on this device");
+    }
+
+    await saveSiteVideo({
+      userId: payload.userId,
+      projectId: payload.projectId,
+      localUri: row.local_uri,
+      durationSeconds: payload.durationSeconds,
+      recordedAt: payload.recordedAt,
+      // Keyed on the row id, so a repeated send converges on one video.
+      storagePath: queuedSiteVideoPath(payload.userId, payload.projectId, row.id),
+    });
+    void queryClient.invalidateQueries({ queryKey: ["project-videos", payload.projectId] });
+  },
+
+  walkthrough_photo: async (row) => {
+    const payload = JSON.parse(row.payload) as WalkthroughPhotoPayload;
+
+    if (!row.local_uri) {
+      throw new PermanentError("Queued walkthrough photo has no file on this device");
+    }
+
+    await saveWalkthroughPhoto({
+      userId: payload.userId,
+      projectId: payload.projectId,
+      walkthroughId: payload.walkthroughId,
+      asset: {
+        uri: row.local_uri,
+        width: payload.width,
+        height: payload.height,
+        exif: payload.exif,
+      },
+      offsetSeconds: payload.offsetSeconds,
+      position: payload.position,
+      deviceCoords: payload.deviceCoords,
+      projectCoords: payload.projectCoords,
+      capturedAt: payload.capturedAt,
+      // Same row, same storage path and idempotency key: a retry converges.
+      uploadId: row.id,
+    });
+    void queryClient.invalidateQueries({ queryKey: ["walkthrough", payload.walkthroughId] });
+    void queryClient.invalidateQueries({ queryKey: ["project-walkthroughs", payload.projectId] });
+    void queryClient.invalidateQueries({ queryKey: ["project-photos", payload.projectId] });
   },
 
   checklist_item_patch: async (row) => {
@@ -365,6 +485,16 @@ const handlers: Record<OutboxKind, Handler> = {
     // Idempotent: the patch carries the whole value for every column it sets,
     // so replaying it lands on the same result.
     await applyPhotoPatch(payload.photoIds, payload.patch);
+  },
+
+  captured_photo_patch: async (row) => {
+    const payload = JSON.parse(row.payload) as CapturedPhotoPatchPayload;
+    const photoId = await findQueuedPhotoId(payload.userId, payload.projectId, payload.uploadId);
+    // Not landed yet (held for its pill, or still retrying): an ordinary
+    // failure, so the backoff tries again after the upload has gone.
+    if (!photoId) throw new Error("Photo has not finished uploading yet");
+    await applyPhotoPatch([photoId], payload.patch);
+    void queryClient.invalidateQueries({ queryKey: ["project-photos", payload.projectId] });
   },
 
   task_create: async (row) => {

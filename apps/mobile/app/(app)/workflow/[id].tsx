@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
-import { router, Stack, useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { WORKFLOW_KIND_LABELS, type WorkflowItemKind } from "@everlumen/shared";
 import {
@@ -18,6 +18,7 @@ import {
   type WorkflowPhase,
 } from "@/api/workflows";
 import { isShareLive, openShareSheet, publicUrl, setRecordShareEnabled } from "@/api/sharing";
+import { ProjectSubPageHeader } from "@/components/ProjectSubPageHeader";
 import { QueueBanner } from "@/components/QueueBanner";
 import { useAuth } from "@/lib/auth";
 import {
@@ -28,7 +29,7 @@ import {
 } from "@/offline/handlers";
 import { enqueue } from "@/offline/outbox";
 import { refreshQueue, requestSync } from "@/offline/sync";
-import { spacing, useTheme } from "@/theme";
+import { spacing, useLayout, useTheme } from "@/theme";
 import { Camera, CircleCheck, PenLine, Share2 } from "@/ui/icons";
 import {
   Badge,
@@ -47,6 +48,9 @@ import {
 export default function WorkflowRunnerScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const theme = useTheme();
+  // A form column, not a stretched phone layout, on a tablet.
+  // Centred upright on a tablet; spread and clear of the notch on its side.
+  const inset = useLayout().inset(spacing.lg);
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -232,10 +236,20 @@ export default function WorkflowRunnerScreen() {
 
   return (
     <>
-      <Stack.Screen
-        options={{
-          title: data?.name ?? "Workflow",
-          headerRight: () =>
+      <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+        <ProjectSubPageHeader
+          projectId={data?.project_id}
+          title={data?.name ?? "Workflow"}
+          summary={
+            !data
+              ? null
+              : phases.length === 0
+                ? "No phases on this workflow"
+                : cursor === -1
+                  ? `All ${phases.length} phases complete`
+                  : `Phase ${cursor + 1} of ${phases.length}: ${phases[cursor]?.name ?? ""}`
+          }
+          actions={
             data ? (
               <IconButton
                 icon={Share2}
@@ -244,23 +258,21 @@ export default function WorkflowRunnerScreen() {
                     ? "Share this workflow"
                     : "Turn on sharing for this workflow"
                 }
-                surface={false}
                 // Tinted while live, muted while off: the header states whether
                 // this record is public without anyone opening a sheet.
                 tone={isShareLive(data.share_token, data.revoked_at) ? "primary" : "muted"}
                 onPress={() => void shareWorkflow()}
               />
-            ) : null,
-        }}
-      />
-      <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+            ) : null
+          }
+        />
         <QueueBanner />
 
         {shareError ? (
           <Text
             variant="caption"
             tone="destructive"
-            style={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.sm }}
+            style={{ paddingHorizontal: inset, paddingVertical: spacing.sm }}
           >
             {shareError}
           </Text>
@@ -275,7 +287,11 @@ export default function WorkflowRunnerScreen() {
           />
         ) : (
           <ScrollView
-            contentContainerStyle={{ padding: spacing.lg, gap: spacing.md }}
+            contentContainerStyle={{
+              paddingHorizontal: inset,
+              paddingVertical: spacing.lg,
+              gap: spacing.md,
+            }}
             keyboardShouldPersistTaps="handled"
             refreshControl={
               <RefreshControl
@@ -297,11 +313,6 @@ export default function WorkflowRunnerScreen() {
                   steps={phases.map((phase) => phase.name)}
                   currentIndex={cursor === -1 ? phases.length - 1 : cursor}
                 />
-                <Text variant="caption" tone="muted" style={{ marginTop: spacing.sm }}>
-                  {cursor === -1
-                    ? "Every phase is complete."
-                    : `Phase ${cursor + 1} of ${phases.length}: ${phases[cursor]?.name ?? ""}`}
-                </Text>
               </Card>
             ) : null}
 

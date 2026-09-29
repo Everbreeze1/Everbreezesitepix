@@ -68,7 +68,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.everlumen.app"
+      "bundleIdentifier": "com.everlumen.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.everlumen.app",
