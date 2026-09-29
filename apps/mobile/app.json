@@ -89,6 +89,38 @@
       ],
       "blockedPermissions": [
         "android.permission.ACCESS_BACKGROUND_LOCATION"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "everlumen.co",
+              "pathPrefix": "/invite/"
+            },
+            {
+              "scheme": "https",
+              "host": "everlumen.co",
+              "pathPrefix": "/subcontractor-invite/"
+            },
+            {
+              "scheme": "https",
+              "host": "www.everlumen.co",
+              "pathPrefix": "/invite/"
+            },
+            {
+              "scheme": "https",
+              "host": "www.everlumen.co",
+              "pathPrefix": "/subcontractor-invite/"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
       ]
     },
     "web": {

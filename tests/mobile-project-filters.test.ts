@@ -34,7 +34,10 @@ const facts = (over: Partial<ProjectFacts> = {}): ProjectFacts => ({
   contributorIds: [],
   ...over,
 });
-const on = (over: Partial<ProjectFilters>): ProjectFilters => ({ ...EMPTY_PROJECT_FILTERS, ...over });
+const on = (over: Partial<ProjectFilters>): ProjectFilters => ({
+  ...EMPTY_PROJECT_FILTERS,
+  ...over,
+});
 const project = { starred: false, labels: ["Lead", "Urgent"], updated_at: "2026-06-01T12:00:00Z" };
 
 describe("matchesProjectFilters", () => {

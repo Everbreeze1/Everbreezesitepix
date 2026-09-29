@@ -176,6 +176,8 @@ export default function AppLayout() {
         />
         <Stack.Screen name="settings/security" options={{ title: "Email and password" }} />
         <Stack.Screen name="settings/appearance" options={{ title: "Appearance" }} />
+        <Stack.Screen name="settings/review-links" options={{ title: "Review links" }} />
+        <Stack.Screen name="help" options={{ title: "Help", ...MENU_DESTINATION }} />
         <Stack.Screen name="workspace" options={{ title: "Workspace" }} />
         <Stack.Screen name="labels" options={{ title: "Labels" }} />
         <Stack.Screen name="templates" options={{ title: "Templates", ...MENU_DESTINATION }} />
@@ -184,6 +186,17 @@ export default function AppLayout() {
           options={{ title: "Workflow template" }}
         />
         <Stack.Screen name="template/[id]" options={{ title: "Template" }} />
+        <Stack.Screen name="blueprints" options={{ title: "Blueprints" }} />
+        <Stack.Screen name="blueprint/[id]" options={{ title: "Blueprint" }} />
+        <Stack.Screen name="document-templates" options={{ title: "Document templates" }} />
+        <Stack.Screen name="document-template/[id]" options={{ title: "Document template" }} />
+        <Stack.Screen name="report-templates" options={{ title: "Report templates" }} />
+        <Stack.Screen name="report-template/[id]" options={{ title: "Report template" }} />
+        <Stack.Screen name="walkthrough-templates" options={{ title: "Walkthrough templates" }} />
+        <Stack.Screen
+          name="walkthrough-template/[id]"
+          options={{ title: "Walkthrough template" }}
+        />
         <Stack.Screen name="project/[id]/site-logs" options={{ title: "Site logs" }} />
         <Stack.Screen name="site-log/[logId]" options={{ title: "Site log" }} />
         <Stack.Screen name="project/[id]/reports" options={{ title: "Reports" }} />

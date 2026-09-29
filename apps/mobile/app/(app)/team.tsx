@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, Pressable, ScrollView, View } from "react-native";
-import { Stack } from "expo-router";
+import { Alert, Pressable, ScrollView, Share, View } from "react-native";
+import { router, Stack } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   assignableRoles,
@@ -36,6 +36,9 @@ import {
   type TeamMember,
 } from "@/api/team-roster";
 import { useAuth } from "@/lib/auth";
+import { webAppUrl } from "@/lib/api";
+import { createTeam } from "@/api/invites";
+import { inviteRoute, parseInviteLink, teamInviteLink } from "@/api/invite-view";
 import { getMemberProjects, setMemberProjects } from "@/api/member-projects";
 import {
   canScopeProjects,
@@ -51,8 +54,12 @@ import { radius, spacing, useLayout, useTheme } from "@/theme";
 import {
   Check,
   FolderKanban,
+  Link,
+  LogIn,
   LogOut,
   Send,
+  Share2,
+  Sparkles,
   TriangleAlert,
   UserPlus,
   Users,
@@ -316,19 +323,15 @@ export default function TeamScreen() {
   }
 
   /*
-   * No team at all is a normal starting state, not an error. Creating one is
-   * deliberately absent: it happens once, during setup, and belongs with the
-   * rest of the wizard rather than behind a roster screen.
+   * No team at all is a normal starting state, not an error. From here the
+   * person can start one (they become its owner, as on the web's Teams page)
+   * or join one from an invitation link somebody sent them.
    */
   if (!data?.team) {
     return (
       <>
         <Stack.Screen options={{ title: "Team" }} />
-        <EmptyState
-          icon={Users}
-          title="No team yet"
-          body="Set your workspace up on the web app once, and the roster appears here."
-        />
+        <NoTeam onCreated={() => void queryClient.invalidateQueries({ queryKey: QUERY_KEY })} />
       </>
     );
   }
@@ -436,6 +439,7 @@ export default function TeamScreen() {
                       invite={invite}
                       plan={plan}
                       canManage={canManageUsers}
+                      link={teamInviteLink(invite.token, webAppUrl)}
                       onResend={() => run.mutate(() => resendInvite(invite.id))}
                       onRevoke={() => run.mutate(() => revokeInvite(invite.id))}
                     />
@@ -631,17 +635,41 @@ function InviteRow({
   invite,
   plan,
   canManage,
+  link,
   onResend,
   onRevoke,
 }: {
   invite: TeamInvite;
   plan: "starter" | "pro" | "team";
   canManage: boolean;
+  /** The web's Copy link, or null when this build has no web origin. */
+  link: string | null;
   onResend: () => void;
   onRevoke: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const expired = isInviteExpired(invite);
+
+  /*
+   * The web's Copy link. The share sheet has Copy in it on both platforms, and
+   * it can also hand the link straight to Messages or WhatsApp, which is how a
+   * foreman actually sends one when the email went to spam.
+   */
+  const shareLink = () => {
+    if (!link) return;
+    void Share.share({ message: link, url: link }).catch(() => {});
+  };
+
+  // Cancelling cannot be undone: the link in their inbox stops working.
+  const confirmRevoke = () =>
+    Alert.alert(
+      "Cancel this invite?",
+      `The link sent to ${invite.email} stops working. You can invite them again later.`,
+      [
+        { text: "Keep it", style: "cancel" },
+        { text: "Cancel invite", style: "destructive", onPress: onRevoke },
+      ],
+    );
 
   return (
     <>
@@ -662,8 +690,11 @@ function InviteRow({
         onClose={() => setOpen(false)}
         title={invite.email}
         actions={[
+          ...(link && !expired
+            ? [{ label: "Share or copy the invite link", icon: Share2, onPress: shareLink }]
+            : []),
           { label: "Send the invite again", icon: Send, onPress: onResend },
-          { label: "Cancel this invite", icon: UserX, destructive: true, onPress: onRevoke },
+          { label: "Cancel this invite", icon: UserX, destructive: true, onPress: confirmRevoke },
         ]}
       />
     </>
@@ -714,5 +745,104 @@ function RolePicker({
         ))}
       </ListGroup>
     </Sheet>
+  );
+}
+
+/**
+ * The screen for somebody with no team: start one, or join one.
+ *
+ * Starting one is the web Teams page's "Start your team": a name, and the
+ * caller becomes the owner. Joining takes the invitation link from the email,
+ * for the phone whose mail app opened it in a browser instead of here.
+ */
+function NoTeam({ onCreated }: { onCreated: () => void }) {
+  const [name, setName] = useState("");
+  const [link, setLink] = useState("");
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<string | null>(null);
+
+  const create = useMutation({
+    mutationFn: () => createTeam(name.trim()),
+    onSuccess: () => {
+      setName("");
+      onCreated();
+    },
+    onError: (error: unknown) =>
+      setFailure(error instanceof Error ? error.message : "Failed to create team"),
+  });
+
+  const openLink = () => {
+    const parsed = parseInviteLink(link);
+    if (!parsed) {
+      setLinkError("That is not an invitation link. It looks like everlumen.co/invite/...");
+      return;
+    }
+    setLinkError(null);
+    router.push(inviteRoute(parsed) as never);
+  };
+
+  return (
+    <Screen scroll bottomInset={spacing.xxl}>
+      <View style={{ gap: spacing.xl, paddingTop: spacing.lg }}>
+        <View style={{ gap: spacing.md }}>
+          <SectionHeader title="Start your team" />
+          <Text variant="body" tone="muted">
+            Create a team to invite teammates and share projects, photos, and reports. You will be
+            the account owner.
+          </Text>
+          <Field
+            label="Team name"
+            value={name}
+            onChangeText={(next) => {
+              setName(next.slice(0, 80));
+              if (failure) setFailure(null);
+            }}
+            placeholder="Acme Construction"
+            error={failure ?? undefined}
+            autoCapitalize="words"
+            returnKeyType="done"
+            onSubmitEditing={() => (name.trim() ? create.mutate() : undefined)}
+          />
+          <Button
+            label={create.isPending ? "Creating" : "Create team"}
+            icon={Sparkles}
+            fullWidth
+            loading={create.isPending}
+            disabled={!name.trim() || create.isPending}
+            onPress={() => create.mutate()}
+          />
+        </View>
+
+        <View style={{ gap: spacing.md }}>
+          <SectionHeader title="Joining somebody else's team?" />
+          <Text variant="body" tone="muted">
+            Open the invitation email on this phone, or paste the link from it here.
+          </Text>
+          <Field
+            label="Invitation link"
+            icon={Link}
+            value={link}
+            onChangeText={(next) => {
+              setLink(next);
+              if (linkError) setLinkError(null);
+            }}
+            placeholder="https://everlumen.co/invite/..."
+            error={linkError ?? undefined}
+            keyboardType="url"
+            autoCapitalize="none"
+            returnKeyType="done"
+            onSubmitEditing={openLink}
+          />
+          <Button
+            label="Open invitation"
+            icon={LogIn}
+            variant="outline"
+            fullWidth
+            disabled={!link.trim()}
+            onPress={openLink}
+          />
+        </View>
+      </View>
+    </Screen>
   );
 }

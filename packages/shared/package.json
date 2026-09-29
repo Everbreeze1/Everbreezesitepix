@@ -31,6 +31,10 @@
     "./team-permissions": {
       "types": "./src/team-permissions.ts",
       "default": "./src/team-permissions.ts"
+    },
+    "./help-guides": {
+      "types": "./src/help-guides.ts",
+      "default": "./src/help-guides.ts"
     }
   },
   "types": "./src/index.ts",

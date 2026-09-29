@@ -32,8 +32,20 @@ describe("buildWorkspaceSchedule", () => {
     stagesById: stages,
     projects: [
       { id: "p1", name: "Booked", status: "active", scheduled_date: "2026-09-15" },
-      { id: "p2", name: "Waiting", status: "active", pipeline_stage_id: "st-sched", scheduled_date: null },
-      { id: "p3", name: "Lead", status: "active", pipeline_stage_id: "st-lead", scheduled_date: null },
+      {
+        id: "p2",
+        name: "Waiting",
+        status: "active",
+        pipeline_stage_id: "st-sched",
+        scheduled_date: null,
+      },
+      {
+        id: "p3",
+        name: "Lead",
+        status: "active",
+        pipeline_stage_id: "st-lead",
+        scheduled_date: null,
+      },
       { id: "p4", name: "Archived", archived: true, scheduled_date: "2026-09-15" },
     ],
     tasks: [
@@ -100,7 +112,7 @@ describe("the Schedule screen", () => {
   });
 
   it("books and clears a job's day with the web's update, and asks before clearing", () => {
-    expect(api).toContain('.update({ scheduled_date: date } as never)');
+    expect(api).toContain(".update({ scheduled_date: date } as never)");
     expect(screen).toContain('"Clear the booked day?"');
     expect(screen).toContain('style: "destructive"');
   });

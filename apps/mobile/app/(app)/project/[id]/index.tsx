@@ -108,6 +108,8 @@ import { listSiteLogs } from "@/api/site-logs";
 import { listDocumentTree } from "@/api/pages";
 import { PhotoBulkBar, type PhotoBulkAction } from "@/components/PhotoBulkBar";
 import { generateSummaryFromPhotos } from "@/api/summaries";
+import { getProjectContributorLog } from "@/api/project-contributors";
+import { attributionText } from "@/api/project-contributors-view";
 import { photoSelectionError } from "@/api/summary-view";
 import { randomUUID } from "expo-crypto";
 import { ProjectEditorSheet } from "@/components/ProjectEditorSheet";
@@ -341,6 +343,15 @@ export default function ProjectDetailScreen() {
   }, [photos, filter, tagFilter, tagLogic, sort]);
 
   const tagCounts = useMemo(() => photoTagCounts(photos), [photos]);
+
+  // The "Logged by" line over the grid: the web project page's contributors call.
+  const contributorsQuery = useQuery({
+    queryKey: ["project-contributor-log", id],
+    queryFn: () => getProjectContributorLog(id!),
+    enabled: Boolean(id),
+    staleTime: 60_000,
+  });
+  const contributorLog = attributionText(contributorsQuery.data);
 
   const videosQuery = useQuery({
     queryKey: ["project-videos", id],
@@ -1041,6 +1052,21 @@ export default function ProjectDetailScreen() {
                         {/* Newest or oldest first is set in Filters, as on the web. */}
                       </View>
                     </View>
+
+                    {/*
+                      Who has been adding photos here, as the web prints it
+                      above its grid. A log of the work, not the crew.
+                    */}
+                    {showPhotos && contributorLog ? (
+                      <UIText
+                        variant="caption"
+                        tone="muted"
+                        accessibilityHint="Who has been adding photos here, not who is assigned"
+                        style={{ marginTop: -spacing.sm, marginBottom: spacing.md }}
+                      >
+                        {contributorLog}
+                      </UIText>
+                    ) : null}
 
                     {/*
                       Was a hand-rolled row of Pressables with its own chip

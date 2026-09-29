@@ -2,9 +2,10 @@ import { useEffect, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createAsyncStoragePersister } from "@tanstack/query-async-storage-persister";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
-import { Stack } from "expo-router";
+import { Stack, usePathname } from "expo-router";
 import * as NativeSplash from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
+import { isInvitePath } from "@/api/invite-view";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { LaunchScreen } from "@/components/LaunchScreen";
 import { AuthProvider, useAuth } from "@/lib/auth";
@@ -107,6 +108,12 @@ function Launch() {
   const [mounted, setMounted] = useState(true);
   const [minimumElapsed, setMinimumElapsed] = useState(false);
   const [dismissed, setDismissed] = useState(false);
+  /*
+   * An invitation link opened signed out goes straight to the invitation. Its
+   * screen is the sign-up, so a welcome screen offering "Sign in" in front of
+   * it would be a step in the wrong direction.
+   */
+  const onInvite = isInvitePath(usePathname());
 
   /*
    * A floor of 900ms keeps it from flashing past on a warm start. Below roughly
@@ -125,7 +132,7 @@ function Launch() {
   }, []);
 
   const settling = loading || !minimumElapsed;
-  const awaitingTap = !settling && !user && !dismissed;
+  const awaitingTap = !settling && !user && !dismissed && !onInvite;
   const showing = mounted && (settling || awaitingTap);
 
   /*

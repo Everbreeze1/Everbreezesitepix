@@ -101,7 +101,9 @@ export const APP_MENU: AppMenuGroup[] = [
     title: null,
     items: [
       { label: "Account and settings", href: "/account", icon: "account", tab: true },
-      { label: "Knowledge Base", href: "/help", icon: "help", web: true },
+      // Native since the articles moved to packages/shared: the web page sits
+      // behind sign-in, and the in-app browser has no session to open it with.
+      { label: "Knowledge Base", href: "/help", icon: "help" },
       { label: "Feedback", href: "/report-issue", icon: "feedback" },
       { label: "Admin", href: "/admin", icon: "admin", adminOnly: true },
     ],

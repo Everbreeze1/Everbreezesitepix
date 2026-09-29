@@ -15,6 +15,7 @@ import {
   Palette,
   Server,
   Sparkles,
+  Star,
   Trash2,
   CloudUpload,
   UserPlus,
@@ -132,7 +133,7 @@ export default function AccountScreen() {
    */
   const { isAdmin } = usePlatformAdmin();
   // The Portfolio row is the owner's, as it is in the menu. See `lib/access.ts`.
-  const { isOwner } = useAccountOwner();
+  const { isOwner, isMember, isLoading: teamLoading } = useAccountOwner();
 
   useEffect(() => {
     let cancelled = false;
@@ -369,6 +370,13 @@ export default function AccountScreen() {
               />
               <RowDivider />
               <ListRow
+                icon={Star}
+                title="Review links"
+                subtitle="Ask clients for a review on shared reports"
+                onPress={() => router.push("/settings/review-links")}
+              />
+              <RowDivider />
+              <ListRow
                 icon={LayoutTemplate}
                 title="Templates"
                 subtitle="The checklists your crews start from"
@@ -388,20 +396,27 @@ export default function AccountScreen() {
             </ListGroup>
           </View>
         </View>
-        <View style={{ gap: spacing.md }}>
-          <SectionHeader title="Open on the web" />
-          <View style={{ paddingHorizontal: spacing.lg }}>
-            <ListGroup>
-              <ListRow
-                icon={CreditCard}
-                title="Plan and billing"
-                right={<ExternalLinkMark />}
-                disabled={!canOpenWeb}
-                onPress={() => void openOnWeb("/pricing")}
-              />
-            </ListGroup>
+        {/*
+          The owner's, or somebody's with no team yet (they will own the one
+          they start). An invited member is never shown what the workspace
+          pays for.
+        */}
+        {isOwner || (!isMember && !teamLoading) ? (
+          <View style={{ gap: spacing.md }}>
+            <SectionHeader title="Open on the web" />
+            <View style={{ paddingHorizontal: spacing.lg }}>
+              <ListGroup>
+                <ListRow
+                  icon={CreditCard}
+                  title="Plan and billing"
+                  right={<ExternalLinkMark />}
+                  disabled={!canOpenWeb}
+                  onPress={() => void openOnWeb("/pricing")}
+                />
+              </ListGroup>
+            </View>
           </View>
-        </View>
+        ) : null}
         <View style={{ gap: spacing.md }}>
           {isAdmin ? (
             <>
@@ -426,9 +441,8 @@ export default function AccountScreen() {
               <ListRow
                 icon={CircleQuestionMark}
                 title="Knowledge base"
-                right={<ExternalLinkMark />}
-                disabled={!canOpenWeb}
-                onPress={() => void openOnWeb("/help")}
+                subtitle="Guides, what's new and how to reach us"
+                onPress={() => router.push("/help")}
               />
               <RowDivider />
               <ListRow

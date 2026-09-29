@@ -118,7 +118,13 @@ describe("isMenuItemActive", () => {
   });
 
   it("never lights a link to the website", () => {
-    expect(isMenuItemActive(find("/help"), "/help")).toBe(false);
+    const web = { label: "Plan", href: "/pricing", icon: "account" as const, web: true };
+    expect(isMenuItemActive(web, "/pricing")).toBe(false);
+  });
+
+  it("opens the Knowledge Base inside the app, and lights it there", () => {
+    expect(find("/help").web).toBeUndefined();
+    expect(isMenuItemActive(find("/help"), "/help")).toBe(true);
   });
 });
 

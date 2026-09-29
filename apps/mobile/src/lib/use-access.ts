@@ -37,7 +37,13 @@ export function useAccountOwner(enabled = true) {
     enabled: enabled && Boolean(user?.id),
     staleTime: 30_000,
   });
-  return { isOwner: isAccountOwner(query.data), isLoading: query.isLoading };
+  const isOwner = isAccountOwner(query.data);
+  return {
+    isOwner,
+    /** On a team, as anything but its owner: an invited member. */
+    isMember: Boolean(query.data?.myRole) && !isOwner,
+    isLoading: query.isLoading,
+  };
 }
 
 /**

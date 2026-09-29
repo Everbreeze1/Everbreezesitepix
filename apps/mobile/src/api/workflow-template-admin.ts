@@ -156,3 +156,129 @@ export async function savePositions(
     if (error) throw new Error(error.message);
   }
 }
+
+/* -------------------------------------------------------- the templates */
+
+export type WorkflowTemplateRow = {
+  id: string;
+  name: string;
+  description: string | null;
+  archived: boolean;
+  category: string | null;
+};
+
+/** Every workflow template, archived ones included: the library manages them. */
+export async function listAllWorkflowTemplates(): Promise<WorkflowTemplateRow[]> {
+  const { data, error } = await supabase
+    .from("workflow_templates" as never)
+    .select("id, name, description, archived, category")
+    .order("name", { ascending: true });
+  if (error) throw new Error(error.message);
+  return ((data as Record<string, unknown>[] | null) ?? []).map((t) => ({
+    id: String(t.id),
+    name: String(t.name ?? "Untitled workflow"),
+    description: (t.description as string | null) ?? null,
+    archived: Boolean(t.archived),
+    category: (t.category as string | null) ?? null,
+  }));
+}
+
+async function insertTemplate(args: {
+  name: string;
+  description: string | null;
+  category: string | null;
+}): Promise<string> {
+  const { data: auth } = await supabase.auth.getUser();
+  const userId = auth.user?.id;
+  if (!userId) throw new Error("Not signed in");
+  const { data, error } = await supabase
+    .from("workflow_templates" as never)
+    .insert({
+      created_by: userId,
+      name: args.name.trim(),
+      description: args.description?.trim() || null,
+      category: args.category,
+    } as never)
+    .select("id")
+    .single();
+  if (error || !data) throw new Error(error?.message ?? "Could not create that workflow");
+  return String((data as { id: string }).id);
+}
+
+/**
+ * A new workflow template, with a first phase already in it: the web's
+ * `submitCreate`. An empty canvas with one lonely "Add phase" button is where
+ * the web builder used to lose people.
+ */
+export async function createWorkflowTemplate(args: {
+  name: string;
+  description: string | null;
+}): Promise<string> {
+  const id = await insertTemplate({ ...args, category: null });
+  await createPhase({ templateId: id, name: "Phase 1", description: null, position: 0 });
+  return id;
+}
+
+/**
+ * Duplicate with every phase and step. Stops at the first failure and says so,
+ * rather than reporting success over phases with no steps.
+ */
+export async function duplicateWorkflowTemplate(source: WorkflowTemplateRow): Promise<string> {
+  const id = await insertTemplate({
+    name: `${source.name} (copy)`,
+    description: source.description,
+    category: source.category,
+  });
+  const phases = await listPhases(source.id);
+  const items = await listPhaseItems(phases.map((p) => p.id));
+  for (const [idx, phase] of phases.entries()) {
+    const copy = await createPhase({
+      templateId: id,
+      name: phase.name,
+      description: phase.description,
+      position: idx,
+    });
+    if (phase.requires_signoff) await updatePhase(copy.id, { requires_signoff: true });
+    const steps = items
+      .filter((it) => it.phase_id === phase.id)
+      .sort((a, b) => a.position - b.position);
+    for (const [i, step] of steps.entries()) {
+      await createItem({
+        phaseId: copy.id,
+        label: step.label,
+        kind: step.kind as WorkflowItemKind,
+        required: step.required,
+        position: i,
+      });
+    }
+  }
+  return id;
+}
+
+export async function setWorkflowTemplateArchived(id: string, archived: boolean): Promise<void> {
+  const { error } = await supabase
+    .from("workflow_templates" as never)
+    .update({ archived } as never)
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+/** Phases and steps go with it (ON DELETE CASCADE); running projects keep their copy. */
+export async function deleteWorkflowTemplate(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("workflow_templates" as never)
+    .delete()
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+export async function updateWorkflowTemplate(
+  id: string,
+  patch: { name?: string; description?: string | null },
+): Promise<void> {
+  const { error } = await supabase
+    .from("workflow_templates" as never)
+    .update(patch as never)
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+}
