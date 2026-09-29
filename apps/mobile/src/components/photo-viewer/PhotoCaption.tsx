@@ -61,7 +61,7 @@ export function ViewerCaption({
   maxHeight,
 }: {
   caption: string | null | undefined;
-  /** Opens the note editor; "voice" opens it straight into dictation. */
+  /** Opens the note editor; "voice" opens it straight into recording. */
   onEdit: (start?: "voice") => void;
   maxHeight: number;
 }) {

@@ -883,6 +883,7 @@ function ViewerBody({
             photoId={photo.id}
             caption={displayCaption(photo.caption, "Photo")}
             imageUrl={imageUrl}
+            savePhoto={photo}
             onAskTeammate={() => {
               setShareOpen(false);
               setTab("comments");

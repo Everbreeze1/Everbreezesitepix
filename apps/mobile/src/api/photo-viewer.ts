@@ -1,5 +1,5 @@
-import { Platform, Share } from "react-native";
 import { Directory, File, Paths } from "expo-file-system";
+import * as Sharing from "expo-sharing";
 import {
   TASK_PHOTO_ITEMS_TABLE,
   TASK_PHOTO_ITEM_COLUMNS,
@@ -156,27 +156,30 @@ export async function listPhotoTasks(projectId: string, photoId: string): Promis
 /* ------------------------------------------------------------------ share */
 
 /**
- * Whether the phone can hand the photograph itself to the share sheet.
+ * Hand a photo file on this phone to the system share sheet.
  *
- * iOS's `Share` takes a local file URL; Android's only carries text, and
- * sending a signed storage URL there would hand somebody a link that dies in an
- * hour. So on Android the photo goes out as its public link instead, from the
- * link half of the share sheet, which is what that half is for.
+ * Through `expo-sharing` on both platforms. React Native's own `Share` carries
+ * a file on iOS only, which is why Android used to be sent to the link half of
+ * the sheet instead.
  */
-export const CAN_SHARE_PHOTO_FILE = Platform.OS === "ios";
+export async function shareLocalPhoto(uri: string, title: string, mimeType = "image/jpeg") {
+  if (!(await Sharing.isAvailableAsync())) {
+    throw new Error("This phone has no way to share a file from the app.");
+  }
+  await Sharing.shareAsync(uri, { mimeType, dialogTitle: title });
+}
 
 /**
  * Hand the photograph itself to the system share sheet.
  *
  * Web's `sharePhotoNative`: the file, so the sheet offers Photos, Messages,
- * AirDrop and the rest. The original is copied into the cache first because
- * the share sheet wants a local file, not a signed URL.
+ * AirDrop, Drive and the rest. The original is copied into the cache first
+ * because the share sheet wants a local file, not a signed URL.
  */
 export async function sharePhotoFile(url: string, title: string): Promise<void> {
   if (!url) throw new Error("This photo is not ready to share yet.");
-  if (!CAN_SHARE_PHOTO_FILE) throw new Error("Share the link instead on this device.");
   const dir = new Directory(Paths.cache, "shared-photos");
   if (!dir.exists) dir.create({ intermediates: true, idempotent: true });
   const file = await File.downloadFileAsync(url, dir, { idempotent: true });
-  await Share.share({ url: file.uri, title });
+  await shareLocalPhoto(file.uri, title, file.type || "image/jpeg");
 }

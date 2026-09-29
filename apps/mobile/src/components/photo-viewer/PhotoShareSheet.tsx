@@ -8,12 +8,14 @@ import {
   revokePhotoShare,
   type PhotoShare,
 } from "@/api/sharing";
-import { CAN_SHARE_PHOTO_FILE, sharePhotoFile } from "@/api/photo-viewer";
+import type { PhotoListItem } from "@/api/photos";
+import { shareLocalPhoto, sharePhotoFile } from "@/api/photo-viewer";
 import { expiryLabel, revokeWarning } from "@/api/photo-shares-view";
 import { liveShareRows } from "@/api/photo-viewer-view";
 import { radius, spacing, useTheme } from "@/theme";
-import { AtSign, Globe, Link2, Share2 } from "@/ui/icons";
+import { AtSign, Globe, ImageDown, Link2, Share2 } from "@/ui/icons";
 import { Icon, Sheet, Text, type LucideIcon } from "@/ui";
+import { saveOnePhoto } from "../PhotoTransfer";
 
 /**
  * Share one photo: web's `SharePhotoDialog`, plus the two things a phone adds.
@@ -23,8 +25,9 @@ import { Icon, Sheet, Text, type LucideIcon } from "@/ui";
  * the photo has, including ones minted by the older per-tap flow, because
  * "sharing off" has to mean the customer's copy stops opening too.
  *
- * Above it, the photograph itself through the system share sheet (web's
- * `sharePhotoNative`), where the platform can carry a file. Below it, asking a
+ * Above it, the photograph itself: through the system share sheet (web's
+ * `sharePhotoNative`), or saved straight into the phone's gallery, which is
+ * the web's Download for a single photo. Below it, asking a
  * teammate: web has no separate "send to teammate" and neither does this; it
  * opens the Comments tab with an @ ready, which is how a teammate is pulled
  * into a photo in both apps and what raises their notification.
@@ -36,6 +39,7 @@ export function PhotoShareSheet({
   caption,
   imageUrl,
   localFileUri,
+  savePhoto,
   onAskTeammate,
 }: {
   visible: boolean;
@@ -46,9 +50,11 @@ export function PhotoShareSheet({
   imageUrl: string | null;
   /**
    * The photo as a file on this phone (the camera's just-taken shot), sent
-   * as it is rather than downloaded first. iOS only, as the download is.
+   * as it is rather than downloaded first.
    */
   localFileUri?: string | null;
+  /** The photo's row, to save its full-size original to the gallery. */
+  savePhoto?: PhotoListItem | null;
   onAskTeammate?: () => void;
 }) {
   const theme = useTheme();
@@ -56,6 +62,7 @@ export function PhotoShareSheet({
   const queryKey = ["photo-shares", photoId];
   const [failure, setFailure] = useState<string | null>(null);
   const [sendingFile, setSendingFile] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const query = useQuery({
     queryKey,
@@ -103,12 +110,22 @@ export function PhotoShareSheet({
     setSendingFile(true);
     setFailure(null);
     try {
-      if (localFileUri) await Share.share({ url: localFileUri, title: caption });
+      if (localFileUri) await shareLocalPhoto(localFileUri, caption);
       else if (imageUrl) await sharePhotoFile(imageUrl, caption);
     } catch (error) {
       setFailure(error instanceof Error ? error.message : "Could not share the photo.");
     } finally {
       setSendingFile(false);
+    }
+  }
+
+  async function saveFile() {
+    if (!savePhoto) return;
+    setSaving(true);
+    try {
+      await saveOnePhoto(savePhoto);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -144,15 +161,23 @@ export function PhotoShareSheet({
           three full-width buttons of text stacked on top of each other.
         */}
         <View style={{ flexDirection: "row", gap: spacing.sm }}>
-          {CAN_SHARE_PHOTO_FILE ? (
+          <ShareTile
+            icon={Share2}
+            label="Send photo"
+            accessibilityLabel="Send the photo"
+            accessibilityHint="Opens the share sheet with the photo itself"
+            busy={sendingFile}
+            disabled={!imageUrl && !localFileUri}
+            onPress={() => void sendFile()}
+          />
+          {savePhoto ? (
             <ShareTile
-              icon={Share2}
-              label="Send photo"
-              accessibilityLabel="Send the photo"
-              accessibilityHint="Opens the share sheet with the photo itself"
-              busy={sendingFile}
-              disabled={!imageUrl && !localFileUri}
-              onPress={() => void sendFile()}
+              icon={ImageDown}
+              label="Save"
+              accessibilityLabel="Save to phone"
+              accessibilityHint="Saves the full-size photo to this phone's gallery"
+              busy={saving}
+              onPress={() => void saveFile()}
             />
           ) : null}
           <ShareTile

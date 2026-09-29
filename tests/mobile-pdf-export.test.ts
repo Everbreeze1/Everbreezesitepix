@@ -45,11 +45,14 @@ describe("the export needs no native module", () => {
     /*
      * The point of the whole approach. A native module means a new development
      * build, which invalidates whatever the testing session is holding.
+     *
+     * `expo-sharing` has since arrived for photo zips and files, and the export
+     * still does not use it: the PDF is filed, not handed to a share sheet.
      */
     const pkg = JSON.parse(read("apps/mobile/package.json"));
     const deps = { ...pkg.dependencies, ...pkg.devDependencies };
-    expect(deps["expo-sharing"]).toBeUndefined();
     expect(deps["expo-print"]).toBeUndefined();
+    expect(filing()).not.toMatch(/from "expo-sharing"/);
   });
 
   it("uses the file-system and browser modules already shipped", () => {

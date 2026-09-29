@@ -9,6 +9,7 @@ import {
 import { AuthError, type ServiceContext } from "../../lib/user-context";
 import { geocodeAddressInputSchema, geocodeAddressService } from "../maps/geocode";
 import { synthesizeBreezeSpeechService, synthesizeSpeechInputSchema } from "../tts/synthesize";
+import { transcribeVoiceNoteInputSchema, transcribeVoiceNoteService } from "../ai/voice-note";
 import {
   createPhotoCommentInputSchema,
   createPhotoCommentService,
@@ -1071,6 +1072,12 @@ export const rpcRegistry: Record<string, RpcEntry> = {
         })
         .parse(d),
     transcribeWalkthroughService as (ctx: ServiceContext, data: never) => Promise<unknown>,
+    { idempotent: true },
+  ),
+  /* A photo note spoken into the note editor, as text. Writes nothing. */
+  transcribeVoiceNote: authed(
+    (d) => transcribeVoiceNoteInputSchema.parse(d),
+    transcribeVoiceNoteService as (ctx: ServiceContext, data: never) => Promise<unknown>,
     { idempotent: true },
   ),
   generateWalkthroughReport: authed(

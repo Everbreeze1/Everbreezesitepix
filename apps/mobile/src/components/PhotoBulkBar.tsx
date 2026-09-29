@@ -7,6 +7,7 @@ import type { PhotoPhase } from "@/api/photos";
 import { spacing, useTheme } from "@/theme";
 import {
   Download,
+  FileArchive,
   FileText,
   FilePlus,
   FolderInput,
@@ -40,8 +41,8 @@ import { usePhotoHandOver, type HandOverSelection } from "./PhotoHandOver";
  * chosen. Docking costs one row of height and keeps every thumbnail visible.
  *
  * The patch actions (phase, tags, move, trash) go through the offline outbox.
- * The hand-over actions the web bar also offers (save, share links, a report,
- * a document) live in `PhotoHandOver` and show when the screen passes the
+ * The hand-over actions the web bar also offers (save, a zip, share links, a
+ * report, a document) live in `PhotoHandOver` and show when the screen passes the
  * selected photos in `handOver`. Print is the one web action left out: nobody
  * prints from a job site, and the phone has no print module.
  */
@@ -76,7 +77,7 @@ export function PhotoBulkBar({
   onAction: (action: PhotoBulkAction) => void;
   currentProjectId?: string;
   busy?: boolean;
-  /** The selected photos themselves, for Save, Share, Report and Document. */
+  /** The selected photos themselves, for Save, Zip, Share, Report and Document. */
   handOver?: HandOverSelection;
 }) {
   const theme = useTheme();
@@ -125,6 +126,15 @@ export function PhotoBulkBar({
                 accessibilityHint="Saves the photos to this phone"
                 disabled={busy}
                 onPress={() => handOverFlow.start("save")}
+              />
+              <Button
+                label="Download zip"
+                icon={FileArchive}
+                size="sm"
+                variant="outline"
+                accessibilityHint="Puts the originals in one zip file to save or send"
+                disabled={busy}
+                onPress={() => handOverFlow.start("zip")}
               />
               <Button
                 label="Share"

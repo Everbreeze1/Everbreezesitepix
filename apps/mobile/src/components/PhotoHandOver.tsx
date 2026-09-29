@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Alert, Platform, Share, View } from "react-native";
+import { Alert, Share, View } from "react-native";
 import { router } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { relativeTime } from "@everlumen/shared";
@@ -7,19 +7,15 @@ import type { PhotoListItem } from "@/api/photos";
 import { listProjectReports } from "@/api/reports";
 import { getTemplateGateFacts } from "@/api/report-builder";
 import { templatesLockedFor } from "@/api/report-builder-view";
-import {
-  addPhotosToExistingReport,
-  createSelectionShareLinks,
-  savePhotosToPhone,
-} from "@/api/photo-selection";
+import { addPhotosToExistingReport, createSelectionShareLinks } from "@/api/photo-selection";
 import {
   photoDropMessage,
-  saveToPhoneRefusal,
   shareLinkRefusal,
   shareLinksMessage,
   shareLinksShortfall,
   singleProjectRefusal,
 } from "@/api/photo-selection-view";
+import { selectionZipLayout } from "@/api/photo-zip-view";
 import { spacing } from "@/theme";
 import { FilePlus, FileText, FolderPlus, Globe, Share2 } from "@/ui/icons";
 import {
@@ -36,12 +32,14 @@ import {
 } from "@/ui";
 import { GenerateReportSheet } from "./GenerateReportSheet";
 import { NewBuiltReportSheet } from "./NewBuiltReportSheet";
+import { usePhotoTransfer } from "./PhotoTransfer";
 
 /**
  * The bulk bar's hand-over actions: the parts of the web's photo bulk bar that
  * send a selection somewhere rather than change it.
  *
- *   save       to the phone's photo library (iOS share sheet, one per photo)
+ *   save       to the phone's gallery, in the Everlumen album where allowed
+ *   zip        one zip of the originals, handed to the share sheet
  *   share      one public link per photo, sent together in one message
  *   report     a new report, or a section added to an existing one
  *   document   the web's Generate menu, with these photos already ticked
@@ -49,7 +47,7 @@ import { NewBuiltReportSheet } from "./NewBuiltReportSheet";
  * Reports and documents belong to one job, so a library selection that spans
  * jobs is told why rather than offered a button that fails.
  */
-export type HandOverStep = "save" | "share" | "report" | "document";
+export type HandOverStep = "save" | "zip" | "share" | "report" | "document";
 
 type OpenSheet = "share" | "report-menu" | "report-new" | "report-existing" | "document" | null;
 
@@ -68,6 +66,7 @@ const MODAL_GAP_MS = 350;
 export function usePhotoHandOver(selection: HandOverSelection | undefined) {
   const [sheet, setSheet] = useState<OpenSheet>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const transfer = usePhotoTransfer();
 
   const later = (next: OpenSheet) => {
     setSheet(null);
@@ -76,30 +75,20 @@ export function usePhotoHandOver(selection: HandOverSelection | undefined) {
 
   function start(step: HandOverStep) {
     if (!selection) return;
-    const count = selection.photos.length;
     if (step === "save") {
-      const refusal = saveToPhoneRefusal(count, Platform.OS);
-      if (refusal) {
-        Alert.alert(
-          "Save to phone",
-          refusal,
-          Platform.OS === "ios"
-            ? [{ text: "OK" }]
-            : [
-                { text: "Not now", style: "cancel" },
-                { text: "Send links", onPress: () => setSheet("share") },
-              ],
-        );
-        return;
-      }
-      Alert.alert(
-        `Save ${count} photo${count === 1 ? "" : "s"} to your phone?`,
-        'The share sheet opens once for each photo. Choose "Save Image" each time. Close a sheet to stop.',
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Save", onPress: () => void runSave() },
-        ],
-      );
+      void transfer.save(selection.photos);
+      return;
+    }
+    if (step === "zip") {
+      /*
+       * Named after the job only when the selection is one job, as the web
+       * names it; a library selection across jobs is plain "photos".
+       */
+      const oneJob = singleProjectRefusal(selection.projectIds) === null;
+      void transfer.zip({
+        photos: selection.photos,
+        layout: selectionZipLayout(oneJob ? selection.projectName : null),
+      });
       return;
     }
     if (step === "share") {
@@ -114,41 +103,21 @@ export function usePhotoHandOver(selection: HandOverSelection | undefined) {
     setSheet(step === "report" ? "report-menu" : "document");
   }
 
-  async function runSave() {
-    if (!selection) return;
-    setBusy("save");
-    try {
-      const { saved, stopped } = await savePhotosToPhone(selection.photos);
-      if (stopped && saved < selection.photos.length) {
-        Alert.alert(
-          "Stopped",
-          `${saved} of ${selection.photos.length} photo${
-            selection.photos.length === 1 ? "" : "s"
-          } went through the share sheet.`,
-        );
-      }
-    } catch (error) {
-      Alert.alert(
-        "Could not save",
-        error instanceof Error ? error.message : "The photos could not be downloaded.",
-      );
-    } finally {
-      setBusy(null);
-    }
-  }
-
   const ui = selection ? (
-    <HandOverSheets
-      selection={selection}
-      sheet={sheet}
-      setSheet={setSheet}
-      later={later}
-      busy={busy}
-      setBusy={setBusy}
-    />
+    <>
+      <HandOverSheets
+        selection={selection}
+        sheet={sheet}
+        setSheet={setSheet}
+        later={later}
+        busy={busy}
+        setBusy={setBusy}
+      />
+      {transfer.ui}
+    </>
   ) : null;
 
-  return { start, ui, busy: busy !== null };
+  return { start, ui, busy: busy !== null || transfer.busy };
 }
 
 function HandOverSheets({

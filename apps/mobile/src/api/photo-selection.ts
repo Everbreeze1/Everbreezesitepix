@@ -1,13 +1,8 @@
-import { Platform, Share } from "react-native";
-import { Directory, File, Paths } from "expo-file-system";
 import { supabase } from "@/lib/supabase";
-import { signPhotoUrls, type PhotoListItem } from "./photos";
 import { createPhotoShareToken, publicUrl } from "./sharing";
 import { normaliseSectionPhotos } from "./report-builder-view";
 import {
   planPhotoDrop,
-  saveToPhoneRefusal,
-  savedPhotoFileName,
   sectionPhotosFor,
   shareLinkRefusal,
   type AttachablePhoto,
@@ -15,11 +10,12 @@ import {
 
 /**
  * What the bulk bar does with a selection that is not a patch: hand the photos
- * over. Links, a report, the phone's own photo library.
+ * over. Links or a report here; the phone's own gallery and a zip are
+ * `photo-download.ts`.
  *
  * None of it is queued. A link or a report section only means something once
- * it exists on the server, and a photo can only be saved once it is on the
- * phone, so each of these runs now and says so when it cannot.
+ * it exists on the server, so each of these runs now and says so when it
+ * cannot.
  */
 
 /**
@@ -87,42 +83,4 @@ export async function addPhotosToExistingReport(
   } as never);
   if (insertError) throw new Error(insertError.message);
   return { added: plan.fresh.length, skipped: plan.skipped };
-}
-
-/**
- * Put photos in the phone's own photo library.
- *
- * There is no media-library or sharing module in this build, so this goes the
- * one way React Native offers: each original is downloaded to the cache and
- * handed to the iOS share sheet, where "Save Image" files it in Photos.
- * Android's share sheet takes no files from React Native, which is what
- * `saveToPhoneRefusal` says before any of this runs.
- *
- * One sheet per photo. Dismissing a sheet stops the run, so the person is never
- * trapped in twenty sheets they did not want.
- */
-export async function savePhotosToPhone(
-  photos: readonly PhotoListItem[],
-  onProgress?: (done: number) => void,
-): Promise<{ saved: number; stopped: boolean }> {
-  const refusal = saveToPhoneRefusal(photos.length, Platform.OS);
-  if (refusal) throw new Error(refusal);
-
-  const originals = await signPhotoUrls([...photos], false);
-  const dir = new Directory(Paths.cache, "saved-photos");
-  if (!dir.exists) dir.create({ intermediates: true, idempotent: true });
-
-  let saved = 0;
-  for (const photo of photos) {
-    const url = originals[photo.id];
-    if (!url) continue;
-    const target = new File(dir, savedPhotoFileName(photo));
-    if (target.exists) target.delete();
-    const file = await File.downloadFileAsync(url, target, { idempotent: true });
-    const result = await Share.share({ url: file.uri });
-    if (result.action === Share.dismissedAction) return { saved, stopped: true };
-    saved += 1;
-    onProgress?.(saved);
-  }
-  return { saved, stopped: false };
 }

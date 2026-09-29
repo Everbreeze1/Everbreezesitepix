@@ -11,7 +11,17 @@ import {
   tileCaptionHeight,
   tileCaptionLines,
 } from "../apps/mobile/src/components/photo-viewer/caption-line";
-import { DICTATION_HINT, VOICE_NOTE_LABEL, voiceNoteMode } from "../apps/mobile/src/lib/voice-note";
+import {
+  DICTATION_HINT,
+  TRANSCRIBING_LABEL,
+  VOICE_NOTE_LABEL,
+  VOICE_NOTE_MAX_SECONDS,
+  appendTranscript,
+  fallbackMessage,
+  formatElapsed,
+  transcriptionFailure,
+  voiceNoteMode,
+} from "../apps/mobile/src/lib/voice-note";
 
 /*
  * The photo note editor: one photo's caption, typed or spoken, and the line it
@@ -142,10 +152,34 @@ describe("noteEditorLayout", () => {
 });
 
 describe("the voice note", () => {
-  it("is keyboard dictation for now, and says so plainly", () => {
-    expect(voiceNoteMode()).toBe("dictation");
+  it("records, with keyboard dictation kept as the fallback", () => {
+    expect(voiceNoteMode()).toBe("record");
     expect(DICTATION_HINT).toBe("Speak now using the keyboard mic");
     expect(VOICE_NOTE_LABEL).toBe("Add voice note");
+    expect(TRANSCRIBING_LABEL).toBe("Transcribing...");
+    expect(VOICE_NOTE_MAX_SECONDS).toBe(120);
+  });
+
+  it("shows the time recorded as m:ss", () => {
+    expect(formatElapsed(0)).toBe("0:00");
+    expect(formatElapsed(7_400)).toBe("0:07");
+    expect(formatElapsed(102_000)).toBe("1:42");
+  });
+
+  it("adds the words to the end of the note, never replacing it", () => {
+    expect(appendTranscript("", "Loose flashing")).toBe("Loose flashing");
+    expect(appendTranscript("North wall  ", " Loose flashing ")).toBe("North wall\nLoose flashing");
+    expect(appendTranscript("North wall", "   ")).toBe("North wall");
+  });
+
+  it("falls back to the keyboard when the server has no voice notes yet", () => {
+    // What a server from before this change answers, as the API client throws it.
+    expect(transcriptionFailure({ status: 404, code: "unknown_op" })).toBe("unavailable");
+    expect(transcriptionFailure({ status: 500, code: "internal_error" })).toBe("failed");
+    expect(transcriptionFailure(new Error("network"))).toBe("failed");
+    for (const reason of ["permission", "unavailable", "failed"] as const) {
+      expect(fallbackMessage(reason)).toMatch(/keyboard mic/);
+    }
   });
 });
 
@@ -177,6 +211,17 @@ describe("wiring", () => {
     expect(hook).toContain('"keyboardDidShow"');
     expect(hook).toContain('"keyboardWillShow"');
     expect(hook).toContain("measureInWindow");
+  });
+
+  it("records with expo-audio and sends the clip to transcribeVoiceNote", () => {
+    const hook = read("apps/mobile/src/components/capture/use-voice-note-recorder.ts");
+    expect(hook).toContain("useAudioRecorder(");
+    expect(hook).toContain("requestRecordingPermissionsAsync()");
+    expect(hook).toContain("allowsRecording: false");
+    expect(read("apps/mobile/src/api/voice-note.ts")).toContain('"transcribeVoiceNote"');
+    expect(editor).toContain("useVoiceNoteRecorder(");
+    expect(editor).toContain("appendTranscript(captionRef.current, text)");
+    expect(editor).toContain('accessibilityLabel="Stop recording"');
   });
 
   it("shows one photo, never a strip of them", () => {

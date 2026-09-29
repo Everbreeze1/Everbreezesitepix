@@ -19,9 +19,9 @@ import { supabase } from "@/lib/supabase";
  * delete paths that already exist. The signed URL is only the fast way to look
  * at it now.
  *
- * This is also why the app needs no `expo-sharing` and no new development
- * build. Storage plus the system browser gets view, keep and share out of
- * modules already shipped. The plan recorded a native module as a hard
+ * This is also why the export does not go through `expo-sharing`, which the
+ * app now ships for photo zips. Storage plus the system browser gets view,
+ * keep and share out of modules already shipped. The plan recorded a native module as a hard
  * requirement here for several days; it was an assumption written down once and
  * then read back as a fact.
  */

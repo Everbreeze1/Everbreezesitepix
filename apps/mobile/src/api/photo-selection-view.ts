@@ -98,24 +98,86 @@ export function photoDropMessage(added: number, skipped: number): string {
 /**
  * The most photos one Save to phone goes through.
  *
- * Without a media-library module the phone saves through the share sheet, one
- * sheet per photo, so the cap is about thumbs rather than bytes: twenty sheets
- * in a row is already a lot of tapping "Save Image".
+ * Each one is downloaded at full size and written to the gallery in turn, so
+ * the cap is about how long a person will hold the screen open: a whole job is
+ * better handed over as a zip, which is what the refusal points at.
  */
-export const SAVE_TO_PHONE_LIMIT = 20;
+export const SAVE_TO_PHONE_LIMIT = 200;
 
-export function saveToPhoneRefusal(count: number, platform: string): string | null {
+export function saveToPhoneRefusal(count: number): string | null {
   if (count <= 0) return "Pick at least one photo to save.";
-  if (platform !== "ios") {
-    return "This version of the app cannot put photos in the Android gallery. Send them as links instead, or save them from the web app.";
-  }
   if (count > SAVE_TO_PHONE_LIMIT) {
-    return `Save up to ${SAVE_TO_PHONE_LIMIT} photos at a time. The share sheet opens once for each photo.`;
+    return `Save up to ${SAVE_TO_PHONE_LIMIT} photos at a time. For more, use Download zip, which keeps them together as one file.`;
   }
   return null;
 }
 
-/** A file name for a downloaded photo that the share sheet can show. */
+/** The line under the progress bar while photos are being saved. */
+export function saveProgressLabel(done: number, total: number): string {
+  return `Saving ${Math.min(done + 1, total)} of ${total}`;
+}
+
+/**
+ * What to say when the phone will not let the app add photos.
+ *
+ * `blocked` is a refusal the system will not ask about again, so the only way
+ * forward is Settings, and the message names where in it to look.
+ */
+export function savePermissionMessage(state: "denied" | "blocked", platform: string): string {
+  const where =
+    platform === "ios"
+      ? 'In Settings, open Everlumen, then Photos, and choose "Add Photos Only" or "Full Access".'
+      : "In Settings, open Apps, then Everlumen, then Permissions, and allow Photos and videos.";
+  return state === "blocked"
+    ? `Everlumen is not allowed to add photos to this phone. ${where}`
+    : `Everlumen needs your permission to add photos to this phone. Try again and allow it, or change it in Settings. ${where}`;
+}
+
+/** The gallery album saved photos are filed in, where the phone allows it. */
+export const PHONE_ALBUM = "Everlumen";
+
+export type SaveOutcome = {
+  saved: number;
+  failed: number;
+  total: number;
+  cancelled: boolean;
+  /** Whether the photos went into the app's own album as well as the library. */
+  inAlbum: boolean;
+};
+
+/** Where the photos went, said once the run is over. */
+export function saveResultMessage({ saved, failed, total, cancelled, inAlbum }: SaveOutcome): {
+  title: string;
+  body: string;
+} {
+  const photos = (n: number) => `${n} photo${n === 1 ? "" : "s"}`;
+  const where = inAlbum ? `the ${PHONE_ALBUM} album in your photos` : "your photos";
+  if (saved === 0) {
+    return {
+      title: cancelled ? "Stopped" : "Nothing was saved",
+      body: cancelled
+        ? "No photos were saved."
+        : "The photos could not be downloaded. Check the connection and try again.",
+    };
+  }
+  const lead = `${photos(saved)} saved to ${where}.`;
+  if (cancelled) {
+    const rest = total - saved - failed;
+    return {
+      title: "Stopped",
+      body: rest > 0 ? `${lead} The other ${rest} ${rest === 1 ? "was" : "were"} not.` : lead,
+    };
+  }
+  if (failed > 0) {
+    return {
+      title: "Saved, with gaps",
+      body: `${lead} ${photos(failed)} could not be downloaded.`,
+    };
+  }
+  return { title: "Saved", body: lead };
+}
+
+/** A file name for a downloaded photo, which the gallery keeps as its title. */
 export function savedPhotoFileName(photo: { id: string; storage_path: string }): string {
   const ext = /\.([a-z0-9]{2,5})$/i.exec(photo.storage_path)?.[1]?.toLowerCase() ?? "jpg";
   return `photo-${photo.id.slice(0, 8)}.${ext}`;

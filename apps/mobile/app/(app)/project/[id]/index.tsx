@@ -30,6 +30,7 @@ import {
   PenLine,
   Send,
   QrCode,
+  FileArchive,
   Share2,
   SlidersHorizontal,
   Sparkles,
@@ -107,6 +108,8 @@ import { normaliseStatus } from "@/api/task-status";
 import { listSiteLogs } from "@/api/site-logs";
 import { listDocumentTree } from "@/api/pages";
 import { PhotoBulkBar, type PhotoBulkAction } from "@/components/PhotoBulkBar";
+import { usePhotoTransfer } from "@/components/PhotoTransfer";
+import { projectZipLayout } from "@/api/photo-zip-view";
 import { generateSummaryFromPhotos } from "@/api/summaries";
 import { getProjectContributorLog } from "@/api/project-contributors";
 import { attributionText } from "@/api/project-contributors-view";
@@ -274,6 +277,7 @@ export default function ProjectDetailScreen() {
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
+  const transfer = usePhotoTransfer();
   /*
    * The web header's Create menu (AI Summary, the two reports, templates, a
    * blank page) and the kebab's organise sheets. Each is mounted only while in
@@ -1410,6 +1414,8 @@ export default function ProjectDetailScreen() {
         />
       ) : null}
 
+      {transfer.ui}
+
       <ActionSheet
         visible={actionsOpen}
         onClose={() => setActionsOpen(false)}
@@ -1451,6 +1457,26 @@ export default function ProjectDetailScreen() {
             icon: QrCode,
             onPress: () =>
               router.push({ pathname: "/project/[id]/qr", params: { id: String(id) } }),
+          },
+          /*
+            The web's "Export photos as ZIP": every photo on the job, not just
+            the pages the grid has loaded, in one folder named after the job.
+            The share sheet is where it goes next: Files, Downloads, Drive.
+          */
+          {
+            label: "Download photos as zip",
+            icon: FileArchive,
+            disabled: transfer.busy || (photosQuery.isSuccess && photos.length === 0),
+            // After this sheet has gone: iOS will not stack the progress sheet on it.
+            onPress: () =>
+              setTimeout(
+                () =>
+                  void transfer.zip({
+                    projectId: String(id),
+                    layout: projectZipLayout(project?.name),
+                  }),
+                350,
+              ),
           },
           /*
             Only when there is something to switch off. Offering "Stop sharing"
