@@ -564,3 +564,175 @@ export function reviewLinksToSave(rows: ReviewLink[]): ReviewLink[] {
     .map((row) => ({ ...row, url: row.url.trim(), label: row.label?.trim() || null }))
     .filter((row) => /^https?:\/\//i.test(row.url));
 }
+
+/**
+ * The site's sections, in the order and words of the web's site editor
+ * (`SITE_STEPS` in `PortfolioSiteSteps.tsx`).
+ *
+ * The web shows one section at a time behind a trail of ticks; the phone
+ * shows the same list as rows and opens one section in a sheet. Each field of
+ * `SiteDraft` belongs to exactly one section, so an error can say where it is.
+ */
+export type SiteSectionId =
+  | "business"
+  | "services"
+  | "cover"
+  | "areas"
+  | "about"
+  | "reviews"
+  | "contact"
+  | "address";
+
+export const SITE_SECTIONS: {
+  id: SiteSectionId;
+  label: string;
+  question: string;
+  hint: string;
+  optional?: boolean;
+  fields: (keyof SiteDraft)[];
+}[] = [
+  {
+    id: "business",
+    label: "Business",
+    question: "What's your business called?",
+    hint: "Your name and colour set the tone for every page on the site.",
+    fields: ["businessName", "accentColor"],
+  },
+  {
+    id: "services",
+    label: "What you do",
+    question: "What work do you want to be known for?",
+    hint: "These become the headline trades and the filters over your projects.",
+    fields: ["services"],
+  },
+  {
+    id: "cover",
+    label: "Cover",
+    question: "What should greet a visitor?",
+    hint: "The headline over the photo at the top of the site.",
+    fields: ["heroHeadline", "heroSubhead"],
+  },
+  {
+    id: "areas",
+    label: "Where you work",
+    question: "Where do you work?",
+    hint: "Shown beside the map, and it is what wins local searches.",
+    optional: true,
+    fields: ["serviceAreas", "showMap"],
+  },
+  {
+    id: "about",
+    label: "About",
+    question: "Who's behind the work?",
+    hint: "A short paragraph does more than a long one.",
+    optional: true,
+    fields: ["about"],
+  },
+  {
+    id: "reviews",
+    label: "Reviews",
+    question: "Where do people review you?",
+    hint: "Connect Google once and it feeds your site and the review ask on every job report.",
+    optional: true,
+    fields: ["showReviews"],
+  },
+  {
+    id: "contact",
+    label: "Contact",
+    question: "How should they reach you?",
+    hint: "This fills the header button, the contact band and the footer.",
+    fields: ["phone", "email", "address", "ctaLabel", "ctaUrl", "websiteUrl"],
+  },
+  {
+    id: "address",
+    label: "Web address",
+    question: "Where should your site live?",
+    hint: "The link you text to customers, and how search engines show it.",
+    fields: ["slug", "seoTitle", "seoDescription"],
+  },
+];
+
+/** Whether a section has something in it, by the web's `isDone` rules. */
+export function siteSectionDone(
+  id: SiteSectionId,
+  draft: SiteDraft,
+  site: Pick<PortfolioSite, "hero_photo_id" | "google_place_id">,
+): boolean {
+  switch (id) {
+    case "business":
+      return draft.businessName.trim().length > 0;
+    case "services":
+      return parseList(draft.services).length > 0;
+    case "cover":
+      return !!site.hero_photo_id || draft.heroHeadline.trim().length > 0;
+    case "areas":
+      return parseList(draft.serviceAreas).length > 0;
+    case "about":
+      return draft.about.trim().length > 0;
+    case "reviews":
+      return !!site.google_place_id;
+    case "contact":
+      return !!(draft.phone.trim() || draft.email.trim());
+    case "address":
+      return true;
+  }
+}
+
+/** "5 of 7": the web counts every section but the address, which always has a value. */
+export function siteSectionProgress(
+  draft: SiteDraft,
+  site: Pick<PortfolioSite, "hero_photo_id" | "google_place_id">,
+): { done: number; total: number } {
+  const counted = SITE_SECTIONS.filter((s) => s.id !== "address");
+  return {
+    done: counted.filter((s) => siteSectionDone(s.id, draft, site)).length,
+    total: counted.length,
+  };
+}
+
+const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** One short line under a section's row: what is there now, so nobody opens it to find out. */
+export function siteSectionSummary(
+  id: SiteSectionId,
+  draft: SiteDraft,
+  site: Pick<PortfolioSite, "hero_photo_id" | "google_place_id" | "google_rating">,
+): string {
+  switch (id) {
+    case "business":
+      return draft.businessName.trim() || "Not named yet";
+    case "services": {
+      const list = parseList(draft.services);
+      return list.length === 0
+        ? "None yet"
+        : list.slice(0, 3).join(", ") + (list.length > 3 ? ` and ${list.length - 3} more` : "");
+    }
+    case "cover":
+      return draft.heroHeadline.trim() || (site.hero_photo_id ? "Photo chosen" : "Not set");
+    case "areas": {
+      const n = parseList(draft.serviceAreas).length;
+      return `${n === 0 ? "No areas yet" : count(n, "area", "areas")}, map ${draft.showMap ? "on" : "off"}`;
+    }
+    case "about": {
+      const text = draft.about.trim().replace(/\s+/g, " ");
+      return text ? (text.length > 60 ? `${text.slice(0, 57)}...` : text) : "Not written yet";
+    }
+    case "reviews":
+      if (!site.google_place_id) return draft.showReviews ? "Google not connected" : "Off";
+      return site.google_rating != null
+        ? `Google, ${site.google_rating.toFixed(1)} stars`
+        : "Google connected";
+    case "contact":
+      return draft.phone.trim() || draft.email.trim() || "Not set";
+    case "address":
+      return `/p/${draft.slug.trim().toLowerCase()}`;
+  }
+}
+
+/** The first section holding an error, so Save can open it. */
+export function sectionWithError(
+  errors: Partial<Record<keyof SiteDraft, string>>,
+): SiteSectionId | null {
+  const keys = Object.keys(errors) as (keyof SiteDraft)[];
+  return SITE_SECTIONS.find((s) => s.fields.some((f) => keys.includes(f)))?.id ?? null;
+}

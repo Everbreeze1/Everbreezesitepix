@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { Alert, View } from "react-native";
+import { Alert, Pressable, View } from "react-native";
 import { Image } from "expo-image";
 import { Redirect, Stack } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
@@ -33,12 +33,13 @@ import {
 } from "@/api/portfolio-view";
 import { listProjects } from "@/api/projects";
 import { openShareSheet, publicUrl } from "@/api/sharing";
+import { ActionRail } from "@/components/ActionRail";
 import { EmbedsPanel } from "@/components/portfolio/EmbedsPanel";
 import { SiteEditor } from "@/components/portfolio/SiteEditor";
 import { SwitchRow } from "@/components/portfolio/SwitchRow";
 import { webAppLink } from "@/lib/api";
 import { useAccountOwner } from "@/lib/use-access";
-import { radius, spacing, useTheme } from "@/theme";
+import { radius, spacing, useRightRail, useTheme } from "@/theme";
 import {
   ChevronDown,
   ChevronUp,
@@ -56,7 +57,6 @@ import {
   Trash2,
 } from "@/ui/icons";
 import {
-  ActionSheet,
   Badge,
   Button,
   Card,
@@ -65,6 +65,7 @@ import {
   EmptyState,
   ErrorState,
   Field,
+  Icon,
   IconButton,
   ListGroup,
   ListRow,
@@ -73,6 +74,7 @@ import {
   Sheet,
   SkeletonList,
   Text,
+  useCardPage,
   type SheetAction,
 } from "@/ui";
 
@@ -124,6 +126,10 @@ const TABS = [
 
 function OwnerPortfolio() {
   const theme = useTheme();
+  // Tablets and landscape: primary actions sit on the right, and the page is
+  // centred and capped rather than stretched edge to edge.
+  const rail = useRightRail();
+  const { inset } = useCardPage();
   const queryClient = useQueryClient();
 
   const [picking, setPicking] = useState(false);
@@ -137,7 +143,7 @@ function OwnerPortfolio() {
     state: "",
     completedOn: "",
   });
-  const [actionsFor, setActionsFor] = useState<PortfolioProject | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
   const [draftTagline, setDraftTagline] = useState("");
   const [titleError, setTitleError] = useState<string | null>(null);
@@ -170,6 +176,9 @@ function OwnerPortfolio() {
     return order.map((id) => byId.get(id)).filter((row): row is PortfolioProject => !!row);
   }, [portfolioQuery.data, order]);
   const live = publishedCount(pages);
+  // Looked up from the list rather than held, so the sheet's switches show
+  // the refetched state after each change instead of the row as first opened.
+  const selected = pages.find((page) => page.id === selectedId) ?? null;
   const projects = useMemo(
     () => (projectsQuery.data ?? []).filter((project) => !project.archived),
     [projectsQuery.data],
@@ -381,6 +390,8 @@ function OwnerPortfolio() {
     setCreating(true);
   }, []);
 
+  const showRail = tab === "projects" && canManage && !portfolioQuery.isLoading;
+
   return (
     <>
       <Stack.Screen
@@ -404,120 +415,144 @@ function OwnerPortfolio() {
         }}
       />
 
-      <Screen
-        scroll
-        padded={false}
-        refreshing={portfolioQuery.isRefetching || siteQuery.isRefetching}
-        onRefresh={() => {
-          void portfolioQuery.refetch();
-          void siteQuery.refetch();
-        }}
-        bottomInset={spacing.xxl}
-      >
-        <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.lg, gap: spacing.md }}>
-          <Text variant="caption" tone="muted">
-            A shareable mini-site of your best work, one page per project, plus embeds for your own
-            website.
-            {pages.length > 0 ? ` ${live} of ${pages.length} pages live.` : ""}
-          </Text>
+      <View style={{ flex: 1 }}>
+        <Screen
+          scroll
+          padded={false}
+          refreshing={portfolioQuery.isRefetching || siteQuery.isRefetching}
+          onRefresh={() => {
+            void portfolioQuery.refetch();
+            void siteQuery.refetch();
+          }}
+          // Room under the last row for the floating Build from a job button.
+          bottomInset={showRail && pages.length > 0 ? spacing.xxl * 3 : spacing.xxl}
+        >
+          <View style={{ paddingHorizontal: inset, paddingTop: spacing.lg, gap: spacing.md }}>
+            {siteQuery.isLoading ? (
+              <SkeletonList rows={1} />
+            ) : siteQuery.error ? (
+              <ErrorState
+                title="Could not load your portfolio site"
+                message={siteQuery.error instanceof Error ? siteQuery.error.message : undefined}
+                onRetry={() => void siteQuery.refetch()}
+              />
+            ) : site ? (
+              /*
+                The publish band, above the tabs as on the web: "is my site
+                live, and what is the link?" is the question people open this
+                to answer. Live shows the link and what to do with it; a draft
+                shows only the switch that makes it live.
+              */
+              <Card>
+                <View
+                  style={{
+                    flexDirection: rail ? "row" : "column",
+                    alignItems: rail ? "center" : "stretch",
+                    gap: spacing.md,
+                  }}
+                >
+                  <View
+                    style={{
+                      flex: rail ? 1 : undefined,
+                      minWidth: 0,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: spacing.sm,
+                    }}
+                  >
+                    <Badge
+                      label={site.published ? "Live" : "Draft"}
+                      tone={site.published ? "success" : "neutral"}
+                      variant={site.published ? "soft" : "outline"}
+                    />
+                    <Text
+                      variant={site.published ? "bodyStrong" : "caption"}
+                      tone={site.published ? "default" : "muted"}
+                      style={{ flex: 1 }}
+                      numberOfLines={site.published ? 1 : 2}
+                    >
+                      {site.published
+                        ? (siteUrl ?? `/p/${site.slug}`)
+                        : "Not public yet. Publish to get a shareable link and turn on embeds."}
+                    </Text>
+                  </View>
+                  {site.published ? (
+                    <View style={{ flexDirection: "row", gap: spacing.sm }}>
+                      <Button
+                        label="View website"
+                        icon={ExternalLink}
+                        size="sm"
+                        variant="secondary"
+                        disabled={!siteUrl}
+                        onPress={() => void openSite(siteUrl)}
+                      />
+                      <Button
+                        label="Share link"
+                        icon={Share2}
+                        size="sm"
+                        variant="secondary"
+                        disabled={!siteUrl}
+                        onPress={() =>
+                          siteUrl
+                            ? void openShareSheet(siteUrl, site.business_name ?? "Our work")
+                            : undefined
+                        }
+                      />
+                    </View>
+                  ) : null}
+                  <View style={rail ? { width: 180 } : undefined}>
+                    <SwitchRow
+                      label="Publish site"
+                      value={site.published}
+                      disabled={publishing || !canManage}
+                      onChange={(next) => void togglePublished(next)}
+                    />
+                  </View>
+                </View>
+              </Card>
+            ) : null}
 
-          {siteQuery.isLoading ? (
-            <SkeletonList rows={1} />
-          ) : siteQuery.error ? (
-            <ErrorState
-              title="Could not load your portfolio site"
-              message={siteQuery.error instanceof Error ? siteQuery.error.message : undefined}
-              onRetry={() => void siteQuery.refetch()}
+            {failure ? (
+              <Text variant="caption" tone="destructive">
+                {failure}
+              </Text>
+            ) : null}
+          </View>
+
+          {/* The web's three tabs, in its order: the site, the projects that fill it, the embeds. */}
+          <View style={{ paddingTop: spacing.md, paddingHorizontal: inset - spacing.lg }}>
+            <ChipGroup
+              label="Portfolio sections"
+              options={TABS.map((t) =>
+                t.id === "projects" && pages.length > 0 ? { ...t, count: pages.length } : t,
+              )}
+              value={tab}
+              onChange={setTab}
             />
-          ) : site ? (
-            /*
-              The publish band, above the tabs as on the web: "is my site live,
-              and what is the link?" is the question people open this to answer.
-            */
-            <Card>
-              <View style={{ gap: spacing.md }}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
-                  <Badge
-                    label={site.published ? "Live" : "Draft"}
-                    tone={site.published ? "success" : "neutral"}
-                    variant={site.published ? "soft" : "outline"}
-                  />
-                  <Text variant="caption" tone="muted" style={{ flex: 1 }} numberOfLines={2}>
-                    {site.published
-                      ? (siteUrl ?? `/p/${site.slug}`)
-                      : "Your site is not public yet. Publish to get a shareable link and turn on embeds."}
-                  </Text>
-                </View>
-                <SwitchRow
-                  label="Publish site"
-                  value={site.published}
-                  disabled={publishing || !canManage}
-                  onChange={(next) => void togglePublished(next)}
-                />
-                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }}>
-                  <Button
-                    label="View website"
-                    icon={ExternalLink}
-                    size="sm"
-                    variant="secondary"
-                    disabled={!site.published || !siteUrl}
-                    onPress={() => void openSite(siteUrl)}
-                  />
-                  <Button
-                    label="Share link"
-                    icon={Share2}
-                    size="sm"
-                    variant="secondary"
-                    disabled={!site.published || !siteUrl}
-                    onPress={() =>
-                      siteUrl
-                        ? void openShareSheet(siteUrl, site.business_name ?? "Our work")
-                        : undefined
-                    }
-                  />
-                </View>
-              </View>
-            </Card>
-          ) : null}
-
-          {failure ? (
-            <Text variant="caption" tone="destructive">
-              {failure}
-            </Text>
-          ) : null}
-        </View>
-
-        <View style={{ paddingTop: spacing.md }}>
-          <ChipGroup label="Portfolio sections" options={TABS} value={tab} onChange={setTab} />
-        </View>
-
-        {tab === "site" ? (
-          <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.lg }}>
-            {site ? (
-              <SiteEditor site={site} onSaved={refreshSite} />
-            ) : siteQuery.isLoading ? null : (
-              <EmptyState icon={Globe} title="No portfolio site yet" />
-            )}
           </View>
-        ) : tab === "embeds" ? (
-          <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.lg }}>
-            {site ? <EmbedsPanel site={site} webBase={webBase} onKeyRotated={refreshSite} /> : null}
-          </View>
-        ) : null}
 
-        {tab !== "projects" ? null : portfolioQuery.isLoading ? (
-          <SkeletonList rows={4} />
-        ) : portfolioQuery.error ? (
-          <ErrorState
-            title="Could not load your portfolio"
-            message={
-              portfolioQuery.error instanceof Error ? portfolioQuery.error.message : undefined
-            }
-            onRetry={() => void portfolioQuery.refetch()}
-          />
-        ) : (
-          <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.lg, gap: spacing.md }}>
-            {pages.length === 0 ? (
+          <View style={{ paddingHorizontal: inset, paddingTop: spacing.lg, gap: spacing.md }}>
+            {tab === "site" ? (
+              site ? (
+                <SiteEditor site={site} onSaved={refreshSite} />
+              ) : siteQuery.isLoading ? null : (
+                <EmptyState icon={Globe} title="No portfolio site yet" />
+              )
+            ) : tab === "embeds" ? (
+              site ? (
+                <EmbedsPanel site={site} webBase={webBase} onKeyRotated={refreshSite} />
+              ) : null
+            ) : portfolioQuery.isLoading ? (
+              <SkeletonList rows={4} />
+            ) : portfolioQuery.error ? (
+              <ErrorState
+                title="Could not load your portfolio"
+                message={
+                  portfolioQuery.error instanceof Error ? portfolioQuery.error.message : undefined
+                }
+                onRetry={() => void portfolioQuery.refetch()}
+              />
+            ) : pages.length === 0 ? (
               <EmptyState
                 icon={Sparkles}
                 title="Nothing in your portfolio yet"
@@ -533,156 +568,196 @@ function OwnerPortfolio() {
                 }
               />
             ) : (
-              pages.map((project, index) => (
-                <Card key={project.id}>
-                  <View style={{ gap: spacing.md }}>
-                    {project.cover_image_url ? (
-                      <Image
-                        source={{ uri: project.cover_image_url }}
-                        style={{
-                          width: "100%",
-                          aspectRatio: 16 / 9,
-                          borderRadius: radius.md,
-                          backgroundColor: theme.colors.secondary,
-                        }}
-                        contentFit="cover"
-                      />
-                    ) : (
-                      /*
-                        A page with no cover is usually a page with no photos,
-                        which is the state worth noticing before publishing.
-                      */
-                      <View
-                        style={{
-                          width: "100%",
-                          aspectRatio: 16 / 9,
-                          borderRadius: radius.md,
-                          backgroundColor: theme.colors.secondary,
+              <>
+                <Text variant="caption" tone="muted">
+                  {live} of {pages.length} live. The order here is the order visitors see. Tap a
+                  project to publish, feature or move it.
+                </Text>
+                <ListGroup>
+                  {pages.map((project, index) => (
+                    <View key={project.id}>
+                      {index > 0 ? <RowDivider /> : null}
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={project.title}
+                        accessibilityHint="Opens this project's settings"
+                        onPress={() => setSelectedId(project.id)}
+                        style={({ pressed }) => ({
+                          flexDirection: "row",
                           alignItems: "center",
-                          justifyContent: "center",
-                          gap: spacing.xs,
-                        }}
+                          gap: spacing.md,
+                          padding: spacing.md,
+                          backgroundColor: pressed ? theme.colors.secondary : "transparent",
+                        })}
                       >
-                        <Badge label="No photos yet" tone="neutral" icon={ImageOff} />
-                      </View>
-                    )}
-
-                    <View
-                      style={{ flexDirection: "row", alignItems: "flex-start", gap: spacing.sm }}
-                    >
-                      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                        <Text variant="bodyStrong" numberOfLines={2}>
-                          {project.title}
-                        </Text>
-                        <Text variant="caption" tone="muted">
-                          {portfolioSummary(project)}
-                        </Text>
-                      </View>
-                      <Badge
-                        label={isPublished(project) ? "Live" : "Draft"}
-                        tone={isPublished(project) ? "success" : "neutral"}
-                        variant={isPublished(project) ? "soft" : "outline"}
-                      />
-                    </View>
-
-                    {project.tagline ? (
-                      <Text variant="caption" tone="muted" numberOfLines={3}>
-                        {project.tagline}
-                      </Text>
-                    ) : null}
-
-                    {canManage ? (
-                      <>
-                        <SwitchRow
-                          label="On site"
-                          hint={
-                            siteListingLabel(project) === "Draft"
-                              ? "Publish this page before it can be listed."
-                              : `${siteListingLabel(project)}${
-                                  cards.get(project.id)?.service_type
-                                    ? ` · ${cards.get(project.id)?.service_type}`
-                                    : ""
-                                }`
-                          }
-                          value={Boolean(project.on_site)}
-                          disabled={run.isPending || !isPublished(project)}
-                          onChange={(next) => patchListing(project, { onSite: next })}
-                        />
-                        <View
-                          style={{ flexDirection: "row", alignItems: "center", gap: spacing.xs }}
-                        >
-                          <Button
-                            label="Manage"
-                            size="sm"
-                            variant="secondary"
-                            onPress={() => setActionsFor(project)}
+                        {project.cover_image_url ? (
+                          <Image
+                            source={{ uri: project.cover_image_url }}
+                            style={{
+                              width: 64,
+                              height: 48,
+                              borderRadius: radius.sm,
+                              backgroundColor: theme.colors.secondary,
+                            }}
+                            contentFit="cover"
                           />
-                          <View style={{ flex: 1 }} />
-                          <IconButton
-                            icon={Star}
-                            tone={project.featured ? "safety" : "default"}
-                            accessibilityLabel={
-                              project.featured ? "Remove featured badge" : "Badge as featured"
-                            }
-                            surface={false}
-                            disabled={run.isPending}
-                            onPress={() => patchListing(project, { featured: !project.featured })}
-                          />
-                          <IconButton
-                            icon={ChevronUp}
-                            accessibilityLabel={`Move ${project.title} up`}
-                            surface={false}
-                            disabled={index === 0}
-                            onPress={() => move(project.id, -1)}
-                          />
-                          <IconButton
-                            icon={ChevronDown}
-                            accessibilityLabel={`Move ${project.title} down`}
-                            surface={false}
-                            disabled={index === pages.length - 1}
-                            onPress={() => move(project.id, 1)}
-                          />
+                        ) : (
+                          /*
+                            A page with no cover is usually a page with no
+                            photos, which is the state worth noticing before
+                            publishing.
+                          */
+                          <View
+                            accessibilityLabel="No photos yet"
+                            style={{
+                              width: 64,
+                              height: 48,
+                              borderRadius: radius.sm,
+                              backgroundColor: theme.colors.secondary,
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            <Icon icon={ImageOff} size="sm" tone="muted" />
+                          </View>
+                        )}
+                        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                          <Text variant="bodyStrong" numberOfLines={2}>
+                            {project.title}
+                          </Text>
+                          <Text variant="caption" tone="muted" numberOfLines={1}>
+                            {portfolioSummary(project)}
+                            {isPublished(project) && !project.on_site ? " · Hidden from site" : ""}
+                          </Text>
                         </View>
-                      </>
-                    ) : null}
-                  </View>
-                </Card>
-              ))
+                        {project.featured ? <Icon icon={Star} size="sm" tone="safety" /> : null}
+                        <Badge
+                          label={isPublished(project) ? "Live" : "Draft"}
+                          tone={isPublished(project) ? "success" : "neutral"}
+                          variant={isPublished(project) ? "soft" : "outline"}
+                        />
+                      </Pressable>
+                    </View>
+                  ))}
+                </ListGroup>
+                <Text variant="caption" tone="muted">
+                  Each page&apos;s photos, sections and long intro are edited in the page builder on
+                  the website.
+                </Text>
+              </>
             )}
 
-            {canManage && pages.length > 0 ? (
-              <>
-                <Button
-                  label="Build from a job"
-                  icon={FolderKanban}
-                  variant="secondary"
-                  fullWidth
-                  disabled={run.isPending}
-                  onPress={() => setPicking(true)}
-                />
-              </>
-            ) : null}
-
-            {!canManage ? (
+            {tab === "projects" && !canManage ? (
               <Text variant="caption" tone="muted">
                 Only an owner or admin can change the portfolio.
               </Text>
             ) : null}
-
-            <Text variant="caption" tone="muted">
-              Each page&apos;s photos, sections and long-form intro are edited in the page builder
-              on the website.
-            </Text>
           </View>
-        )}
-      </Screen>
+        </Screen>
 
-      <ActionSheet
-        visible={actionsFor !== null}
-        onClose={() => setActionsFor(null)}
-        title={actionsFor?.title}
-        actions={actionsFor ? rowActions(actionsFor) : []}
-      />
+        {/*
+          Building a page from a finished job is this tab's main act, so it
+          floats at the lower right where the thumb is, on a phone and as a
+          labelled pill on a tablet. Hidden while the empty state offers it.
+        */}
+        {!showRail || pages.length === 0 ? null : (
+          <ActionRail
+            actions={[
+              {
+                key: "build-from-job",
+                icon: FolderKanban,
+                label: "Build from a job",
+                hint: "Turn a finished job's photos into a portfolio page",
+                disabled: run.isPending,
+                onPress: () => setPicking(true),
+              },
+            ]}
+          />
+        )}
+      </View>
+
+      {/*
+        One project's settings. The two switches the web grid carries on each
+        card (listed on the site, featured) and the running order sit at the
+        top; everything rarer is a row underneath.
+      */}
+      <Sheet
+        visible={selected !== null}
+        onClose={() => setSelectedId(null)}
+        title={selected?.title}
+        subtitle={selected ? portfolioSummary(selected) : undefined}
+      >
+        {selected ? (
+          <>
+            {canManage ? (
+              <Card>
+                <View style={{ gap: spacing.md }}>
+                  <SwitchRow
+                    label="On site"
+                    hint={
+                      siteListingLabel(selected) === "Draft"
+                        ? "Publish this page before it can be listed."
+                        : `${siteListingLabel(selected)}${
+                            cards.get(selected.id)?.service_type
+                              ? ` · ${cards.get(selected.id)?.service_type}`
+                              : ""
+                          }`
+                    }
+                    value={Boolean(selected.on_site)}
+                    disabled={run.isPending || !isPublished(selected)}
+                    onChange={(next) => patchListing(selected, { onSite: next })}
+                  />
+                  <SwitchRow
+                    label="Featured"
+                    hint="A badge on this project's card on your site."
+                    value={Boolean(selected.featured)}
+                    disabled={run.isPending}
+                    onChange={(next) => patchListing(selected, { featured: next })}
+                  />
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
+                    <Text variant="bodyStrong" style={{ flex: 1 }}>
+                      Position {pages.findIndex((p) => p.id === selected.id) + 1} of {pages.length}
+                    </Text>
+                    <IconButton
+                      icon={ChevronUp}
+                      accessibilityLabel={`Move ${selected.title} up`}
+                      disabled={pages[0]?.id === selected.id}
+                      onPress={() => move(selected.id, -1)}
+                    />
+                    <IconButton
+                      icon={ChevronDown}
+                      accessibilityLabel={`Move ${selected.title} down`}
+                      disabled={pages[pages.length - 1]?.id === selected.id}
+                      onPress={() => move(selected.id, 1)}
+                    />
+                  </View>
+                </View>
+              </Card>
+            ) : null}
+            {canManage ? (
+              <ListGroup>
+                {rowActions(selected).map((action, index) => (
+                  <View key={action.label}>
+                    {index > 0 ? <RowDivider /> : null}
+                    <ListRow
+                      icon={action.icon}
+                      iconTone={action.destructive ? "destructive" : "primary"}
+                      title={action.label}
+                      destructive={action.destructive}
+                      disabled={action.disabled}
+                      chevron={false}
+                      onPress={() => {
+                        setSelectedId(null);
+                        action.onPress();
+                      }}
+                    />
+                  </View>
+                ))}
+              </ListGroup>
+            ) : null}
+          </>
+        ) : null}
+      </Sheet>
 
       <Sheet
         visible={picking}
@@ -721,6 +796,11 @@ function OwnerPortfolio() {
           setEditing(null);
         }}
         title={editing ? "Rename page" : "New portfolio page"}
+        footer={
+          <View style={{ alignItems: rail ? "flex-end" : "stretch" }}>
+            <Button label="Save" fullWidth={!rail} onPress={saveEdit} />
+          </View>
+        }
       >
         <View style={{ gap: spacing.lg }}>
           <Field
@@ -768,8 +848,6 @@ function OwnerPortfolio() {
               </ListGroup>
             </View>
           ) : null}
-
-          <Button label="Save" fullWidth onPress={saveEdit} />
         </View>
       </Sheet>
       <Sheet
@@ -777,6 +855,29 @@ function OwnerPortfolio() {
         onClose={() => setListing(null)}
         title="Site listing"
         subtitle="How this page is filed and filtered on your portfolio site."
+        footer={
+          <View style={{ alignItems: rail ? "flex-end" : "stretch" }}>
+            <Button
+              label="Save listing"
+              fullWidth={!rail}
+              onPress={() => {
+                const target = listing;
+                const done = listingDraft.completedOn.trim();
+                if (!target || (done && !/^\d{4}-\d{2}-\d{2}$/.test(done))) return;
+                setListing(null);
+                run.mutate(() =>
+                  updateShowcaseSite(target.id, {
+                    serviceType: listingDraft.serviceType.trim() || null,
+                    summary: listingDraft.summary.trim() || null,
+                    city: listingDraft.city.trim() || null,
+                    state: listingDraft.state.trim() || null,
+                    completedOn: done || null,
+                  }),
+                );
+              }}
+            />
+          </View>
+        }
       >
         <View style={{ gap: spacing.lg }}>
           <Field
@@ -826,25 +927,6 @@ function OwnerPortfolio() {
                 ? "Use YYYY-MM-DD"
                 : undefined
             }
-          />
-          <Button
-            label="Save listing"
-            fullWidth
-            onPress={() => {
-              const target = listing;
-              const done = listingDraft.completedOn.trim();
-              if (!target || (done && !/^\d{4}-\d{2}-\d{2}$/.test(done))) return;
-              setListing(null);
-              run.mutate(() =>
-                updateShowcaseSite(target.id, {
-                  serviceType: listingDraft.serviceType.trim() || null,
-                  summary: listingDraft.summary.trim() || null,
-                  city: listingDraft.city.trim() || null,
-                  state: listingDraft.state.trim() || null,
-                  completedOn: done || null,
-                }),
-              );
-            }}
           />
         </View>
       </Sheet>

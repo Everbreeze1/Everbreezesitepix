@@ -13,7 +13,12 @@ import {
   portfolioPageUrl,
   portfolioSiteUrl,
   reviewLinksToSave,
+  sectionWithError,
+  SITE_SECTIONS,
   siteDraftErrors,
+  siteSectionDone,
+  siteSectionProgress,
+  siteSectionSummary,
   siteListingLabel,
   sitePatch,
   toSiteDraft,
@@ -384,5 +389,115 @@ describe("the site, as the web's Portfolio page has it", () => {
     expect(screen).toContain('label="View website"');
     expect(screen).toContain('label="Publish site"');
     expect(screen).toContain("WebBrowser.openBrowserAsync(url)");
+  });
+});
+
+describe("laid out the way the web's Portfolio page is", () => {
+  /*
+   * Jon, 2026-09-29: the phone's portfolio "feels cumbersome" and does not
+   * look like the website. The web (`PortfolioPage.tsx`, the page the sidebar
+   * links to at /showcases) is a publish band, three tabs, and a site editor
+   * that shows one section at a time behind a trail of ticks. The phone had
+   * the tabs but put every field of the site into one long form.
+   */
+  const read = (p: string) => readFileSync(join(process.cwd(), p), "utf8");
+  const site = {
+    hero_photo_id: null,
+    google_place_id: null,
+    google_rating: null,
+  } as const;
+  const blank = toSiteDraft({
+    id: "p1",
+    slug: "acme-roofing",
+    business_name: null,
+    logo_url: null,
+    accent_color: null,
+    hero_headline: null,
+    hero_subhead: null,
+    hero_photo_id: null,
+    hero_image_url: null,
+    about_html: null,
+    services: [],
+    service_areas: [],
+    phone: null,
+    email: null,
+    address: null,
+    website_url: null,
+    cta_label: null,
+    cta_url: null,
+    show_map: true,
+    show_reviews: false,
+    published: false,
+    embed_key: "k",
+    seo_title: null,
+    seo_description: null,
+    google_place_id: null,
+    google_name: null,
+    google_rating: null,
+    google_review_count: null,
+    google_synced_at: null,
+  } as PortfolioSite);
+
+  it("names the site's sections as the web's editor does, in its order", () => {
+    const web = read("apps/web/src/features/showcases/components/PortfolioSiteSteps.tsx");
+    const webLabels = [...web.matchAll(/^\s{4}label: "([^"]+)",$/gm)].map((m) => m[1]);
+    expect(SITE_SECTIONS.map((s) => s.label)).toEqual(webLabels);
+  });
+
+  it("files every draft field under exactly one section", () => {
+    const all = SITE_SECTIONS.flatMap((s) => s.fields).sort();
+    expect(all).toEqual(Object.keys(blank).sort());
+    expect(new Set(all).size).toBe(all.length);
+  });
+
+  it("ticks sections by the web's rules and counts all but the address", () => {
+    expect(siteSectionProgress(blank, site)).toEqual({ done: 0, total: 7 });
+    const filled = { ...blank, businessName: "Acme", services: "Roofing", phone: "0113" };
+    expect(siteSectionProgress(filled, site).done).toBe(3);
+    expect(siteSectionDone("cover", blank, { ...site, hero_photo_id: "ph" })).toBe(true);
+    expect(siteSectionDone("reviews", blank, { ...site, google_place_id: "g" })).toBe(true);
+  });
+
+  it("says what is in each section, so nobody opens one to find out", () => {
+    expect(siteSectionSummary("business", blank, site)).toBe("Not named yet");
+    expect(siteSectionSummary("services", { ...blank, services: "A, B, C, D, E" }, site)).toBe(
+      "A, B, C and 2 more",
+    );
+    expect(siteSectionSummary("address", blank, site)).toBe("/p/acme-roofing");
+    expect(
+      siteSectionSummary("reviews", blank, { ...site, google_place_id: "g", google_rating: 4.84 }),
+    ).toBe("Google, 4.8 stars");
+  });
+
+  it("points Save at the section holding the error", () => {
+    expect(sectionWithError({})).toBeNull();
+    expect(sectionWithError({ slug: "bad" })).toBe("address");
+    expect(sectionWithError({ ctaUrl: "bad" })).toBe("contact");
+  });
+
+  it("opens one section at a time instead of one long form", () => {
+    const editor = read("apps/mobile/src/components/portfolio/SiteEditor.tsx");
+    expect(editor).toContain("SITE_SECTIONS.map(");
+    expect(editor).toContain("<Sheet");
+    // The old form listed every section as a header down one scroll.
+    expect(editor).not.toContain('<SectionHeader title="Business" />');
+  });
+
+  it("puts each embed behind its own row", () => {
+    const embeds = read("apps/mobile/src/components/portfolio/EmbedsPanel.tsx");
+    expect(embeds).toContain('title="Website gallery"');
+    expect(embeds).toContain('title="Project map"');
+    expect(embeds).toContain("<Sheet");
+  });
+
+  it("lists projects as compact rows and keeps their controls in a sheet", () => {
+    const screen = read("apps/mobile/app/(app)/portfolio.tsx");
+    expect(screen).toContain("setSelectedId(project.id)");
+    expect(screen).toContain('label="Featured"');
+    expect(screen).toContain('label="On site"');
+    // Building from a job floats at the lower right, a labelled pill on a tablet.
+    expect(screen).toContain("<ActionRail");
+    expect(screen).toContain('label: "Build from a job"');
+    expect(screen).toContain("useRightRail()");
   });
 });

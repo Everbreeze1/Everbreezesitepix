@@ -78,6 +78,7 @@ export { default as MapPin } from "lucide-react-native/dist/esm/icons/map-pin";
 export { default as Megaphone } from "lucide-react-native/dist/esm/icons/megaphone";
 export { default as Menu } from "lucide-react-native/dist/esm/icons/menu";
 export { default as MessageSquare } from "lucide-react-native/dist/esm/icons/message-square";
+export { default as Mic } from "lucide-react-native/dist/esm/icons/mic";
 export { default as Paperclip } from "lucide-react-native/dist/esm/icons/paperclip";
 export { default as PanelRightClose } from "lucide-react-native/dist/esm/icons/panel-right-close";
 export { default as PanelRightOpen } from "lucide-react-native/dist/esm/icons/panel-right-open";

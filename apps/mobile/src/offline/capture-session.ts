@@ -21,6 +21,27 @@ import { autoDailyLog } from "@/api/daily-log";
  * The decision itself is in `capture-session-rules.ts` and tested there.
  */
 
+/**
+ * Sessions a camera screen still has open.
+ *
+ * The camera saves each shot the moment it is taken, so with signal a shot
+ * can land, and the queue empty, between one shutter press and the next. If
+ * the session were written up then, the Daily Log would get the first photo
+ * alone and the rest of the visit would reuse an idempotency key already
+ * spent. So a session is not written up while its camera is open; closing the
+ * camera releases it. Held in memory on purpose: if the app dies with the
+ * camera open, the next launch has nothing here and writes the visit up.
+ */
+const openSessions = new Set<string>();
+
+export function openCaptureSession(sessionId: string): void {
+  openSessions.add(sessionId);
+}
+
+export function closeCaptureSession(sessionId: string): void {
+  openSessions.delete(sessionId);
+}
+
 /** Record a queued photo against the session that shot it. */
 export async function recordSessionPhoto(input: {
   outboxId: string;
@@ -119,6 +140,7 @@ export async function flushCaptureSessions(): Promise<void> {
   }
 
   for (const session of readySessions(rows)) {
+    if (openSessions.has(session.sessionId)) continue;
     if (session.photoIds.length === 0) {
       // Every upload in it failed. Nothing to write up, but the rows have to go
       // or they are re-read on every drain for the life of the install.

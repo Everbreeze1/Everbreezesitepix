@@ -1,14 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  BackHandler,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   useWindowDimensions,
   View,
 } from "react-native";
@@ -22,7 +17,7 @@ import * as Location from "expo-location";
 import { useQuery } from "@tanstack/react-query";
 import { listProjectPhotos, type CapturedAsset, type PhotoPhase } from "@/api/photos";
 import { getMyTeam } from "@/api/team";
-import { tagForPhase, type WatermarkTag } from "@/api/watermark";
+import { type WatermarkTag } from "@/api/watermark";
 import { downscaleForStamp, makePreviewThumb, renderWatermarked } from "@/api/watermark-render";
 import { WatermarkCanvas } from "@/components/WatermarkCanvas";
 import { ScanCanvas } from "@/components/ScanCanvas";
@@ -34,6 +29,7 @@ import { LevelIndicator } from "@/components/LevelIndicator";
 import { ShotAnnotator } from "@/components/ShotAnnotator";
 import { ShotEditor, type ShotPatch } from "@/components/ShotEditor";
 import { TagPickerSheet } from "@/components/TagPickerSheet";
+import { CaptureNotePanel, type NotePanelAction } from "@/components/capture/CaptureNotePanel";
 import { useTagLibrary } from "@/components/photo-viewer/TagPill";
 import { formatAddress, getProject, projectCoords } from "@/api/projects";
 import { projectDisplayName } from "@everlumen/shared";
@@ -41,53 +37,94 @@ import { useAuth } from "@/lib/auth";
 import { takeCaptureNotice } from "@/lib/capture-notice";
 import { deviceSupportsMeasure } from "@/lib/measure-support";
 import {
+  addRecent,
+  EMPTY_NOTE,
+  metaForNewShot,
+  noteIsActive,
+  noteSummary,
+  patchRecent,
   phaseAtShutter,
-  savedMessage,
-  setPhaseForAll,
-  sharedPhase,
-  shotPhase,
+  pillChanged,
+  pillOf,
+  queuedMetaPatch,
+  uploadedMetaPatch,
+  type CaptureNote,
 } from "@/lib/capture-batch";
 import { persistCapture, replaceCapture } from "@/offline/media";
-import { enqueue, finishHeld, newOutboxId } from "@/offline/outbox";
-import { recordSessionPhoto } from "@/offline/capture-session";
+import {
+  discardUnsent,
+  enqueue,
+  finishHeld,
+  holdQueued,
+  newOutboxId,
+  updateQueuedPayload,
+} from "@/offline/outbox";
+import {
+  closeCaptureSession,
+  openCaptureSession,
+  recordSessionPhoto,
+} from "@/offline/capture-session";
 import { refreshQueue, requestSync } from "@/offline/sync";
-import type { PhotoUploadPayload } from "@/offline/handlers";
+import {
+  capturedPhotoPatchRowId,
+  type CapturedPhotoPatchPayload,
+  type PhotoUploadPayload,
+} from "@/offline/handlers";
 import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
 import { Icon } from "@/ui";
 import {
+  Check,
   ChevronDown,
-  ChevronLeft,
+  Crop,
   Grid3x3,
   ImageIcon,
   MapPin,
+  Mic,
+  RefreshCw,
   Ruler,
+  StickyNote,
   SwitchCamera,
   X,
 } from "@/ui/icons";
 
 /**
- * `scan` marks a shot taken in Scan mode. Its file already has the document
- * look applied, and on Save it queues with a `scan` tag and never gets a
- * before/after pill, whatever the batch phase says.
+ * One shot this camera visit has taken. It is saved (queued to the outbox)
+ * the moment it is taken; this is what the camera keeps so the shot can be
+ * retagged, captioned or annotated on its own afterwards.
  */
-type Shot = CapturedAsset & {
-  key: string;
-  scan?: boolean;
-  /** This shot's own description, from its preview. Wins over the batch caption. */
-  caption?: string;
-  /** This shot's own tags, from its preview. Added to the batch tags. */
-  tags?: string[];
+type RecentShot = {
+  /** The outbox row id, which is also the upload's idempotency key. */
+  id: string;
+  asset: CapturedAsset;
   /**
-   * Before/After as selected when this shot's shutter fired. Saved per shot,
-   * never read from the toggle at Save time; see `capture-batch.ts`.
+   * The shot's own picture, without its before/after pill: the camera's file,
+   * or its annotated or cropped version. The pill is always burnt in from
+   * this, so a retag redraws it rather than stacking a second pill.
    */
-  phase?: PhotoPhase;
-  /** A small copy for the strip and review grid, once it has been made. */
+  source: string;
+  width?: number | null;
+  height?: number | null;
+  /** The queued copy in app storage, once it is queued. */
+  localUri: string | null;
+  /** A small copy for the corner and the strip, once it has been made. */
   thumb?: string;
+  /** Taken in Scan mode: filed with the scan tag, never given a pill. */
+  scan: boolean;
+  /** Before/After as selected when this shot's shutter fired, or as retagged since. */
+  phase: PhotoPhase;
+  caption: string;
+  tags: string[];
+  /** When the shutter fired (ISO), for the timeline when EXIF has no time. */
+  capturedAt: string;
+  /** Could not be stored on the device. Still on screen, with a retry. */
+  failed?: boolean;
 };
 
-/** A queued shot still waiting for its before/after pill. */
-type StampJob = { id: string; uri: string; localUri: string; tag: WatermarkTag };
+/** The camera file work for one queued shot: its pill, or an edit's new picture. */
+type FileJob = { gen: number; running: boolean; edited: boolean };
+
+/** The note panel, for the shots still to come or for one saved shot. */
+type Panel = { kind: "next"; focus?: boolean } | { kind: "shot"; id: string; focus?: boolean };
 
 /**
  * How long a queued Before/After photo waits for its pill before it uploads
@@ -96,15 +133,8 @@ type StampJob = { id: string; uri: string; localUri: string; tag: WatermarkTag }
  */
 const STAMP_HOLD_MS = 2 * 60_000;
 
-/** The tag a Scan mode capture is filed under, so scans can be found later. */
-const SCAN_TAG = "scan";
-
-/** Review's "Set all" row. */
-const PHASES: { id: PhotoPhase; label: string }[] = [
-  { id: "before", label: "Before" },
-  { id: "untagged", label: "Untagged" },
-  { id: "after", label: "After" },
-];
+/** How long a caption keeps typing before the queued row is rewritten. */
+const META_DEBOUNCE_MS = 700;
 
 /** The viewfinder's Before/After toggle, worded as web's. */
 const PHASE_TOGGLE: { id: PhotoPhase; label: string }[] = [
@@ -131,7 +161,13 @@ export default function CaptureScreen() {
   }>();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { width: winWidth } = useWindowDimensions();
+  const { width: winWidth, height: winHeight } = useWindowDimensions();
+  /*
+   * A tablet by its short side, in either orientation. There the camera's
+   * note, voice and library controls sit on a rail on the right, where the
+   * hand holding it can reach, and the note panel docks to that side.
+   */
+  const wide = Math.min(winWidth, winHeight) >= 600;
   const { user } = useAuth();
 
   const [permission, requestPermission] = useCameraPermissions();
@@ -139,8 +175,6 @@ export default function CaptureScreen() {
 
   const [facing, setFacing] = useState<CameraType>("back");
   const [flash, setFlash] = useState<FlashMode>("auto");
-  const [shots, setShots] = useState<Shot[]>([]);
-  const [reviewing, setReviewing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /** A passing word on the viewfinder, such as Dual being on its way. */
@@ -148,9 +182,15 @@ export default function CaptureScreen() {
 
   const [phase, setPhase] = useState<PhotoPhase>("untagged");
   const [mode, setMode] = useState<CameraMode>("photo");
-  const [caption, setCaption] = useState("");
-  const [tagText, setTagText] = useState("");
-  const [batchTagsOpen, setBatchTagsOpen] = useState(false);
+  /**
+   * The caption and tags the next shots are saved with. Sticky until cleared,
+   * and shown on the camera's note pill whenever either is set.
+   */
+  const [note, setNote] = useState<CaptureNote>(EMPTY_NOTE);
+  /** The note panel, open for the next shots or for one saved shot. */
+  const [panel, setPanel] = useState<Panel | null>(null);
+  /** Whose tags the tag picker is changing: the next shots', or one shot's. */
+  const [tagsFor, setTagsFor] = useState<"next" | string | null>(null);
   /**
    * Whether the whole mode bar is showing. It opens on arrival so the modes
    * can be seen, then settles to the chosen mode once one is picked and after
@@ -160,18 +200,27 @@ export default function CaptureScreen() {
 
   /** Rule-of-thirds grid, on by default as on web. */
   const [gridOn, setGridOn] = useState(true);
-  /**
-   * Quick capture, web's autoSave: every shot is queued the moment it is
-   * taken, with the current phase, instead of collecting into a batch.
+
+  /*
+   * What this visit has saved, newest first. The ref is the truth for the
+   * background work (pill burning, retags), which must read the latest state
+   * of a shot rather than the one its closure saw; the state is for drawing.
    */
-  const [quick, setQuick] = useState(false);
-  /** Thumbnails of what quick capture has queued this visit, newest first. */
-  const [quickSaved, setQuickSaved] = useState<string[]>([]);
+  const recentRef = useRef<RecentShot[]>([]);
+  const [recent, setRecentState] = useState<RecentShot[]>([]);
+  const setRecent = useCallback((next: RecentShot[]) => {
+    recentRef.current = next;
+    setRecentState(next);
+  }, []);
+  /** How many shots this visit has saved, for the corner's count. */
+  const [savedCount, setSavedCount] = useState(0);
   const [savedFlash, setSavedFlash] = useState(false);
-  /** The shot open in the per-shot preview (annotate, crop, tags, description). */
-  const [editingKey, setEditingKey] = useState<string | null>(null);
-  /** The shot Measure mode has just taken, open in the annotator's Measure tool. */
-  const [measuringKey, setMeasuringKey] = useState<string | null>(null);
+  /** The saved shot open full screen to annotate, measure or crop. */
+  const [editingId, setEditingId] = useState<string | null>(null);
+  /** The picture Measure mode has just taken, open in the annotator's Measure tool. */
+  const [measuring, setMeasuring] = useState<{ asset: CapturedAsset; phase: PhotoPhase } | null>(
+    null,
+  );
   /**
    * The page Scan mode has just taken, open on its corner step, with the
    * corners starting where the viewfinder's paper guide framed it.
@@ -183,8 +232,6 @@ export default function CaptureScreen() {
   /** The paper guide and the viewfinder it sits in, as laid out, for that start. */
   const scanGuide = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
   const scanView = useRef<{ width: number; height: number } | null>(null);
-
-  const keyCounter = useRef(0);
 
   /*
    * The off-screen surface the before/after pill is burnt in on.
@@ -283,59 +330,31 @@ export default function CaptureScreen() {
     };
   }, []);
 
-  /*
-   * Android's back button on review goes back to the viewfinder, as review's
-   * own back arrow does, rather than closing the camera and the batch with it.
-   */
-  useEffect(() => {
-    if (!reviewing) return;
-    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
-      if (!busy) setReviewing(false);
-      return true;
-    });
-    return () => sub.remove();
-  }, [reviewing, busy]);
+  /** A shot of this visit, as it is now. */
+  function recentShot(id: string): RecentShot | undefined {
+    return recentRef.current.find((shot) => shot.id === id);
+  }
 
-  /** A shot for the batch, with a key that is known before it is added. */
-  const makeShot = useCallback((asset: CapturedAsset, scan: boolean, phase: PhotoPhase): Shot => {
-    keyCounter.current += 1;
-    return { ...asset, scan, phase, key: `${asset.uri}-${keyCounter.current}` };
-  }, []);
+  function patchShot(id: string, patch: Partial<RecentShot>) {
+    setRecent(patchRecent(recentRef.current, id, patch));
+  }
 
   /**
-   * Make the strip's small copy in the background. The grid shows the full
-   * photo until it lands; a thumb made for a file the preview has since
-   * replaced (crop, annotate) is dropped rather than shown.
+   * Make the corner's small copy in the background. A thumb made for a
+   * picture the shot has since replaced (crop, annotate) is dropped.
    */
-  const thumbFor = useCallback((key: string, uri: string) => {
-    void makePreviewThumb(uri).then((thumb) => {
-      if (!thumb) return;
-      setShots((prev) =>
-        prev.map((shot) => (shot.key === key && shot.uri === uri ? { ...shot, thumb } : shot)),
-      );
-    });
-  }, []);
-
-  const addShot = useCallback(
-    (asset: CapturedAsset, scan: boolean, phase: PhotoPhase) => {
-      const shot = makeShot(asset, scan, phase);
-      setShots((prev) => [...prev, shot]);
-      thumbFor(shot.key, shot.uri);
-      return shot;
+  const thumbFor = useCallback(
+    (id: string, uri: string) => {
+      void makePreviewThumb(uri).then((thumb) => {
+        if (!thumb) return;
+        const shot = recentRef.current.find((item) => item.id === id);
+        if (shot && shot.source === uri) {
+          setRecent(patchRecent(recentRef.current, id, { thumb }));
+        }
+      });
     },
-    [makeShot, thumbFor],
+    [setRecent],
   );
-
-  function patchShot(key: string, patch: ShotPatch) {
-    setShots((prev) =>
-      prev.map((shot) => {
-        if (shot.key !== key) return shot;
-        const replaced = patch.uri !== undefined && patch.uri !== shot.uri;
-        return { ...shot, ...patch, ...(replaced ? { thumb: undefined } : null) };
-      }),
-    );
-    if (patch.uri) thumbFor(key, patch.uri);
-  }
 
   /*
    * The job switch on the viewfinder. Only for a plain capture: one opened
@@ -346,15 +365,11 @@ export default function CaptureScreen() {
   /**
    * Pick another job. `replace`, so the picker takes this camera's place and
    * opens the new job's camera in its own place in turn: backing out lands
-   * where the person started, not on a second camera. An unsaved batch has to
-   * be saved first, because its photos belong to the job they were shot for.
+   * where the person started, not on a second camera. Nothing is waiting to
+   * be saved: every shot was queued, for this job, when it was taken.
    */
   function switchJob() {
     if (busy) return;
-    if (shots.length > 0) {
-      setError("Save this batch first, then change job.");
-      return;
-    }
     router.replace("/capture-start");
   }
 
@@ -368,19 +383,10 @@ export default function CaptureScreen() {
    * video"; Walkthrough is the narrated walk with photos pinned to it. Leaving
    * Before/After clears the phase, as web clears its tag, so a Photo or Scan
    * run never inherits a pill picked for a different job.
-   *
-   * A batch still on screen is saved on the way to the recorder rather than
-   * blocking the switch: Save only hands it to the offline queue, which takes
-   * a moment and needs no signal, so there is nothing to make anyone wait for.
    */
-  async function changeMode(next: CameraMode) {
+  function changeMode(next: CameraMode) {
     if (next === "video" || next === "walkthrough") {
       if (!projectId || busy) return;
-      if (shots.length > 0) {
-        const saved = await save();
-        // Anything that could not be stored stays on screen with its error.
-        if (!saved) return;
-      }
       router.push({
         pathname: "/project/[id]/walkthrough-record",
         params: next === "video" ? { id: projectId, kind: "video" } : { id: projectId },
@@ -399,7 +405,7 @@ export default function CaptureScreen() {
     if (next !== "before-after") setPhase("untagged");
     // Untagged is where tags are picked, as web's tag picker: it opens the
     // picker every time it is tapped, and the bar then shows what was picked.
-    if (next === "untagged") setBatchTagsOpen(true);
+    if (next === "untagged") setTagsFor("next");
   }
 
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -427,10 +433,10 @@ export default function CaptureScreen() {
   );
 
   /**
-   * Where a new shot goes, by mode.
+   * Where a new picture goes, by mode.
    *
-   * Measure opens it straight in the annotator's Measure tool, as web does.
-   * Quick capture queues it at once. Everything else joins the batch.
+   * Measure opens it in the annotator's Measure tool first, as web does, and
+   * saves it from there. Everything else is saved at once.
    *
    * `phase` is the one selected when the shutter fired, passed in rather than
    * read here, because a capture can land after the toggle has moved on.
@@ -442,15 +448,10 @@ export default function CaptureScreen() {
     allowMeasure = true,
   ) {
     if (allowMeasure && mode === "measure" && canMeasure) {
-      const shot = addShot(asset, scan, phase);
-      setMeasuringKey(shot.key);
+      setMeasuring({ asset, phase });
       return;
     }
-    if (quick) {
-      void quickSave(makeShot(asset, scan, phase));
-      return;
-    }
-    addShot(asset, scan, phase);
+    saveShot(asset, scan, phase);
   }
 
   /**
@@ -492,7 +493,7 @@ export default function CaptureScreen() {
         if (mode === "scan") {
           /*
            * Straight to the corner step, as a document scanner does, rather
-           * than into the batch as a photo of a desk with a page on it. The
+           * than saved as a photo of a desk with a page on it. The
            * page is straightened and given its look there, before the strip
            * shows it, so it looks the way it will be filed.
            */
@@ -532,7 +533,7 @@ export default function CaptureScreen() {
           exif: (asset.exif as Record<string, unknown> | null) ?? null,
         };
         // Imports never open the Measure tool one after another; they can be
-        // measured from the review step instead.
+        // measured from the recent photos (Annotate) instead.
         if (scan) {
           // The document look is a new JPEG, so the picker's mime no longer applies.
           afterCapture(
@@ -548,10 +549,6 @@ export default function CaptureScreen() {
     } finally {
       if (scan) setBusy(false);
     }
-  }
-
-  function removeShot(key: string) {
-    setShots((prev) => prev.filter((shot) => shot.key !== key));
   }
 
   /*
@@ -651,236 +648,363 @@ export default function CaptureScreen() {
   }, [stamping]);
 
   /*
-   * The background pill burner. Runs after Save has returned, one photo at a
-   * time, so the shutter and the screen never wait on it.
-   */
-  const stampChain = useRef<Promise<void>>(Promise.resolve());
-
-  /**
-   * Burn the before/after pill into queued photos, after the fact.
+   * The capture session this visit's shots are recorded against, which is what
+   * the Daily Log is written from. One per camera visit, the way one Save used
+   * to be one trip to the van and back. Opened with the first shot and kept
+   * from being written up until the camera closes (`openCaptureSession`), so
+   * a shot landing between two shutter presses does not write the visit up
+   * with only that photo in it.
    *
-   * Each row was queued held (`holdUntil`), so the drain leaves it alone while
-   * this works. Per photo: shrink it once, natively, to the 2048px the upload
-   * stores anyway; draw the pill on that; swap the queued file for the result;
-   * release the row. **Fails open, always**: any problem, or the camera
-   * closing first, releases the row with the photo as it was. Losing a pill is
-   * a cosmetic difference from a web-captured photo; losing the photo is what
-   * the whole queue exists to prevent. `photos.phase` is written either way.
+   * The offset is read from THIS device, on purpose. "Daily" has to mean the
+   * technician's day: the API runs in UTC, so a 6:30pm job in California is
+   * already tomorrow to the server.
    */
-  function stampInBackground(jobs: StampJob[]) {
-    if (jobs.length === 0) return;
-    const run = async () => {
-      for (const job of jobs) {
-        let stamped: string | null = null;
-        if (alive.current) {
-          try {
-            const small = await downscaleForStamp(job.uri);
-            const out = await renderOffscreen({ kind: "watermark", ...small, tag: job.tag });
-            if (out !== small.uri) stamped = out;
-          } catch {
-            // Released unstamped below.
-          }
-        }
-        const file = stamped;
-        await finishHeld(job.id, file ? () => replaceCapture(file, job.localUri) : undefined).catch(
-          () => false,
-        );
-        requestSync();
-      }
-    };
-    stampChain.current = stampChain.current.then(run, run);
-  }
-
-  /**
-   * Queue one shot: copy it into app storage and enqueue it. Throws when the
-   * device could not store it, so the caller can keep the shot on screen.
-   *
-   * Milliseconds per photo: nothing is decoded or drawn here. A Before/After
-   * photo is queued held and handed back as a `StampJob` for
-   * `stampInBackground`, which burns its pill in after Save has returned.
-   *
-   * The shot's own description wins over the batch caption, and its own tags
-   * are added to the batch tags, so the per-shot preview and the batch fields
-   * both work and neither silently discards the other.
-   */
-  async function queueShot(
-    shot: Shot,
-    batch: { sessionId: string; tzOffsetMinutes: number; tags: string[]; caption: string },
-  ): Promise<StampJob | null> {
-    if (!projectId || !user) throw new Error("Not ready");
-    // The id is minted first: the durable copy is named after it, and it
-    // becomes the idempotency key for the upload itself.
-    const id = newOutboxId();
-    // The phase this shot was taken under; a scan is always untagged.
-    const phaseOfShot = shotPhase(shot);
-    const tag = tagForPhase(phaseOfShot);
-    const shotTags = Array.from(
-      new Set([...batch.tags, ...(shot.tags ?? []), ...(shot.scan ? [SCAN_TAG] : [])]),
-    );
-    const shotCaption = shot.caption?.trim() || batch.caption.trim() || undefined;
-    const localUri = persistCapture(shot.uri, id);
-
-    const payload: PhotoUploadPayload = {
-      userId: user.id,
-      projectId,
-      captureSessionId: batch.sessionId,
-      attachToChecklistItemId: checklistItemId ?? null,
-      attachToWorkflowItemId: workflowItemId ?? null,
-      width: shot.width,
-      height: shot.height,
-      exif: shot.exif,
-      phase: phaseOfShot,
-      tags: shotTags,
-      caption: shotCaption,
-      deviceCoords,
-      projectCoords: projectCoords(project ?? null),
-    };
-
-    await enqueue({
-      id,
-      kind: "photo_upload",
-      projectId,
-      localUri,
-      payload,
-      holdUntil: tag ? Date.now() + STAMP_HOLD_MS : undefined,
-    });
-    // After the enqueue, so a session row can never point at a photo that
-    // was never queued. A failure here costs the log, not the photograph.
-    await recordSessionPhoto({
-      outboxId: id,
-      sessionId: batch.sessionId,
-      projectId,
-      source: "camera",
-      tzOffsetMinutes: batch.tzOffsetMinutes,
-    }).catch(() => {});
-    return tag ? { id, uri: shot.uri, localUri, tag } : null;
-  }
-
-  /*
-   * Quick capture's one session: every shot queued while it is on is one trip
-   * as far as the Daily Log is concerned, the way one Save is.
-   */
-  const quickSession = useRef<{ sessionId: string; tzOffsetMinutes: number } | null>(null);
-
-  /**
-   * Quick capture: queue this shot now. If the device cannot store it, it
-   * drops into the batch instead, so it is on screen and can be saved again.
-   */
-  async function quickSave(shot: Shot) {
-    if (!quickSession.current) {
-      quickSession.current = {
+  const sessionRef = useRef<{ sessionId: string; tzOffsetMinutes: number } | null>(null);
+  function captureSession() {
+    if (!sessionRef.current) {
+      sessionRef.current = {
         sessionId: newOutboxId(),
         tzOffsetMinutes: new Date().getTimezoneOffset(),
       };
+      openCaptureSession(sessionRef.current.sessionId);
     }
+    return sessionRef.current;
+  }
+
+  /**
+   * Save one new picture: it joins this visit's shots at once, with the
+   * phase from its shutter and the camera's note, and is queued straight
+   * away. No Save step: it is on its way to the project timeline before the
+   * next shot.
+   */
+  function saveShot(asset: CapturedAsset, scan: boolean, phase: PhotoPhase) {
+    const meta = metaForNewShot(note, scan);
+    const shot: RecentShot = {
+      id: newOutboxId(),
+      asset,
+      source: asset.uri,
+      width: asset.width,
+      height: asset.height,
+      localUri: null,
+      scan,
+      phase: scan ? "untagged" : phase,
+      caption: meta.caption,
+      tags: meta.tags,
+      capturedAt: new Date().toISOString(),
+    };
+    setRecent(addRecent(recentRef.current, shot));
+    thumbFor(shot.id, shot.source);
+    void storeShot(shot.id);
+  }
+
+  /**
+   * Queue one shot: copy it into app storage and enqueue it, as it is now.
+   *
+   * Milliseconds per photo: nothing is decoded or drawn here. A Before/After
+   * photo is queued held and its pill is burnt in afterwards by `refile`.
+   * Nothing is uploaded here either; the drain delivers it whenever the
+   * network allows, with the queue banner showing progress.
+   *
+   * If the device cannot store it (local storage, never the network), the shot
+   * stays in the strip marked unsaved, with a retry, because its file is still
+   * only in the camera cache.
+   */
+  async function storeShot(id: string) {
+    const shot = recentShot(id);
+    if (!shot || !projectId || !user) return;
     try {
-      const job = await queueShot(shot, {
-        ...quickSession.current,
-        tags: splitTags(tagText),
-        caption,
+      // Named after the row id, which is also the upload's idempotency key.
+      const localUri = persistCapture(shot.source, shot.id);
+      const pill = pillOf(shot);
+      const session = captureSession();
+      const payload: PhotoUploadPayload = {
+        userId: user.id,
+        projectId,
+        captureSessionId: session.sessionId,
+        attachToChecklistItemId: checklistItemId ?? null,
+        attachToWorkflowItemId: workflowItemId ?? null,
+        width: shot.width,
+        height: shot.height,
+        exif: shot.asset.exif,
+        ...queuedMetaPatch(shot),
+        deviceCoords,
+        projectCoords: projectCoords(project ?? null),
+        capturedAt: shot.capturedAt,
+      };
+      await enqueue({
+        id: shot.id,
+        kind: "photo_upload",
+        projectId,
+        localUri,
+        payload,
+        holdUntil: pill ? Date.now() + STAMP_HOLD_MS : undefined,
       });
-      setQuickSaved((prev) => [shot.uri, ...prev].slice(0, 8));
-      setSavedFlash(true);
-      setTimeout(() => setSavedFlash(false), 700);
+      // After the enqueue, so a session row can never point at a photo that
+      // was never queued. A failure here costs the log, not the photograph.
+      await recordSessionPhoto({
+        outboxId: shot.id,
+        sessionId: session.sessionId,
+        projectId,
+        source: "camera",
+        tzOffsetMinutes: session.tzOffsetMinutes,
+      }).catch(() => {});
+      patchShot(shot.id, { localUri, failed: false });
+      setSavedCount((count) => count + 1);
+      flashSaved();
       await refreshQueue();
       requestSync();
-      if (job) stampInBackground([job]);
+      if (pill) void refile(shot.id);
+      /*
+       * A retag made while this was being stored went to a row that did not
+       * exist yet; write the shot as it is now.
+       */
+      const now = recentShot(shot.id);
+      if (now && now.source !== shot.source) void refileAfterEdit(shot.id);
+      if (now && metaKey(now) !== metaKey(shot)) void flushMeta(shot.id);
     } catch {
-      setShots((prev) => [...prev, shot]);
-      thumbFor(shot.key, shot.uri);
-      setError("Could not save that one to this device. It is in the batch below.");
+      patchShot(shot.id, { failed: true });
+      setError("Could not save that photo to this device. Tap it in the corner to try again.");
+    }
+  }
+
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function flashSaved() {
+    if (savedTimer.current) clearTimeout(savedTimer.current);
+    setSavedFlash(true);
+    savedTimer.current = setTimeout(() => setSavedFlash(false), 700);
+  }
+
+  /*
+   * The file work per queued shot. `gen` counts edits to its picture (a new
+   * pill, an annotation, a crop), so a render that finishes after the shot
+   * changed again is thrown away and done over rather than queued stale.
+   */
+  const fileJobs = useRef(new Map<string, FileJob>());
+  function fileJob(id: string): FileJob {
+    let job = fileJobs.current.get(id);
+    if (!job) {
+      job = { gen: 0, running: false, edited: false };
+      fileJobs.current.set(id, job);
+    }
+    return job;
+  }
+
+  /**
+   * Bring a queued shot's file up to date: its pill burnt in from its own
+   * picture, or the picture as it is when it has no pill. The row is held
+   * (`holdUntil` at queue time, `holdQueued` after an edit) while this works,
+   * and released at the end.
+   *
+   * Per pass: shrink once, natively, to the 2048px the upload stores anyway;
+   * draw the pill on that; swap the queued file for the result. **Fails open,
+   * always**: any problem, or the camera closing first, releases the row with
+   * the picture as it was. Losing a pill is a cosmetic difference from a
+   * web-captured photo; losing the photo is what the whole queue exists to
+   * prevent. `photos.phase` is written either way.
+   */
+  async function refile(id: string) {
+    const job = fileJob(id);
+    if (job.running) return;
+    job.running = true;
+    try {
+      for (;;) {
+        const gen = job.gen;
+        const shot = recentShot(id);
+        if (!shot?.localUri) {
+          // Taken back, or aged out of the strip: let the row go as it is.
+          await finishHeld(id).catch(() => false);
+          break;
+        }
+        const pill = pillOf(shot);
+        let file: string | null = null;
+        let keepSource = false;
+        if (pill) {
+          if (alive.current) {
+            try {
+              const small = await downscaleForStamp(shot.source);
+              const out = await renderOffscreen({ kind: "watermark", ...small, tag: pill });
+              if (out !== small.uri) file = out;
+            } catch {
+              // Released without the pill below.
+            }
+          }
+          // An edited shot's queued copy is out of date, so even a failed
+          // pill swaps in the shot's own picture.
+          if (!file && job.edited) {
+            file = shot.source;
+            keepSource = true;
+          }
+        } else {
+          file = shot.source;
+          keepSource = true;
+        }
+        // Changed again while this was drawn: draw it again.
+        if (job.gen !== gen) continue;
+        const target = shot.localUri;
+        const swap = file;
+        await finishHeld(
+          id,
+          swap ? () => replaceCapture(swap, target, { keepSource }) : undefined,
+        ).catch(() => false);
+        requestSync();
+        if (job.gen === gen) break;
+        // Changed while it was being released: hold it again, if it has not gone.
+        if (!(await holdQueued(id, Date.now() + STAMP_HOLD_MS).catch(() => false))) {
+          if (alive.current) showNotice(ALREADY_SENT);
+          break;
+        }
+      }
+    } finally {
+      job.running = false;
     }
   }
 
   /**
-   * Hand the batch to the outbox and get out of the way.
-   *
-   * Nothing is uploaded here, and nothing is drawn. Each shot is copied into
-   * app storage and written to the queue, which takes milliseconds and cannot
-   * fail for lack of signal; the drain delivers it whenever the network
-   * allows, with the queue banner showing progress. Before/After pills are
-   * burnt in afterwards by `stampInBackground`.
-   *
-   * It used to stamp each photo inline, at the camera's full resolution,
-   * before queueing the next: a 12 megapixel SVG render, a base64 PNG of it
-   * across the bridge and a re-encode, one after another, behind a "Saving 2
-   * of 5" button. That was the wait.
-   *
-   * @returns whether every shot was queued.
+   * One saved shot's picture changed (a new pill, an annotation, a crop).
+   * Held before the work starts, so the old file cannot go up in the
+   * meantime; if it already has, the photo on the timeline keeps its picture
+   * and only its phase, caption and tags change.
    */
-  async function save(): Promise<boolean> {
-    if (!projectId || !user || shots.length === 0 || busy) return false;
-    setBusy(true);
-    setError(null);
-
-    const tags = splitTags(tagText);
-    const failed: Shot[] = [];
-    const jobs: StampJob[] = [];
-    const count = shots.length;
-
-    /*
-     * One session per Save, which is what the Daily Log is written against.
-     *
-     * A technician makes several trips to the van and back; each trip is a
-     * session and gets its own timestamped section in today's log. The id is
-     * minted here rather than server-side because the photos it covers have no
-     * ids yet: they are queued, and each gets one only when its upload lands.
-     *
-     * The offset is read from THIS device, on purpose. "Daily" has to mean the
-     * technician's day: the API runs in UTC, so a 6:30pm job in California is
-     * already tomorrow to the server, and grouping on the server's clock filed
-     * an evening's photos into the next day's log.
-     */
-    const sessionId = newOutboxId();
-    const tzOffsetMinutes = new Date().getTimezoneOffset();
-
-    for (const shot of shots) {
-      try {
-        const job = await queueShot(shot, { sessionId, tzOffsetMinutes, tags, caption });
-        if (job) jobs.push(job);
-      } catch {
-        failed.push(shot);
-      }
+  async function refileAfterEdit(id: string) {
+    const job = fileJob(id);
+    job.gen += 1;
+    job.edited = true;
+    if (job.running) return;
+    const held = await holdQueued(id, Date.now() + STAMP_HOLD_MS).catch(() => false);
+    if (!held) {
+      if (alive.current) showNotice(ALREADY_SENT);
+      return;
     }
-
-    await refreshQueue();
-    requestSync();
-    stampInBackground(jobs);
-
-    setBusy(false);
-
-    if (failed.length) {
-      /*
-       * Queueing failed, which means local storage, not the network. Keep the
-       * shots on screen: their files are still only in the camera cache, and
-       * dropping them here loses the photo for good.
-       */
-      setShots(failed);
-      setError(`${failed.length} could not be saved to this device. Still here, try again.`);
-      return false;
-    }
-
-    /*
-     * Success. The batch is queued and the durable copies are in app storage, so
-     * there is nothing left on screen that has to be uploaded. Reset the form and
-     * flip back to the viewfinder so the next photo can be taken immediately
-     * without re-opening the camera. The toggle is deliberately kept: a
-     * technician shooting a run of "before" (or "after") photos across several
-     * saves should not have to re-pick it every time; the per-batch caption and
-     * tags are cleared so one batch's notes don't leak into the next.
-     */
-    setShots([]);
-    setCaption("");
-    setTagText("");
-    setReviewing(false);
-    showNotice(savedMessage(count));
-    return true;
+    void refile(id);
   }
 
   /*
+   * Caption typing rewrites the queued row once it pauses, not per letter.
+   */
+  const metaTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  function scheduleMeta(id: string) {
+    const timers = metaTimers.current;
+    const pending = timers.get(id);
+    if (pending) clearTimeout(pending);
+    timers.set(
+      id,
+      setTimeout(() => {
+        timers.delete(id);
+        void flushMeta(id);
+      }, META_DEBOUNCE_MS),
+    );
+  }
+
+  /**
+   * Write one shot's phase, caption and tags to wherever its photo is now.
+   *
+   * Still queued and untried: into the queued upload itself. Otherwise it may
+   * already be on the server, so a `captured_photo_patch` row is queued,
+   * which finds the photo by its storage path once the upload has landed.
+   */
+  async function flushMeta(id: string) {
+    const shot = recentShot(id);
+    if (!shot?.localUri || !projectId || !user) return;
+    try {
+      const inQueue = await updateQueuedPayload(id, {
+        ...queuedMetaPatch(shot),
+        width: shot.width,
+        height: shot.height,
+      });
+      if (inQueue) return;
+      const payload: CapturedPhotoPatchPayload = {
+        userId: user.id,
+        projectId,
+        uploadId: id,
+        patch: uploadedMetaPatch(shot),
+      };
+      await enqueue({
+        id: capturedPhotoPatchRowId(id),
+        kind: "captured_photo_patch",
+        projectId,
+        payload,
+      });
+      await refreshQueue();
+      requestSync();
+    } catch {
+      if (alive.current) setError("Could not save that change on this device. Try again.");
+    }
+  }
+
+  /** Every retag still waiting on its pause, written now (the camera is closing). */
+  const flushAllMeta = useRef<() => void>(() => {});
+  flushAllMeta.current = () => {
+    for (const [id, timer] of metaTimers.current) {
+      clearTimeout(timer);
+      void flushMeta(id);
+    }
+    metaTimers.current.clear();
+  };
+
+  /**
+   * Change one saved shot, and only that shot: its phase, caption, tags, or
+   * (from the full-screen editor) its picture. Never several at once.
+   */
+  function editShot(
+    id: string,
+    patch: Partial<Pick<RecentShot, "phase" | "caption" | "tags" | "source" | "width" | "height">>,
+  ) {
+    const before = recentShot(id);
+    if (!before) return;
+    const after: RecentShot = {
+      ...before,
+      ...patch,
+      phase: before.scan ? "untagged" : (patch.phase ?? before.phase),
+    };
+    patchShot(id, after);
+    const newPicture = patch.source !== undefined && patch.source !== before.source;
+    if (newPicture) thumbFor(id, after.source);
+    // Not queued yet (still storing, or failed): it is stored as it is now.
+    if (!before.localUri) return;
+    if (newPicture || pillChanged(before, after)) void refileAfterEdit(id);
+    if (metaKey(before) !== metaKey(after) || newPicture) scheduleMeta(id);
+  }
+
+  /**
+   * Take one saved shot back: dropped from the queue if it has not gone yet.
+   * One that has already been sent is deleted from the timeline, like any
+   * other photo, rather than silently kept here.
+   */
+  async function removeShot(id: string) {
+    const shot = recentShot(id);
+    if (!shot) return;
+    const timer = metaTimers.current.get(id);
+    if (timer) clearTimeout(timer);
+    metaTimers.current.delete(id);
+    const gone = shot.localUri ? await discardUnsent(id).catch(() => false) : true;
+    if (!gone) {
+      showNotice("Already uploaded. Delete it from the project timeline.");
+      return;
+    }
+    setRecent(recentRef.current.filter((item) => item.id !== id));
+    setPanel((current) => (current?.kind === "shot" && current.id === id ? null : current));
+    if (shot.localUri) setSavedCount((count) => Math.max(0, count - 1));
+    await refreshQueue();
+    showNotice("Photo removed");
+  }
+
+  /*
+   * Closing the camera: write any retag still waiting, and let the Daily Log
+   * write this visit up once the queue has delivered it.
+   */
+  useEffect(
+    () => () => {
+      flushAllMeta.current();
+      if (sessionRef.current) closeCaptureSession(sessionRef.current.sessionId);
+      requestSync();
+    },
+    [],
+  );
+
+  /*
    * The off-screen surface, in every view: Scan mode renders its document
-   * look from the viewfinder, and the pill burner runs wherever the person has
-   * moved on to after Save.
+   * look from the viewfinder, and the pill burner runs whichever view is
+   * showing.
    */
   const offscreenSurface = stamping ? (
     <View style={styles.stampSurface} pointerEvents="none" accessibilityElementsHidden>
@@ -944,389 +1068,87 @@ export default function CaptureScreen() {
   }
 
   /*
-   * One shot's preview: web's post-capture step (retake, annotate, measure,
-   * crop, tags, description, and PDF for a scan). Opened from a review tile.
+   * One saved shot, full screen: web's post-capture tools (annotate, measure,
+   * crop, tags, description, and PDF for a scan). Every change goes to that
+   * shot's queued photo; Retake takes it back if it has not gone yet.
    */
-  const editingShot = editingKey ? shots.find((shot) => shot.key === editingKey) : undefined;
+  const editingShot = editingId ? recent.find((shot) => shot.id === editingId) : undefined;
   if (editingShot && projectId) {
     return (
       <>
         <Stack.Screen options={{ headerShown: false }} />
-        {/* A quick-capture save can still be stamping in the background. */}
+        {/* A pill can still be burning in the background. */}
         {offscreenSurface}
         <ShotEditor
-          shot={editingShot}
+          shot={{
+            uri: editingShot.source,
+            width: editingShot.width,
+            height: editingShot.height,
+            scan: editingShot.scan,
+            caption: editingShot.caption,
+            tags: editingShot.tags,
+          }}
           projectId={projectId}
           userId={user?.id ?? null}
           existingTags={existingTags}
           canMeasure={canMeasure}
-          onChange={(patch) => patchShot(editingShot.key, patch)}
+          onChange={(patch: ShotPatch) =>
+            editShot(editingShot.id, {
+              ...(patch.uri !== undefined ? { source: patch.uri } : null),
+              ...(patch.width !== undefined ? { width: patch.width } : null),
+              ...(patch.height !== undefined ? { height: patch.height } : null),
+              ...(patch.caption !== undefined ? { caption: patch.caption } : null),
+              ...(patch.tags !== undefined ? { tags: patch.tags } : null),
+            })
+          }
           onRetake={() => {
-            removeShot(editingShot.key);
-            setEditingKey(null);
-            setReviewing(false);
+            setEditingId(null);
+            void removeShot(editingShot.id);
           }}
-          onClose={() => setEditingKey(null)}
+          onClose={() => setEditingId(null)}
         />
       </>
     );
   }
 
-  if (reviewing) {
-    /*
-     * Tiles sized from the window, three across on a phone and five on a
-     * tablet, inside a column capped at REVIEW_MAX_WIDTH so a tablet on its
-     * side does not stretch the form across the whole screen.
-     */
-    const columnWidth = Math.min(winWidth - insets.left - insets.right, REVIEW_MAX_WIDTH);
-    const columns = columnWidth >= 600 ? 5 : 3;
-    const tileSize = Math.floor(
-      (columnWidth - spacing.lg * 2 - spacing.sm * (columns - 1)) / columns,
-    );
-    const allPhase = sharedPhase(shots);
-    const hasPhotos = shots.some((shot) => !shot.scan);
-
-    return (
-      <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
-        <Stack.Screen options={{ headerShown: false }} />
-
-        {/*
-          The watermark surface, mounted off-screen while a shot is being
-          stamped and unmounted immediately after.
-
-          Positioned far off the left edge rather than hidden with
-          `opacity: 0` or `display: none`: the rasteriser needs a real, laid
-          out native view, and a view the layout engine has skipped produces a
-          blank image rather than an error.
-        */}
-        {offscreenSurface}
-
-        {/*
-          Its own header rather than the stack's: the stack's back arrow
-          would close the whole camera and drop the batch, where this one goes
-          back to the viewfinder with every photo still there.
-        */}
-        <View
-          style={[
-            styles.reviewHeader,
-            {
-              paddingTop: insets.top + spacing.sm,
-              paddingLeft: insets.left + spacing.md,
-              paddingRight: insets.right + spacing.md,
-              borderBottomColor: theme.colors.border,
-            },
-          ]}
-        >
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Back to camera"
-            disabled={busy}
-            hitSlop={8}
-            onPress={() => setReviewing(false)}
-            style={styles.reviewBack}
-          >
-            <Icon icon={ChevronLeft} size="md" color={theme.colors.foreground} />
-          </Pressable>
-          <Text
-            style={[typography.heading, { color: theme.colors.foreground, flex: 1 }]}
-            numberOfLines={1}
-            accessibilityRole="header"
-          >
-            Review {shots.length} photo{shots.length === 1 ? "" : "s"}
-          </Text>
-        </View>
-
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-          style={{ flex: 1 }}
-        >
-          <ScrollView
-            keyboardShouldPersistTaps="handled"
-            contentContainerStyle={[
-              styles.reviewColumn,
-              { padding: spacing.lg, gap: spacing.lg, maxWidth: REVIEW_MAX_WIDTH },
-            ]}
-          >
-            <Text style={[typography.caption, { color: theme.colors.mutedForeground }]}>
-              Tap a photo to annotate, measure, crop, tag or describe it.
-            </Text>
-            <View style={styles.reviewGrid}>
-              {shots.map((shot) => {
-                const tag = tagForPhase(shotPhase(shot));
-                const firstTag = shot.tags?.[0];
-                return (
-                  <View key={shot.key} style={{ width: tileSize, height: tileSize }}>
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="Open this photo to annotate, crop, tag or describe it"
-                      onPress={() => setEditingKey(shot.key)}
-                      style={StyleSheet.absoluteFill}
-                    >
-                      {/*
-                        The small copy made after the shot, so the grid paints at
-                        once instead of decoding every full-size photo. Until it
-                        lands, the original, asked for at tile size.
-                      */}
-                      <Image
-                        source={{ uri: shot.thumb ?? shot.uri }}
-                        style={styles.reviewImage}
-                        contentFit="cover"
-                        recyclingKey={shot.key}
-                        cachePolicy="memory"
-                        allowDownscaling
-                        transition={0}
-                      />
-                    </Pressable>
-                    {tag ? (
-                      <View
-                        style={[styles.tilePhase, { backgroundColor: PHASE_FILL[tag] }]}
-                        pointerEvents="none"
-                      >
-                        <Text style={styles.tilePhaseText}>{tag.toUpperCase()}</Text>
-                      </View>
-                    ) : null}
-                    {shot.scan || shot.caption?.trim() || firstTag ? (
-                      <View style={styles.tileMarks} pointerEvents="none">
-                        {shot.scan ? <Text style={styles.tileMark}>SCAN</Text> : null}
-                        {firstTag ? (
-                          <Text style={styles.tileMark} numberOfLines={1}>
-                            {firstTag}
-                            {shot.tags && shot.tags.length > 1 ? ` +${shot.tags.length - 1}` : ""}
-                          </Text>
-                        ) : null}
-                        {shot.caption?.trim() ? <Text style={styles.tileMark}>NOTE</Text> : null}
-                      </View>
-                    ) : null}
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="Remove this photo"
-                      style={styles.removeBadge}
-                      hitSlop={8}
-                      onPress={() => removeShot(shot.key)}
-                    >
-                      <Text style={styles.removeBadgeText}>×</Text>
-                    </Pressable>
-                  </View>
-                );
-              })}
-            </View>
-
-            {/*
-              Each photo keeps the Before/After it was taken under, shown on its
-              tile. This row corrects a whole batch shot under the wrong one;
-              it lights up only when every photo already shares that phase.
-            */}
-            {hasPhotos ? (
-              <View style={{ gap: spacing.sm }}>
-                <Text style={[typography.overline, { color: theme.colors.mutedForeground }]}>
-                  SET ALL PHOTOS TO
-                </Text>
-                <View style={styles.segmented}>
-                  {PHASES.map((option) => {
-                    const active = allPhase === option.id;
-                    return (
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: active }}
-                        key={option.id}
-                        onPress={() => setShots((prev) => setPhaseForAll(prev, option.id))}
-                        style={[
-                          styles.segment,
-                          {
-                            backgroundColor: active ? theme.colors.primary : theme.colors.card,
-                            borderColor: theme.colors.border,
-                          },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            typography.bodyStrong,
-                            {
-                              color: active
-                                ? theme.colors.primaryForeground
-                                : theme.colors.mutedForeground,
-                            },
-                          ]}
-                        >
-                          {option.label}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </View>
-            ) : null}
-
-            <View style={{ gap: spacing.sm }}>
-              <Text style={[typography.overline, { color: theme.colors.mutedForeground }]}>
-                CAPTION
-              </Text>
-              <TextInput
-                value={caption}
-                onChangeText={setCaption}
-                placeholder="Optional, applied to every photo"
-                placeholderTextColor={theme.colors.mutedForeground}
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: theme.colors.card,
-                    borderColor: theme.colors.border,
-                    color: theme.colors.foreground,
-                  },
-                ]}
-              />
-            </View>
-
-            <View style={{ gap: spacing.sm }}>
-              <View style={styles.labelRow}>
-                <Text style={[typography.overline, { color: theme.colors.mutedForeground }]}>
-                  TAGS
-                </Text>
-                <Pressable
-                  accessibilityRole="button"
-                  hitSlop={8}
-                  onPress={() => setBatchTagsOpen(true)}
-                >
-                  <Text style={[typography.bodyStrong, { color: theme.colors.primary }]}>
-                    Pick tags
-                  </Text>
-                </Pressable>
-              </View>
-              <TextInput
-                value={tagText}
-                onChangeText={setTagText}
-                autoCapitalize="none"
-                placeholder="Comma separated, for example: roof, framing"
-                placeholderTextColor={theme.colors.mutedForeground}
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: theme.colors.card,
-                    borderColor: theme.colors.border,
-                    color: theme.colors.foreground,
-                  },
-                ]}
-              />
-            </View>
-          </ScrollView>
-
-          {/*
-            The three ways out, pinned under the form so they are always on
-            screen, however many photos or however small the phone: Save
-            first, then more from the library or back to the viewfinder.
-          */}
-          <View
-            style={[
-              styles.reviewActions,
-              {
-                paddingBottom: insets.bottom + spacing.md,
-                paddingLeft: insets.left + spacing.lg,
-                paddingRight: insets.right + spacing.lg,
-                borderTopColor: theme.colors.border,
-                backgroundColor: theme.colors.background,
-              },
-            ]}
-          >
-            <View style={[styles.reviewColumn, { gap: spacing.sm, maxWidth: REVIEW_MAX_WIDTH }]}>
-              {error ? (
-                <Text style={[typography.caption, { color: theme.colors.destructive }]}>
-                  {error}
-                </Text>
-              ) : null}
-              <Pressable
-                accessibilityRole="button"
-                disabled={busy || shots.length === 0}
-                style={[
-                  styles.primaryButton,
-                  { backgroundColor: theme.colors.primary, opacity: busy ? 0.7 : 1 },
-                ]}
-                onPress={() => void save()}
-              >
-                {busy ? (
-                  <ActivityIndicator color={theme.colors.primaryForeground} />
-                ) : (
-                  <Text style={[typography.bodyStrong, { color: theme.colors.primaryForeground }]}>
-                    Save {shots.length} photo{shots.length === 1 ? "" : "s"}
-                  </Text>
-                )}
-              </Pressable>
-              <View style={styles.reviewSecondaryRow}>
-                <Pressable
-                  accessibilityRole="button"
-                  disabled={busy}
-                  style={[
-                    styles.secondaryButton,
-                    styles.reviewSecondary,
-                    { borderColor: theme.colors.border },
-                  ]}
-                  onPress={() => void pickFromLibrary()}
-                >
-                  <Text style={[typography.bodyStrong, { color: theme.colors.foreground }]}>
-                    Add from library
-                  </Text>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  disabled={busy}
-                  style={[
-                    styles.secondaryButton,
-                    styles.reviewSecondary,
-                    { borderColor: theme.colors.border },
-                  ]}
-                  onPress={() => setReviewing(false)}
-                >
-                  <Text style={[typography.bodyStrong, { color: theme.colors.foreground }]}>
-                    Back to camera
-                  </Text>
-                </Pressable>
-              </View>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-
-        <TagPickerSheet
-          visible={batchTagsOpen}
-          title="Tag every photo"
-          existing={existingTags}
-          selected={splitTags(tagText)}
-          userId={user?.id ?? null}
-          onChange={(next) => setTagText(next.join(", "))}
-          onClose={() => setBatchTagsOpen(false)}
-        />
-      </View>
-    );
-  }
-
-  const lastShot = shots.length > 0 ? shots[shots.length - 1] : null;
-  const measuringShot = measuringKey ? shots.find((shot) => shot.key === measuringKey) : undefined;
+  const lastShot = recent[0] ?? null;
   const projectLabel = project
     ? (formatAddress(project) ?? projectDisplayName(project))
     : "Loading job";
-  const pickedTags = splitTags(tagText);
+  const noteActive = noteIsActive(note);
+  const noteLabel = noteSummary(note);
+  const anyFailed = recent.some((shot) => shot.failed);
+
+  /** The mic: a spoken note for the photo just taken, or for the next ones. */
+  function openVoiceNote() {
+    if (lastShot) setPanel({ kind: "shot", id: lastShot.id, focus: true });
+    else setPanel({ kind: "next", focus: true });
+  }
 
   /*
    * The bottom-left slot. On an empty camera it is web's gallery button. Once
-   * a batch is building it becomes the last shot with the batch count on it,
-   * which opens review, where the batch gets its caption, tags, a last look at
-   * the phase and more photos from the library before Save.
+   * this visit has saved something it shows the last shot with the count of
+   * what has been saved, and opens the recent shots, where each one can be
+   * retagged, captioned or annotated on its own.
    */
   const leftSlot = lastShot ? (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Review ${shots.length} photo${shots.length === 1 ? "" : "s"}`}
+      accessibilityLabel={`${savedCount} saved. Open recent photos to retag or add a note`}
       style={styles.squareButton}
-      onPress={() => setReviewing(true)}
+      onPress={() => setPanel({ kind: "shot", id: lastShot.id })}
     >
       <Image
-        source={{ uri: lastShot.thumb ?? lastShot.uri }}
+        source={{ uri: lastShot.thumb ?? lastShot.source }}
         style={styles.lastShotImage}
         allowDownscaling
         transition={0}
       />
-      <View style={[styles.countBadge, { backgroundColor: theme.colors.primary }]}>
-        <Text style={[styles.countText, { color: theme.colors.primaryForeground }]}>
-          {shots.length}
-        </Text>
+      <View
+        style={[styles.countBadge, anyFailed ? styles.failedBadge : styles.savedBadge]}
+        pointerEvents="none"
+      >
+        <Text style={[styles.countText, { color: "#fff" }]}>{anyFailed ? "!" : savedCount}</Text>
       </View>
     </Pressable>
   ) : (
@@ -1337,14 +1159,56 @@ export default function CaptureScreen() {
       onPress={() => void pickFromLibrary()}
     >
       <Icon icon={ImageIcon} size="lg" color={CHROME_FG} />
-      {quick && quickSaved.length > 0 ? (
-        <View
-          style={[styles.countBadge, styles.savedBadge]}
-          accessibilityLabel={`${quickSaved.length} saved this session`}
-        >
-          <Text style={[styles.countText, { color: "#fff" }]}>{quickSaved.length}</Text>
-        </View>
-      ) : null}
+    </Pressable>
+  );
+
+  /*
+   * The camera's own note controls: the caption and tags the next shots take
+   * (filled when set, so nobody shoots a run under a note they forgot was
+   * on), and the mic for a spoken note on the photo just taken. On a phone
+   * they sit with the job pill; on a tablet, on the right-hand rail.
+   */
+  const notePill = (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={
+        noteActive ? `Note for next photos: ${noteLabel}. Change` : "Add a note and tags"
+      }
+      accessibilityHint="Sets a caption and tags for the photos you take next"
+      onPress={() => setPanel({ kind: "next" })}
+      hitSlop={4}
+      style={[
+        styles.smallPill,
+        styles.notePill,
+        noteActive && { backgroundColor: theme.colors.primary },
+      ]}
+    >
+      <Icon icon={StickyNote} size="xs" color={CHROME_FG} />
+      <Text style={styles.smallPillText} numberOfLines={1}>
+        {noteLabel ?? "Note"}
+      </Text>
+    </Pressable>
+  );
+  const micButton = (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={lastShot ? "Voice note for the last photo" : "Voice note"}
+      onPress={openVoiceNote}
+      hitSlop={4}
+      style={styles.smallRound}
+    >
+      <Icon icon={Mic} size="sm" color={CHROME_FG} />
+    </Pressable>
+  );
+  const libraryButton = (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Add from library"
+      onPress={() => void pickFromLibrary()}
+      hitSlop={4}
+      style={styles.roundButton}
+    >
+      <Icon icon={ImageIcon} size="md" color={CHROME_FG} />
     </Pressable>
   );
 
@@ -1400,14 +1264,122 @@ export default function CaptureScreen() {
   /*
    * Untagged is web's tag picker in the mode bar: once tags are picked the
    * mode shows the tag, or how many, so nobody shoots a run under a tag they
-   * forgot was on.
+   * forgot was on. The same tags as the note pill: the next photos' tags.
    */
   const modeLabels: Partial<Record<CameraMode, string>> =
-    pickedTags.length === 1
-      ? { untagged: pickedTags[0] }
-      : pickedTags.length > 1
-        ? { untagged: `${pickedTags.length} tags` }
+    note.tags.length === 1
+      ? { untagged: note.tags[0] }
+      : note.tags.length > 1
+        ? { untagged: `${note.tags.length} tags` }
         : {};
+
+  /*
+   * The note panel. For the next photos: the sticky caption and tags. For a
+   * saved photo: the strip of this visit's photos, and the picked one's own
+   * Before/None/After, note and tags. Each change is that photo's alone.
+   */
+  const panelInsets = { bottom: insets.bottom, left: insets.left, right: insets.right };
+  const panelShot =
+    panel?.kind === "shot" ? recent.find((shot) => shot.id === panel.id) : undefined;
+  const doneAction: NotePanelAction = {
+    id: "done",
+    label: "Done",
+    icon: Check,
+    primary: true,
+    onPress: () => setPanel(null),
+  };
+  let panelView: React.ReactNode = null;
+  if (panel?.kind === "next") {
+    panelView = (
+      <CaptureNotePanel
+        key="next"
+        title="Note for the next photos"
+        caption={note.caption}
+        onCaptionChange={(caption) => setNote((current) => ({ ...current, caption }))}
+        captionPlaceholder="What these photos show. Stays on until cleared."
+        tags={note.tags}
+        onEditTags={() => setTagsFor("next")}
+        actions={[
+          ...(noteActive
+            ? [{ id: "clear", label: "Clear", icon: X, onPress: () => setNote(EMPTY_NOTE) }]
+            : []),
+          doneAction,
+        ]}
+        focusCaption={panel.focus}
+        wide={wide}
+        insets={panelInsets}
+        onClose={() => setPanel(null)}
+      />
+    );
+  } else if (panel?.kind === "shot" && panelShot) {
+    const shotId = panelShot.id;
+    const actions: NotePanelAction[] = [
+      ...(panelShot.failed
+        ? [
+            {
+              id: "retry",
+              label: "Try again",
+              icon: RefreshCw,
+              onPress: () => {
+                setError(null);
+                void storeShot(shotId);
+              },
+            },
+          ]
+        : []),
+      {
+        id: "edit",
+        label: "Annotate",
+        icon: Crop,
+        onPress: () => {
+          setPanel(null);
+          setEditingId(shotId);
+        },
+      },
+      {
+        id: "library",
+        label: "Library",
+        icon: ImageIcon,
+        onPress: () => {
+          setPanel(null);
+          void pickFromLibrary();
+        },
+      },
+      doneAction,
+    ];
+    panelView = (
+      <CaptureNotePanel
+        key={`shot-${shotId}`}
+        title="Recent photos"
+        caption={panelShot.caption}
+        onCaptionChange={(caption) => editShot(shotId, { caption })}
+        captionPlaceholder="Note for this photo"
+        tags={panelShot.tags}
+        onEditTags={() => setTagsFor(shotId)}
+        phase={panelShot.scan ? undefined : panelShot.phase}
+        onPhaseChange={(next) => editShot(shotId, { phase: next })}
+        strip={{
+          shots: recent.map((shot) => ({
+            id: shot.id,
+            uri: shot.thumb ?? shot.source,
+            phase: shot.phase,
+            scan: shot.scan,
+            failed: shot.failed,
+          })),
+          selectedId: shotId,
+          onSelect: (id) => setPanel({ kind: "shot", id }),
+        }}
+        actions={actions}
+        message={panelShot.failed ? "Not saved on this device yet." : null}
+        focusCaption={panel.focus}
+        wide={wide}
+        insets={panelInsets}
+        onClose={() => setPanel(null)}
+      />
+    );
+  }
+  const tagShot =
+    tagsFor && tagsFor !== "next" ? recent.find((shot) => shot.id === tagsFor) : undefined;
 
   /*
    * One layout on every phone and tablet, in either orientation, as web's
@@ -1507,6 +1479,7 @@ export default function CaptureScreen() {
           </Pressable>
 
           <View style={styles.topRight}>
+            {wide ? null : libraryButton}
             <Pressable
               accessibilityRole="switch"
               accessibilityState={{ checked: gridOn }}
@@ -1544,7 +1517,8 @@ export default function CaptureScreen() {
           street address when there is one, because that is what a crew calls
           a job), and tapping it switches job. Not offered when the camera was
           opened for a checklist or workflow item, whose evidence has to land
-          on this job. Beside it, Quick capture (web's autoSave).
+          on this job. Beside it on a phone, the note for the next photos and
+          the mic.
         */}
         <View style={styles.pillRow} pointerEvents="box-none">
           {canSwitchJob ? (
@@ -1570,20 +1544,12 @@ export default function CaptureScreen() {
               </Text>
             </View>
           )}
-          <Pressable
-            accessibilityRole="switch"
-            accessibilityState={{ checked: quick }}
-            accessibilityLabel="Quick capture"
-            accessibilityHint="Saves each photo as soon as it is taken"
-            onPress={() => {
-              if (quick) quickSession.current = null;
-              setQuick((on) => !on);
-            }}
-            hitSlop={4}
-            style={[styles.smallPill, quick && { backgroundColor: theme.colors.primary }]}
-          >
-            <Text style={styles.smallPillText}>QUICK</Text>
-          </Pressable>
+          {wide ? null : (
+            <>
+              {notePill}
+              {micButton}
+            </>
+          )}
         </View>
 
         {mode === "measure" ? (
@@ -1660,11 +1626,7 @@ export default function CaptureScreen() {
             accessibilityRole="button"
             accessibilityLabel={mode === "scan" ? "Scan document" : "Take photo"}
             disabled={busy}
-            accessibilityHint={
-              quick
-                ? "Saves the photo straight away"
-                : "Adds a photo to this batch without leaving the camera"
-            }
+            accessibilityHint="Saves the photo to this job straight away"
             style={[styles.shutter, busy && { opacity: 0.6 }]}
             onPress={() => void takeShot()}
           >
@@ -1674,14 +1636,31 @@ export default function CaptureScreen() {
         </View>
       </View>
 
+      {/*
+        On a tablet, the note, voice and library controls on the right-hand
+        side, where the hand holding it reaches.
+      */}
+      {wide ? (
+        <View style={[styles.rail, { right: insets.right + spacing.lg }]} pointerEvents="box-none">
+          {notePill}
+          {micButton}
+          {libraryButton}
+        </View>
+      ) : null}
+
+      {panelView}
+
       <TagPickerSheet
-        visible={batchTagsOpen}
-        title="Tag this batch"
+        visible={tagsFor !== null}
+        title={tagsFor === "next" ? "Tag the next photos" : "Tag this photo"}
         existing={existingTags}
-        selected={pickedTags}
+        selected={tagsFor === "next" ? note.tags : (tagShot?.tags ?? [])}
         userId={user?.id ?? null}
-        onChange={(next) => setTagText(next.join(", "))}
-        onClose={() => setBatchTagsOpen(false)}
+        onChange={(next) => {
+          if (tagsFor === "next") setNote((current) => ({ ...current, tags: next }));
+          else if (tagShot) editShot(tagShot.id, { tags: next });
+        }}
+        onClose={() => setTagsFor(null)}
       />
 
       {scanPending ? (
@@ -1705,24 +1684,24 @@ export default function CaptureScreen() {
         />
       ) : null}
 
-      {measuringShot ? (
+      {measuring ? (
         <ShotAnnotator
           visible
-          uri={measuringShot.uri}
-          width={measuringShot.width}
-          height={measuringShot.height}
+          uri={measuring.asset.uri}
+          width={measuring.asset.width}
+          height={measuring.asset.height}
           canMeasure={canMeasure}
           initialTool="measure"
-          onCancel={() => setMeasuringKey(null)}
+          onCancel={() => {
+            // Saved all the same: a photo is never lost to a closed tool.
+            const { asset, phase: shotPhaseAtShutter } = measuring;
+            setMeasuring(null);
+            saveShot(asset, false, shotPhaseAtShutter);
+          }}
           onDone={({ uri, width, height }) => {
-            const shot = { ...measuringShot, uri, width, height };
-            setMeasuringKey(null);
-            if (quick) {
-              removeShot(shot.key);
-              void quickSave(shot);
-            } else {
-              patchShot(shot.key, { uri, width, height });
-            }
+            const { asset, phase: shotPhaseAtShutter } = measuring;
+            setMeasuring(null);
+            saveShot({ ...asset, uri, width, height }, false, shotPhaseAtShutter);
           }}
         />
       ) : null}
@@ -1730,12 +1709,13 @@ export default function CaptureScreen() {
   );
 }
 
-/** "roof, framing" to ["roof", "framing"]. */
-function splitTags(text: string): string[] {
-  return text
-    .split(",")
-    .map((tag) => tag.trim())
-    .filter(Boolean);
+/** A retag's word when the photo had already gone up with its old picture. */
+const ALREADY_SENT =
+  "Already uploaded. Its tags and note are updated; the picture stays as it was.";
+
+/** What a retag compares: the parts of a shot written to its photo row. */
+function metaKey(shot: { phase: PhotoPhase; caption: string; tags: string[] }): string {
+  return JSON.stringify([shot.phase, shot.caption.trim(), shot.tags]);
 }
 
 /**
@@ -1767,15 +1747,6 @@ function FlashGlyph({ mode }: { mode: FlashMode }) {
   );
 }
 
-/** Review's form and buttons stop widening here, on a tablet or a phone on its side. */
-const REVIEW_MAX_WIDTH = 760;
-
-/** Review tiles' phase badge, in the watermark pill's own colours (`watermark.ts`). */
-const PHASE_FILL: Record<WatermarkTag, string> = {
-  before: "rgba(37,99,235,0.96)",
-  after: "rgba(16,185,129,0.96)",
-};
-
 /** Gallery and level: web's rounded squares either side of the shutter. */
 const SQUARE = 56;
 
@@ -1783,7 +1754,7 @@ const SQUARE = 56;
  * Camera chrome is always dark, whatever the app's scheme: it sits on a live
  * picture, and a light pill over a bright sky would vanish. So these are fixed
  * rather than read from the palette, and the orange primary is kept for the
- * one thing that is ours (the batch count).
+ * one thing that is ours (the note pill when it is on).
  */
 const CHROME_FG = "#ffffff";
 const CHROME_FILL = "rgba(24, 20, 16, 0.55)";
@@ -1824,6 +1795,23 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     paddingHorizontal: spacing.md,
     minHeight: 30,
+  },
+  notePill: { maxWidth: 190 },
+  smallRound: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: CHROME_FILL,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  rail: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    justifyContent: "center",
+    alignItems: "flex-end",
+    gap: spacing.sm,
   },
   smallPillText: {
     color: CHROME_FG,
@@ -1872,26 +1860,6 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   savedFlashText: { color: "#fff", fontSize: 13, fontWeight: "800" },
-  labelRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  tileMarks: {
-    position: "absolute",
-    left: 4,
-    right: 4,
-    bottom: 4,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 3,
-  },
-  tileMark: {
-    color: "#fff",
-    fontSize: 9,
-    fontWeight: "800",
-    backgroundColor: "rgba(10, 8, 6, 0.8)",
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-    borderRadius: 4,
-    overflow: "hidden",
-  },
   scanOverlay: {
     ...StyleSheet.absoluteFill,
     alignItems: "center",
@@ -2002,6 +1970,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   savedBadge: { backgroundColor: "rgba(16, 150, 96, 0.95)" },
+  failedBadge: { backgroundColor: "rgba(180,35,24,0.95)" },
   countText: { fontSize: 12, fontWeight: "800" },
   shutter: {
     width: 78,
@@ -2020,73 +1989,7 @@ const styles = StyleSheet.create({
    * so the offset says the view has to genuinely exist.
    */
   stampSurface: { position: "absolute", left: -10000, top: 0 },
-  reviewGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-  reviewHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    paddingBottom: spacing.sm,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  reviewBack: {
-    width: HIT_TARGET,
-    height: HIT_TARGET,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  reviewColumn: { width: "100%", alignSelf: "center" },
-  reviewActions: { paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth },
-  reviewSecondaryRow: { flexDirection: "row", gap: spacing.sm },
-  reviewSecondary: { flex: 1, paddingHorizontal: spacing.sm },
-  tilePhase: {
-    position: "absolute",
-    top: 4,
-    left: 4,
-    borderRadius: radius.pill,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  tilePhaseText: { color: "#fff", fontSize: 10, fontWeight: "800", letterSpacing: 0.5 },
-  reviewImage: { width: "100%", height: "100%", borderRadius: radius.md, backgroundColor: "#ddd" },
-  removeBadge: {
-    position: "absolute",
-    top: -6,
-    right: -6,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "rgba(0,0,0,0.75)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  removeBadgeText: { color: "#fff", fontSize: 16, lineHeight: 18, fontWeight: "700" },
-  segmented: { flexDirection: "row", gap: spacing.sm },
-  segment: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
-    alignItems: "center",
-    minHeight: HIT_TARGET,
-    justifyContent: "center",
-  },
-  input: {
-    borderWidth: 1,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    fontSize: 16,
-    minHeight: HIT_TARGET,
-  },
   primaryButton: {
-    borderRadius: radius.md,
-    paddingVertical: spacing.lg,
-    alignItems: "center",
-    minHeight: HIT_TARGET,
-    justifyContent: "center",
-  },
-  secondaryButton: {
-    borderWidth: 1,
     borderRadius: radius.md,
     paddingVertical: spacing.lg,
     alignItems: "center",

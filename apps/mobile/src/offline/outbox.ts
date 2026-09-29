@@ -21,6 +21,7 @@ export type OutboxKind =
   | "task_patch"
   | "task_edit"
   | "photo_patch"
+  | "captured_photo_patch"
   | "project_patch"
   | "workflow_item_patch"
   | "workflow_phase_patch"
@@ -137,6 +138,86 @@ export async function finishHeld(id: string, replace?: () => void): Promise<bool
     [id],
   );
   return swapped;
+}
+
+/**
+ * Keep an unsent row out of the drain until `until` (ms since epoch).
+ *
+ * The camera uses it when a photo it has already queued is edited (a new
+ * Before/After pill, an annotation, a crop): the file is about to be swapped,
+ * and `finishHeld` lets it go again once that is done. Only a row that has
+ * never been tried can be held: one that is sending, or has been tried, may
+ * already be on the server, and holding it would change nothing there.
+ *
+ * @returns whether the row is now held.
+ */
+export async function holdQueued(id: string, until: number): Promise<boolean> {
+  const db = await getDb();
+  const held = await db.runAsync(
+    `UPDATE outbox SET next_attempt = ? WHERE id = ? AND state = 'pending' AND attempts = 0`,
+    [until, id],
+  );
+  return held.changes > 0;
+}
+
+/**
+ * Merge `patch` into an unsent row's payload.
+ *
+ * How the camera retags a photo it has already queued: while the row has
+ * never been tried, the new phase, caption and tags simply ride along with
+ * the upload. Once it is sending, or has been tried (and so may already have
+ * written its photo row), this returns false and the caller queues a
+ * `captured_photo_patch` instead, which lands after the upload.
+ *
+ * The write is conditional on the same state as the read, so a drain claiming
+ * the row in between makes it return false rather than edit a row in flight.
+ */
+export async function updateQueuedPayload(
+  id: string,
+  patch: Record<string, unknown>,
+): Promise<boolean> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<{ payload: string }>(
+    `SELECT payload FROM outbox WHERE id = ? AND state = 'pending' AND attempts = 0`,
+    [id],
+  );
+  if (!row) return false;
+  let current: Record<string, unknown> = {};
+  try {
+    current = JSON.parse(row.payload) as Record<string, unknown>;
+  } catch {
+    return false;
+  }
+  const result = await db.runAsync(
+    `UPDATE outbox SET payload = ? WHERE id = ? AND state = 'pending' AND attempts = 0`,
+    [JSON.stringify({ ...current, ...patch }), id],
+  );
+  return result.changes > 0;
+}
+
+/**
+ * Drop a row that has never been tried, and its file.
+ *
+ * The camera's "take that one back". Unlike `discard`, it refuses a row that
+ * is sending or has been tried, because that photo may already be on the
+ * server and deleting the local row would only hide it from the queue.
+ *
+ * @returns whether the row was dropped.
+ */
+export async function discardUnsent(id: string): Promise<boolean> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<OutboxRow>(
+    `SELECT * FROM outbox WHERE id = ? AND state = 'pending' AND attempts = 0`,
+    [id],
+  );
+  if (!row) return false;
+  const result = await db.runAsync(
+    `DELETE FROM outbox WHERE id = ? AND state = 'pending' AND attempts = 0`,
+    [id],
+  );
+  if (result.changes === 0) return false;
+  discardCapture(row.local_uri);
+  return true;
 }
 
 /**

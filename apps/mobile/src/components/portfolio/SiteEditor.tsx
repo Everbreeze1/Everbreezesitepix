@@ -16,36 +16,87 @@ import {
   defaultGoogleApply,
   GOOGLE_APPLY_FIELDS,
   reviewLinksToSave,
+  sectionWithError,
+  SITE_SECTIONS,
   siteDraftErrors,
   sitePatch,
+  siteSectionDone,
+  siteSectionProgress,
+  siteSectionSummary,
   toSiteDraft,
   type GoogleApplyField,
   type PortfolioSite,
   type ReviewLink,
   type SiteDraft,
+  type SiteSectionId,
 } from "@/api/portfolio-view";
-import { spacing } from "@/theme";
-import { Plus, RefreshCw, Save, Star, Trash2 } from "@/ui/icons";
-import { Button, Card, Chip, Field, IconButton, SectionHeader, Text } from "@/ui";
+import { spacing, useRightRail } from "@/theme";
+import {
+  Building2,
+  ChevronRight,
+  Check,
+  ImageIcon,
+  Link2,
+  Mail,
+  MapPin,
+  Plus,
+  RefreshCw,
+  Save,
+  Star,
+  Tag,
+  Trash2,
+  UserRound,
+} from "@/ui/icons";
+import {
+  Button,
+  Card,
+  Chip,
+  Field,
+  Icon,
+  IconButton,
+  ListGroup,
+  ListRow,
+  ProgressBar,
+  RowDivider,
+  SectionHeader,
+  Sheet,
+  Text,
+  type LucideIcon,
+} from "@/ui";
 import { SwitchRow } from "./SwitchRow";
 
+const SECTION_ICONS: Record<SiteSectionId, LucideIcon> = {
+  business: Building2,
+  services: Tag,
+  cover: ImageIcon,
+  areas: MapPin,
+  about: UserRound,
+  reviews: Star,
+  contact: Mail,
+  address: Link2,
+};
+
 /**
- * The Site tab: every section the web's site editor has, as one form.
+ * The Site tab, laid out as the web's site editor is.
  *
- * Business, what you do, where you work, about, reviews (Google Business and
- * other review links), contact and the button, the web address, search
- * engines, and the look. Saved with one button, and only what changed is sent
+ * The web shows the site's eight sections (Business, What you do, Cover,
+ * Where you work, About, Reviews, Contact, Web address) as a trail with a tick
+ * on each one that is filled in, and puts one section on screen at a time.
+ * The phone does the same: a short list of rows, each saying what is there
+ * now, and a sheet holding just that section's few fields. The old version
+ * stacked every field into one long form, which is what felt cumbersome.
+ *
+ * One draft covers every section and one Save sends only what changed
  * (`sitePatch`), so formatting made on the web survives a phone save.
- *
- * The logo upload and the cover photo picker stay on the web; they are named
- * at the foot of the form so nobody hunts for them.
  */
 export function SiteEditor({ site, onSaved }: { site: PortfolioSite; onSaved: () => void }) {
+  const rail = useRightRail();
   const original = useMemo(() => toSiteDraft(site), [site]);
   const [draft, setDraft] = useState<SiteDraft>(original);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [slugIssue, setSlugIssue] = useState<string | null>(null);
+  const [open, setOpen] = useState<SiteSectionId | null>(null);
 
   useEffect(() => setDraft(original), [original]);
 
@@ -55,6 +106,7 @@ export function SiteEditor({ site, onSaved }: { site: PortfolioSite; onSaved: ()
   const errors = siteDraftErrors(draft);
   const patch = sitePatch(original, draft);
   const dirty = Object.keys(patch).length > 0;
+  const progress = siteSectionProgress(draft, site);
 
   // Checked while typing, as the web does: moving the address breaks every
   // link already handed out, so "is it free" belongs before Save.
@@ -73,8 +125,11 @@ export function SiteEditor({ site, onSaved }: { site: PortfolioSite; onSaved: ()
   }, [draft.slug, site.slug, errors.slug]);
 
   const save = async () => {
-    if (Object.keys(errors).length > 0 || slugIssue) {
-      setMessage("Fix the fields marked below first.");
+    const broken = sectionWithError(slugIssue ? { ...errors, slug: slugIssue } : errors);
+    if (broken) {
+      const label = SITE_SECTIONS.find((s) => s.id === broken)?.label ?? "the site";
+      setMessage(`Fix the marked field in ${label} first.`);
+      setOpen(broken);
       return;
     }
     setSaving(true);
@@ -82,6 +137,7 @@ export function SiteEditor({ site, onSaved }: { site: PortfolioSite; onSaved: ()
     try {
       await updatePortfolio(patch);
       setMessage("Site saved.");
+      setOpen(null);
       onSaved();
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "The site was not saved.");
@@ -104,115 +160,220 @@ export function SiteEditor({ site, onSaved }: { site: PortfolioSite; onSaved: ()
     />
   );
 
+  const fieldsFor = (id: SiteSectionId) => {
+    switch (id) {
+      case "business":
+        return (
+          <>
+            {field("businessName", "Business name", { autoCapitalize: "words" })}
+            {field("accentColor", "Brand colour", {
+              autoCapitalize: "none",
+              placeholder: "#2563eb",
+              hint: "Used for buttons, filters, map pins and the contact band.",
+            })}
+            <Text variant="caption" tone="muted">
+              The logo is uploaded on the website.
+            </Text>
+          </>
+        );
+      case "services":
+        return field("services", "Your trades", {
+          hint: "Separate with commas: Roofing, Gutters, Siding",
+          multiline: true,
+          rows: 3,
+        });
+      case "cover":
+        return (
+          <>
+            {field("heroHeadline", "Headline", { placeholder: "Work you can point at." })}
+            {field("heroSubhead", "Sub-headline", { multiline: true, rows: 2 })}
+            <Text variant="caption" tone="muted">
+              The cover photo is picked on the website.
+            </Text>
+          </>
+        );
+      case "areas":
+        return (
+          <>
+            {field("serviceAreas", "Towns and cities", {
+              hint: "Separate with commas: Leeds, York, Harrogate",
+              multiline: true,
+              rows: 2,
+            })}
+            <SwitchRow
+              label="Show the project map"
+              hint="Pins each published project on the site."
+              value={draft.showMap}
+              onChange={(next) => set("showMap", next)}
+            />
+          </>
+        );
+      case "about":
+        return field("about", "About your business", {
+          multiline: true,
+          rows: 6,
+          hint: "Paragraphs are kept. Bold and links are edited on the web.",
+        });
+      case "reviews":
+        return (
+          <>
+            <SwitchRow
+              label="Show reviews on my site"
+              hint="Your Google rating and review links."
+              value={draft.showReviews}
+              onChange={(next) => set("showReviews", next)}
+            />
+            <GoogleBusiness site={site} onChanged={onSaved} />
+            <ReviewLinks />
+          </>
+        );
+      case "contact":
+        return (
+          <>
+            {field("phone", "Phone", { keyboardType: "phone-pad", autoComplete: "tel" })}
+            {field("email", "Email", {
+              keyboardType: "email-address",
+              autoCapitalize: "none",
+              autoComplete: "email",
+            })}
+            {field("address", "Address", {
+              autoComplete: "street-address",
+              hint: "Optional. Shown under the contact band.",
+            })}
+            {field("ctaLabel", "Button label", { placeholder: "Get a quote" })}
+            {field("ctaUrl", "Button link", {
+              autoCapitalize: "none",
+              keyboardType: "url",
+              placeholder: "https://",
+            })}
+            {field("websiteUrl", "Your main website", {
+              autoCapitalize: "none",
+              keyboardType: "url",
+              placeholder: "https://",
+            })}
+          </>
+        );
+      case "address":
+        return (
+          <>
+            {field("slug", "Site address", {
+              autoCapitalize: "none",
+              hint: "Changing it breaks every link already shared.",
+            })}
+            <SectionHeader title="Search engines" />
+            {field("seoTitle", "Page title")}
+            {field("seoDescription", "Description", { multiline: true, rows: 3 })}
+          </>
+        );
+    }
+  };
+
+  const index = open ? SITE_SECTIONS.findIndex((s) => s.id === open) : -1;
+  const section = index >= 0 ? SITE_SECTIONS[index] : null;
+  const next = index >= 0 ? SITE_SECTIONS[index + 1] : undefined;
+
+  const saveButton = (
+    <Button
+      label="Save site"
+      icon={Save}
+      size="sm"
+      loading={saving}
+      disabled={saving || !dirty}
+      onPress={() => void save()}
+    />
+  );
+
   return (
     <View style={{ gap: spacing.md }}>
       <Card>
         <View style={{ gap: spacing.sm }}>
-          <Text variant="caption" tone={dirty ? "safety" : "muted"}>
-            {dirty ? "Unsaved changes" : "All changes saved"}
-          </Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
+            <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+              <Text variant="bodyStrong">
+                {progress.done} of {progress.total} sections filled in
+              </Text>
+              <Text variant="caption" tone={dirty ? "safety" : "muted"}>
+                {dirty ? "Unsaved changes" : "All changes saved"}
+              </Text>
+            </View>
+            {dirty ? saveButton : null}
+          </View>
+          <ProgressBar value={progress.done} total={progress.total} />
           {message ? <Text variant="caption">{message}</Text> : null}
-          <Button
-            label="Save site"
-            icon={Save}
-            fullWidth
-            loading={saving}
-            disabled={saving || !dirty}
-            onPress={() => void save()}
-          />
         </View>
       </Card>
 
-      <SectionHeader title="Business" />
-      {field("businessName", "Business name", { autoCapitalize: "words" })}
-      {field("heroHeadline", "Headline", { placeholder: "Work you can point at." })}
-      {field("heroSubhead", "Intro line", { multiline: true, rows: 2 })}
+      <ListGroup>
+        {SITE_SECTIONS.map((s, i) => {
+          const done = siteSectionDone(s.id, draft, site);
+          return (
+            <View key={s.id}>
+              {i > 0 ? <RowDivider /> : null}
+              <ListRow
+                icon={SECTION_ICONS[s.id]}
+                iconTone={done ? "primary" : "muted"}
+                title={s.label}
+                subtitle={siteSectionSummary(s.id, draft, site)}
+                right={
+                  done && s.id !== "address" ? (
+                    <Icon icon={Check} size="sm" tone="success" />
+                  ) : s.optional && !done ? (
+                    <Text variant="caption" tone="muted">
+                      Optional
+                    </Text>
+                  ) : null
+                }
+                onPress={() => {
+                  setMessage(null);
+                  setOpen(s.id);
+                }}
+              />
+            </View>
+          );
+        })}
+      </ListGroup>
 
-      <SectionHeader title="What you do" />
-      {field("services", "Services", {
-        hint: "Separate with commas: Roofing, Gutters, Siding",
-        multiline: true,
-        rows: 2,
-      })}
-
-      <SectionHeader title="Where you work" />
-      {field("serviceAreas", "Service areas", {
-        hint: "Separate with commas: Leeds, York, Harrogate",
-        multiline: true,
-        rows: 2,
-      })}
-      <SwitchRow
-        label="Show the project map"
-        hint="Pins each published project on the site."
-        value={draft.showMap}
-        onChange={(next) => set("showMap", next)}
-      />
-
-      <SectionHeader title="About" />
-      {field("about", "Who's behind the work", {
-        multiline: true,
-        rows: 6,
-        hint: "Paragraphs are kept. Bold and links are edited on the web.",
-      })}
-
-      <SectionHeader title="Reviews" />
-      <SwitchRow
-        label="Show reviews"
-        hint="Your Google rating and review links on the site."
-        value={draft.showReviews}
-        onChange={(next) => set("showReviews", next)}
-      />
-      <GoogleBusiness site={site} onChanged={onSaved} />
-      <ReviewLinks />
-
-      <SectionHeader title="Contact" />
-      {field("phone", "Phone", { keyboardType: "phone-pad", autoComplete: "tel" })}
-      {field("email", "Email", {
-        keyboardType: "email-address",
-        autoCapitalize: "none",
-        autoComplete: "email",
-      })}
-      {field("address", "Address", { autoComplete: "street-address" })}
-      {field("websiteUrl", "Your website", {
-        autoCapitalize: "none",
-        keyboardType: "url",
-        placeholder: "https://",
-      })}
-      {field("ctaLabel", "Button label", { placeholder: "Get a quote" })}
-      {field("ctaUrl", "Button link", {
-        autoCapitalize: "none",
-        keyboardType: "url",
-        placeholder: "https://",
-      })}
-
-      <SectionHeader title="Web address" />
-      {field("slug", "Address", {
-        autoCapitalize: "none",
-        hint: "Changing it breaks every link already shared.",
-      })}
-
-      <SectionHeader title="Search engines" />
-      {field("seoTitle", "Page title")}
-      {field("seoDescription", "Description", { multiline: true, rows: 3 })}
-
-      <SectionHeader title="Look" />
-      {field("accentColor", "Accent colour", {
-        autoCapitalize: "none",
-        placeholder: "#2563eb",
-      })}
-
-      <Text variant="caption" tone="muted">
-        The logo upload and the cover photo are chosen on the website.
-      </Text>
-
-      <Button
-        label="Save site"
-        icon={Save}
-        fullWidth
-        loading={saving}
-        disabled={saving || !dirty}
-        onPress={() => void save()}
-      />
+      <Sheet
+        visible={section !== null}
+        onClose={() => setOpen(null)}
+        title={section?.label}
+        subtitle={section?.question}
+        footer={
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: spacing.sm,
+              justifyContent: rail ? "flex-end" : "space-between",
+            }}
+          >
+            {next ? (
+              <Button
+                label={next.label}
+                icon={ChevronRight}
+                size="sm"
+                variant="ghost"
+                onPress={() => setOpen(next.id)}
+              />
+            ) : (
+              <Text variant="caption" tone="muted">
+                That is every section
+              </Text>
+            )}
+            {saveButton}
+          </View>
+        }
+      >
+        {section ? (
+          <>
+            <Text variant="caption" tone="muted">
+              {section.hint}
+            </Text>
+            {message ? <Text variant="caption">{message}</Text> : null}
+            {fieldsFor(section.id)}
+          </>
+        ) : null}
+      </Sheet>
     </View>
   );
 }

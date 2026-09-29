@@ -1,5 +1,5 @@
 import { applyItemPatch, attachPhotoToItem } from "@/api/checklists";
-import { uploadProjectPhoto, type PhotoPhase } from "@/api/photos";
+import { findQueuedPhotoId, uploadProjectPhoto, type PhotoPhase } from "@/api/photos";
 import type { Coords } from "@/api/photo-meta";
 import { applyPhotoPatch, type PhotoPatch } from "@/api/photo-edit";
 import { applyProjectPatch } from "@/api/projects";
@@ -62,9 +62,16 @@ export type PhotoUploadPayload = {
   exif?: Record<string, unknown> | null;
   phase?: PhotoPhase;
   tags?: string[];
+  /**
+   * The photo's note: typed, or dictated with the keyboard's microphone, on
+   * the camera. Written to `photos.caption`, which is what the whole-job
+   * report, photo summaries and site-log descriptions read (`cleanCaption`).
+   */
   caption?: string;
   deviceCoords?: Coords | null;
   projectCoords?: Coords | null;
+  /** When the shutter fired (ISO): the timeline's order for a photo with no EXIF time. */
+  capturedAt?: string;
 };
 
 /**
@@ -230,6 +237,29 @@ export function photoPatchRowId(field: string, photoIds: string[]): string {
   return `photo-patch:${field}:${photoIds.join(",")}`;
 }
 
+/**
+ * A camera retag of a photo that was queued and may already have landed.
+ *
+ * The camera saves every shot the moment it is taken, so a Before/After,
+ * caption or tag changed afterwards can reach a row that is already on the
+ * server. The photo's id is not known on the phone, but its storage path is
+ * (derived from the upload's row id), so this finds the row by that.
+ *
+ * Carries the whole value of every column it sets, so it is idempotent, and
+ * it is keyed per upload so a second retag replaces the first.
+ */
+export type CapturedPhotoPatchPayload = {
+  userId: string;
+  projectId: string;
+  /** The `photo_upload` row id, which is the upload's idempotency key. */
+  uploadId: string;
+  patch: PhotoPatch;
+};
+
+export function capturedPhotoPatchRowId(uploadId: string): string {
+  return `captured-photo-patch:${uploadId}`;
+}
+
 export type TaskCreatePayload = {
   input: CreateTaskInput;
 };
@@ -312,6 +342,7 @@ const handlers: Record<OutboxKind, Handler> = {
       caption: payload.caption,
       deviceCoords: payload.deviceCoords,
       projectCoords: payload.projectCoords,
+      capturedAt: payload.capturedAt,
       // The row id is the idempotency key: same key, same storage path, same
       // duplicate check, so a repeat of a half-finished send converges.
       uploadId: row.id,
@@ -402,6 +433,16 @@ const handlers: Record<OutboxKind, Handler> = {
     // Idempotent: the patch carries the whole value for every column it sets,
     // so replaying it lands on the same result.
     await applyPhotoPatch(payload.photoIds, payload.patch);
+  },
+
+  captured_photo_patch: async (row) => {
+    const payload = JSON.parse(row.payload) as CapturedPhotoPatchPayload;
+    const photoId = await findQueuedPhotoId(payload.userId, payload.projectId, payload.uploadId);
+    // Not landed yet (held for its pill, or still retrying): an ordinary
+    // failure, so the backoff tries again after the upload has gone.
+    if (!photoId) throw new Error("Photo has not finished uploading yet");
+    await applyPhotoPatch([photoId], payload.patch);
+    void queryClient.invalidateQueries({ queryKey: ["project-photos", payload.projectId] });
   },
 
   task_create: async (row) => {

@@ -37,11 +37,12 @@ export type ShotPatch = Partial<
 >;
 
 /**
- * One shot, before it is saved: web's post-capture preview.
+ * One shot the camera has just saved: web's post-capture preview.
  *
  * Retake, Annotate, Measure (Pro/Team, on a supported iPhone), Crop, Tags and
- * a description, and for a scan, Save as PDF. Every edit goes back to the batch through `onChange`,
- * so the shot still queues offline with the rest when the batch is saved.
+ * a description, and for a scan, Save as PDF. Every edit goes back to the
+ * camera through `onChange`, which applies it to that shot's queued photo;
+ * Retake takes the shot back.
  *
  * A full-screen view rather than a Modal, so the annotator, cropper and tag
  * sheet it opens are the only modals on screen: iOS will not stack a modal on
@@ -188,7 +189,7 @@ export function ShotEditor({
       >
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Back to the batch"
+          accessibilityLabel="Back to camera"
           onPress={onClose}
           hitSlop={8}
           style={styles.roundButton}

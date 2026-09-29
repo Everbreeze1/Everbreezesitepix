@@ -221,7 +221,45 @@ export type UploadPhotoOptions = {
    * producing a second copy of the photo.
    */
   uploadId?: string;
+  /**
+   * When the shutter fired (ISO), for a photo whose EXIF carries no time.
+   *
+   * A queued photo can land minutes or hours after it was taken (no signal,
+   * or held for its Before/After pill), and "now" at upload time would file
+   * it out of order on the project timeline.
+   */
+  capturedAt?: string;
 };
+
+/**
+ * Where a queued upload's photo is stored, derived from its outbox row id.
+ *
+ * The same path `uploadProjectPhoto` writes, so a later edit to a photo that
+ * was queued (and has since landed) can find its row without ever having been
+ * told the photo's id.
+ */
+export function queuedPhotoStoragePath(
+  userId: string,
+  projectId: string,
+  uploadId: string,
+): string {
+  return `${userId}/${projectId}/${uploadId}.jpg`;
+}
+
+/** The id of the photo a queued upload wrote, or null while it has not landed. */
+export async function findQueuedPhotoId(
+  userId: string,
+  projectId: string,
+  uploadId: string,
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("photos")
+    .select("id")
+    .eq("storage_path", queuedPhotoStoragePath(userId, projectId, uploadId))
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data?.id ?? null;
+}
 
 /**
  * Upload one capture into `site-photos` plus a `photos` row.
@@ -235,8 +273,9 @@ export async function uploadProjectPhoto(options: UploadPhotoOptions): Promise<{
   const source = new File(asset.uri);
   if (!source.exists) throw new Error("Could not read image from device");
 
+  const exifMeta = readExifMeta(asset.exif);
   const meta = resolvePhotoMeta(
-    readExifMeta(asset.exif),
+    exifMeta.takenAt ? exifMeta : { ...exifMeta, takenAt: options.capturedAt ?? null },
     options.deviceCoords ?? null,
     options.projectCoords ?? null,
   );
@@ -250,7 +289,7 @@ export async function uploadProjectPhoto(options: UploadPhotoOptions): Promise<{
    * longer describes the bytes is how a PNG-named JPEG ends up in the bucket.
    */
   const uploadId = options.uploadId ?? randomUUID();
-  const path = `${userId}/${projectId}/${uploadId}.jpg`;
+  const path = queuedPhotoStoragePath(userId, projectId, uploadId);
 
   /*
    * A retry may be finishing an attempt that already wrote the row. There is no
