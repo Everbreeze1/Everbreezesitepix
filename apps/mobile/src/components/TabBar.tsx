@@ -1,9 +1,7 @@
-import { Camera } from "@/ui/icons";
-import { Platform, Pressable, View } from "react-native";
+import { Pressable, View } from "react-native";
 import type { BottomTabBarProps } from "expo-router/js-tabs";
-import { radius, spacing, useRightRail, useTheme } from "@/theme";
-import { Icon, Text } from "@/ui";
-import { useQuickCapture } from "@/lib/use-quick-capture";
+import { spacing, useRightRail, useTheme } from "@/theme";
+import { Text } from "@/ui";
 import { FloatingMenuButton, withAlpha } from "./AppMenu";
 
 /**
@@ -15,44 +13,40 @@ import { FloatingMenuButton, withAlpha } from "./AppMenu";
  * a `MobileTabBar` with Projects, Map, Gallery and Account, and the native app
  * shipped none.
  *
- * The bar is written by hand rather than configured, for one reason: the camera
- * button. Capture is not a peer of the other tabs, it is the reason the app is
- * installed, and the field-app convention the client keeps sending screenshots
- * of puts it in the middle, raised, and larger than its neighbours. A tab that
- * looks like the other four does not get used on a job site with gloves on.
+ * **No camera here.** It used to sit raised in the middle of this bar, and
+ * float under the menu button on a tablet, on every tab. That put a camera on
+ * Account and on the photo library with no job behind it, so pressing it had
+ * to guess where the pictures should go (Jon, 2026-09-29: "right now I am
+ * navigating account settings and when i open the camera its not sure where
+ * to saved"). Capture now lives where a project is: the Capture button on
+ * each project page, which opens the camera for that job. Home keeps its own
+ * "Capture photo" action for the nearest or most recent job, drawn by Home
+ * itself (in its hero row on a phone, in its `ActionRail` on a tablet).
  *
- * The camera is not a route in this navigator. It cannot be: capture needs a
- * project and a tab has no argument. Pressing it opens the viewfinder straight
- * away on the job the phone is standing at, or the one last worked on (see
- * `useQuickCapture`), and the job's name on the viewfinder switches it. A list
- * of jobs in between read as the camera button opening Projects. Modelling it
- * as a tab would leave a tab you can never be "on".
- *
- * **On a tablet, or any screen in landscape, there is no bar at all.** Two
- * round buttons float on the right edge instead: the menu, and the camera
- * under it. A tablet is held with a hand on each side, most often by someone
- * right handed, and on a landscape 11 inch screen the bottom centre is the one
- * spot neither thumb can reach without letting go; the right edge is where the
- * tapping thumb already rests.
+ * **On a tablet, or any screen in landscape, there is no bar at all.** One
+ * round button floats on the right edge instead: the menu. A tablet is held
+ * with a hand on each side, most often by someone right handed, and on a
+ * landscape 11 inch screen the bottom centre is the one spot neither thumb can
+ * reach without letting go; the right edge is where the tapping thumb already
+ * rests.
  *
  * This replaced a full-height dark rail on that edge. The rail cost a strip of
  * the screen for four tabs and a lot of empty chrome, and still reached less
  * of the product than the website's sidebar. The menu button opens
  * `AppMenu`, which lists every destination the web sidebar has, and the page
- * keeps the full width. The buttons sit on the lower third of the edge
- * (Jon, 2026-09-29), where the resting thumb is, and stop above the create
+ * keeps the full width. The button sits on the lower third of the edge
+ * (Jon, 2026-09-29), where the resting thumb is, and stops above the create
  * actions `ActionRail` keeps in the lower right corner.
  */
 /**
- * How far the rail's two buttons sit above the bottom edge: clear of a pair of
- * `ActionRail` buttons (64 + 52 + gaps) in the same corner.
+ * How far the floating menu button sits above the bottom edge: clear of a pair
+ * of `ActionRail` buttons (64 + 52 + gaps) in the same corner.
  */
 const RAIL_LIFT = 184;
 
 export function TabBar({ state, descriptors, navigation, insets }: BottomTabBarProps) {
   const theme = useTheme();
   const rail = useRightRail();
-  const openCamera = useQuickCapture();
 
   /*
    * The bar is always-dark chrome, in both schemes, so the inactive tint is the
@@ -61,12 +55,6 @@ export function TabBar({ state, descriptors, navigation, insets }: BottomTabBarP
    * Dimmed with alpha rather than a second token, so it moves with the chrome.
    */
   const inactive = withAlpha(theme.colors.chromeForeground, 0.6);
-
-  // The camera sits between the second and third tab. With four tabs that is
-  // the middle; the slice keeps it centred if a fifth is ever added.
-  const middle = Math.ceil(state.routes.length / 2);
-  const left = state.routes.slice(0, middle);
-  const right = state.routes.slice(middle);
 
   const renderTab = (route: (typeof state.routes)[number]) => {
     const index = state.routes.indexOf(route);
@@ -133,48 +121,6 @@ export function TabBar({ state, descriptors, navigation, insets }: BottomTabBarP
     );
   };
 
-  const cameraButton = (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel="Take photos"
-      accessibilityHint="Opens the camera on the nearest or most recent job"
-      onPress={openCamera}
-      style={({ pressed }) => [
-        {
-          width: 64,
-          height: 64,
-          borderRadius: radius.pill,
-          alignItems: "center",
-          justifyContent: "center",
-          backgroundColor: theme.colors.primary,
-          // Lifted above the bar so it reads as the primary action rather
-          // than a fifth tab that happens to be orange. Floating on the edge
-          // there is no bar to lift it out of.
-          marginTop: rail ? 0 : -26,
-          // The ring is the bar's own colour, so the button looks cut into
-          // the chrome rather than stuck on top of it. Floating over a page
-          // it is the page's colour instead, which reads as a clean edge.
-          borderWidth: rail ? 3 : 5,
-          borderColor: rail ? theme.colors.background : theme.colors.chrome,
-          opacity: pressed ? 0.85 : 1,
-          transform: [{ scale: pressed ? 0.96 : 1 }],
-        },
-        Platform.select({
-          ios: {
-            shadowColor: theme.colors.primary,
-            shadowOpacity: 0.45,
-            shadowRadius: 14,
-            shadowOffset: { width: 0, height: 4 },
-          },
-          android: { elevation: 8 },
-          default: {},
-        }),
-      ]}
-    >
-      <Icon icon={Camera} size="lg" tone="inverse" />
-    </Pressable>
-  );
-
   if (rail) {
     return (
       <View
@@ -182,7 +128,7 @@ export function TabBar({ state, descriptors, navigation, insets }: BottomTabBarP
         style={{
           /*
            * Out of the layout, so the screens take the full width. Pinned to
-           * the whole height of the edge with the buttons at the foot of it,
+           * the whole height of the edge with the button at the foot of it,
            * lifted to the lower third, and never lower than the corner the
            * `ActionRail` create buttons use.
            */
@@ -197,7 +143,6 @@ export function TabBar({ state, descriptors, navigation, insets }: BottomTabBarP
         }}
       >
         <FloatingMenuButton />
-        {cameraButton}
       </View>
     );
   }
@@ -206,7 +151,7 @@ export function TabBar({ state, descriptors, navigation, insets }: BottomTabBarP
     <View
       style={{
         flexDirection: "row",
-        alignItems: "flex-start",
+        alignItems: "center",
         backgroundColor: theme.colors.chrome,
         /*
          * No keyline on the light palette, where the dark bar already separates
@@ -224,11 +169,7 @@ export function TabBar({ state, descriptors, navigation, insets }: BottomTabBarP
         paddingBottom: insets.bottom > 0 ? insets.bottom : spacing.sm,
       }}
     >
-      {left.map(renderTab)}
-
-      <View style={{ width: 76, alignItems: "center" }}>{cameraButton}</View>
-
-      {right.map(renderTab)}
+      {state.routes.map(renderTab)}
     </View>
   );
 }

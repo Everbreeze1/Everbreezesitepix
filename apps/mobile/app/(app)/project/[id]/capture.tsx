@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { router, Stack, useLocalSearchParams } from "expo-router";
+import { router, Stack, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { CameraView, useCameraPermissions, type CameraType, type FlashMode } from "expo-camera";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
@@ -38,6 +38,7 @@ import { useTagLibrary } from "@/components/photo-viewer/TagPill";
 import { formatAddress, getProject, projectCoords } from "@/api/projects";
 import { projectDisplayName } from "@everlumen/shared";
 import { useAuth } from "@/lib/auth";
+import { takeCaptureNotice } from "@/lib/capture-notice";
 import { deviceSupportsMeasure } from "@/lib/measure-support";
 import {
   phaseAtShutter,
@@ -361,7 +362,8 @@ export default function CaptureScreen() {
    * Switch camera mode from the row under the shutter.
    *
    * Mirrors web: Video and Walkthrough hand off to a recorder rather than
-   * becoming a mode here, since the photo queue has no video path. Video is a
+   * becoming a mode here. A site video is queued by the recorder the moment
+   * it stops (`video_upload`), which then closes straight back to here. Video is a
    * plain site video saved to the project's videos, as web's "Record a site
    * video"; Walkthrough is the narrated walk with photos pinned to it. Leaving
    * Before/After clears the phase, as web clears its tag, so a Photo or Scan
@@ -411,6 +413,17 @@ export default function CaptureScreen() {
       if (noticeTimer.current) clearTimeout(noticeTimer.current);
     },
     [],
+  );
+
+  /*
+   * Back from the video recorder: it queued the clip and closed at once, and
+   * leaves its "saved" line here instead of holding the screen to say it.
+   */
+  useFocusEffect(
+    useCallback(() => {
+      const text = takeCaptureNotice();
+      if (text) showNotice(text);
+    }, []),
   );
 
   /**

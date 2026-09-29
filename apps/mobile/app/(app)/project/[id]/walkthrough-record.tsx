@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import {
@@ -11,7 +11,7 @@ import {
 import * as Location from "expo-location";
 import { useQuery } from "@tanstack/react-query";
 import { getProject, projectCoords } from "@/api/projects";
-import { saveSiteVideo, videoMaxSeconds } from "@/api/project-videos";
+import { videoMaxSeconds } from "@/api/project-videos";
 import { getMyTeam } from "@/api/team";
 import type { CapturedAsset } from "@/api/photos";
 import {
@@ -24,6 +24,11 @@ import {
   walkthroughVideoPath,
 } from "@/api/walkthroughs";
 import { useAuth } from "@/lib/auth";
+import { leaveCaptureNotice } from "@/lib/capture-notice";
+import type { VideoUploadPayload } from "@/offline/handlers";
+import { persistRecording } from "@/offline/media";
+import { enqueue, newOutboxId } from "@/offline/outbox";
+import { requestSync } from "@/offline/sync";
 import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
 import { Icon } from "@/ui";
 import { X } from "@/ui/icons";
@@ -195,8 +200,8 @@ export default function WalkthroughRecordScreen() {
   /**
    * Everything that happens after the stop button.
    *
-   * Deliberately sequential and deliberately not in the offline outbox. A
-   * walkthrough is a session on the server: the id has to exist before its
+   * A site video goes to the offline outbox and returns at once. A walkthrough
+   * is deliberately sequential and deliberately not in the outbox: it is a session on the server: the id has to exist before its
    * photos can reference it, and the video path before the session is finished.
    * Queuing the steps independently would let them arrive in an order the API
    * cannot accept.
@@ -206,17 +211,29 @@ export default function WalkthroughRecordScreen() {
     setStage("saving");
 
     if (siteVideo) {
+      /*
+       * Queued, not uploaded. The clip is moved into app storage and handed to
+       * the outbox, which is a rename and one row: instant, and it needs no
+       * signal. The drain sends it in the background with the queue banner
+       * showing it, the way photos go, and the camera is back at once.
+       *
+       * This used to upload inline behind a full-screen "Uploading video 42%"
+       * that held the phone for as long as the upload took (Jon, 2026-09-29:
+       * "the whole screen was doing a count down on saving the video").
+       */
       try {
-        setStatus("Uploading video 0%");
-        await saveSiteVideo({
+        const id = newOutboxId();
+        const localUri = persistRecording(videoUri, id);
+        const payload: VideoUploadPayload = {
           userId: user.id,
           projectId,
-          localUri: videoUri,
           durationSeconds,
-          onProgress: (percent) => setStatus(`Uploading video ${percent}%`),
-        });
+          recordedAt: new Date().toISOString(),
+        };
+        await enqueue({ id, kind: "video_upload", projectId, localUri, payload });
+        requestSync();
+        leaveCaptureNotice("Video saved. Uploading in the background.");
         router.back();
-        Alert.alert("Video saved", "It is on the project's Photos tab, under site videos.");
       } catch (e) {
         setStage("idle");
         setStatus(null);
@@ -312,7 +329,12 @@ export default function WalkthroughRecordScreen() {
     );
   }
 
-  if (stage === "saving") {
+  /*
+   * A site video never gets this screen: it is queued in a moment and the
+   * recorder closes, so the live view stays up with a small "Saving" chip
+   * for that moment rather than a page telling someone to wait.
+   */
+  if (stage === "saving" && !siteVideo) {
     return (
       <View
         style={[styles.centered, { backgroundColor: theme.colors.background, gap: spacing.md }]}
@@ -369,6 +391,11 @@ export default function WalkthroughRecordScreen() {
             <Text style={styles.chipText}>
               {minutes}:{String(seconds).padStart(2, "0")}
             </Text>
+          </View>
+        ) : null}
+        {siteVideo && stage === "saving" ? (
+          <View style={styles.chip}>
+            <Text style={styles.chipText}>Saving video</Text>
           </View>
         ) : null}
         {siteVideo && stage === "idle" ? (
@@ -441,7 +468,8 @@ export default function WalkthroughRecordScreen() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Start recording"
-            style={styles.recordButton}
+            style={[styles.recordButton, stage === "saving" && { opacity: 0.5 }]}
+            disabled={stage === "saving"}
             onPress={() => void start()}
           >
             <View style={styles.recordInner} />

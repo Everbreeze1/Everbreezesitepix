@@ -25,6 +25,35 @@ beforeEach(async () => {
   media = await import("../apps/mobile/src/offline/media");
 });
 
+describe("persistRecording", () => {
+  const RECORDING = "file:///app/cache/Camera/VID_0192.mp4";
+
+  it("moves the clip into app storage at once, named after its row", () => {
+    /*
+     * A site video is queued the moment Stop is pressed. A move is a rename,
+     * instant for any length of clip, where a copy of a long video held the
+     * screen; and the recording is the camera's scratch file, not the user's.
+     */
+    fs.__seedFile(RECORDING, 50_000_000);
+
+    const stored = media.persistRecording(RECORDING, "row-v");
+
+    expect(stored).toBe(`${OUTBOX_DIR}/row-v.mp4`);
+    expect(fs.__exists(stored)).toBe(true);
+    expect(fs.__exists(RECORDING)).toBe(false);
+  });
+
+  it("reuses the stored clip when called again for the same row", () => {
+    fs.__seedFile(RECORDING);
+    const first = media.persistRecording(RECORDING, "row-v");
+    expect(media.persistRecording(RECORDING, "row-v")).toBe(first);
+  });
+
+  it("refuses a recording that is already gone", () => {
+    expect(() => media.persistRecording(RECORDING, "row-v")).toThrow(/no longer on the device/i);
+  });
+});
+
 describe("persistCapture", () => {
   it("copies the capture out of the camera cache", async () => {
     /*

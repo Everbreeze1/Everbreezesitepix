@@ -41,7 +41,7 @@ async function lastKnownHere(): Promise<Coord | null> {
  * or no list at all because the first load failed with no signal.
  *
  * The project list comes from the query cache when a screen has already loaded
- * it, so on Home and every tab the camera opens with no network round trip.
+ * it, so on Home the camera opens with no network round trip.
  */
 export function useQuickCapture(): () => void {
   const queryClient = useQueryClient();

@@ -64,7 +64,11 @@ describe("the menu's destinations", () => {
     for (const item of items) {
       if (item.web) continue;
       const name = item.href === "/" ? "index" : item.href.slice(1);
-      const candidates = [`${APP}/${name}.tsx`, `${APP}/(tabs)/${name}.tsx`];
+      const candidates = [
+        `${APP}/${name}.tsx`,
+        `${APP}/(tabs)/${name}.tsx`,
+        `${APP}/${name}/index.tsx`,
+      ];
       expect(
         candidates.some((p) => existsSync(join(ROOT, p))),
         `${item.label} -> ${item.href}`,
@@ -83,6 +87,19 @@ describe("the menu's destinations", () => {
 
   it("hides the staff console from everyone the server does not vouch for", () => {
     expect(items.find((item) => item.href === "/admin")?.adminOnly).toBe(true);
+  });
+});
+
+describe("the notifications bell", () => {
+  it("is not a menu row: it stays in the header at the top of the page", () => {
+    // Jon, 2026-09-29: the bell showed on top of the page and again in the
+    // pop-out menu; "we should leave it on top of the page".
+    expect(hrefs).not.toContain("/notifications");
+    expect(labels).not.toContain("Notifications");
+    expect(read("apps/mobile/src/components/AppMenu.tsx")).not.toMatch(/\bBell\b/);
+    const home = read(`${APP}/(tabs)/index.tsx`);
+    expect(home).toContain("icon={Bell}");
+    expect(home).toContain('router.push("/notifications")');
   });
 });
 
@@ -106,7 +123,7 @@ describe("isMenuItemActive", () => {
 });
 
 describe("how the menu is reached", () => {
-  it("replaces the tablet rail with a floating menu button and the camera", () => {
+  it("replaces the tablet rail with a floating menu button", () => {
     const bar = read("apps/mobile/src/components/TabBar.tsx");
     const railBranch = bar.slice(
       bar.indexOf("if (rail) {"),
@@ -115,7 +132,6 @@ describe("how the menu is reached", () => {
     // Out of the layout, so the page keeps the full width.
     expect(railBranch).toContain('position: "absolute"');
     expect(railBranch).toContain("<FloatingMenuButton />");
-    expect(railBranch).toContain("{cameraButton}");
     // No tabs stacked down the edge any more: they are rows in the menu.
     expect(railBranch).not.toContain("state.routes.map");
     expect(bar).not.toContain("width: 96 + insets.right");
@@ -137,7 +153,7 @@ describe("how the menu is reached", () => {
     expect(bar).toContain('justifyContent: "flex-end"');
   });
 
-  it("keeps the phone's bottom bar of four tabs around the camera", () => {
+  it("keeps the phone's bottom bar of four tabs", () => {
     const layout = read(`${APP}/(tabs)/_layout.tsx`);
     for (const name of ["index", "projects", "gallery", "account"]) {
       expect(layout).toContain(`name="${name}"`);
@@ -182,6 +198,50 @@ describe("menu destinations open inside the app", () => {
         .find((chunk) => chunk.includes(`name="${name}"`));
       expect(element, name).toContain('presentation: "fullScreenModal"');
       expect(element, name).toContain("...MODAL_ANIMATION");
+    }
+  });
+});
+
+describe("where the camera is offered", () => {
+  /*
+   * Jon, 2026-09-29: the camera icon stayed on every page reached from the
+   * menu, and on Account settings "when i open the camera its not sure where
+   * to saved". Capture belongs to a job: each project page, and Home's own
+   * nearest-job action. The tab bar, shown on Projects, Photos and Account,
+   * carries none.
+   */
+  it("the tab bar draws no camera on a phone or a tablet", () => {
+    const bar = read("apps/mobile/src/components/TabBar.tsx");
+    expect(bar).not.toContain("useQuickCapture");
+    expect(bar).not.toContain("cameraButton");
+    expect(bar).not.toMatch(/icon=\{Camera\}/);
+  });
+
+  it("each project page opens the camera for that project", () => {
+    const project = read(`${APP}/project/[id]/index.tsx`).replace(/\s+/g, " ");
+    expect(project).toContain('key: "capture"');
+    expect(project).toContain("onPress: () => router.push(`/project/${id}/capture`)");
+  });
+
+  it("Home keeps its nearest-job capture, in the hero row and on the tablet rail", () => {
+    const home = read(`${APP}/(tabs)/index.tsx`).replace(/\s+/g, " ");
+    expect(home).toContain("const openCamera = useQuickCapture();");
+    expect(home).toContain('text="Capture photo"');
+    const rail = home.slice(home.indexOf("<ActionRail railOnly"));
+    expect(rail).toContain('key: "capture"');
+    expect(rail).toContain("onPress: openCamera");
+  });
+
+  it("no other screen reaches for the nearest-job camera", () => {
+    const users = [
+      "apps/mobile/src/components/TabBar.tsx",
+      "apps/mobile/src/components/AppMenu.tsx",
+      `${APP}/(tabs)/projects.tsx`,
+      `${APP}/(tabs)/gallery.tsx`,
+      `${APP}/(tabs)/account.tsx`,
+    ];
+    for (const file of users) {
+      expect(read(file), file).not.toContain("useQuickCapture");
     }
   });
 });

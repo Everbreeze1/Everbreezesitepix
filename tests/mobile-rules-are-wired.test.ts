@@ -88,7 +88,6 @@ const ALLOWED = new Map<string, string>([
     "push-view.ts:deviceLabel",
     "written for a 'signed in on' device list the phone does not have yet",
   ],
-  ["portfolio-view.ts:taglineError", "the phone does not edit the portfolio tagline"],
   ["push-view.ts:canPrompt", "the OS prompt is driven by expo-notifications' own permission state"],
   [
     "report-view.ts:comprehensiveTitleError",

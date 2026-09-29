@@ -508,9 +508,11 @@ export default function HomeScreen() {
 
           Not on a tablet or in landscape. There the page is a centred column
           and this row would sit in the middle of the screen, out of reach of
-          the thumb resting on the right edge. The camera is already the foot
-          of the tab rail on that edge, so New project floats beside it (see
-          the `ActionRail` at the end) and the row is not drawn at all.
+          the thumb resting on the right edge, so both actions float in the
+          lower right instead (see the `ActionRail` at the end) and the row is
+          not drawn at all. The tab bar no longer carries a camera of its own:
+          capture belongs to a job, so it is here on Home (nearest or most
+          recent job) and on each project page, and nowhere else.
         */}
         {rail ? null : (
           <View style={{ flexDirection: "row", gap: spacing.md, paddingHorizontal: spacing.lg }}>
@@ -634,6 +636,13 @@ export default function HomeScreen() {
             icon: Plus,
             label: "New project",
             onPress: () => router.push("/project-new"),
+          },
+          {
+            key: "capture",
+            icon: Camera,
+            label: "Capture photo",
+            hint: "Opens the camera on the nearest or most recent job",
+            onPress: openCamera,
           },
         ]}
       />

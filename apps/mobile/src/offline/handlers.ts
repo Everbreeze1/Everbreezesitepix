@@ -3,6 +3,8 @@ import { uploadProjectPhoto, type PhotoPhase } from "@/api/photos";
 import type { Coords } from "@/api/photo-meta";
 import { applyPhotoPatch, type PhotoPatch } from "@/api/photo-edit";
 import { applyProjectPatch } from "@/api/projects";
+import { queuedSiteVideoPath, saveSiteVideo } from "@/api/project-videos";
+import { queryClient } from "@/lib/query";
 import { saveSiteLog } from "@/api/site-logs";
 import { setTaskPhotoStatus } from "@/api/task-photos";
 import type { ProjectPatch } from "@/api/project-patch";
@@ -94,6 +96,22 @@ export function isPermanent(error: unknown): boolean {
   if (error instanceof PermanentError) return true;
   return error instanceof Error ? classify(error.message) : false;
 }
+
+/**
+ * A site video recorded in the camera's Video mode, queued.
+ *
+ * Queued like a photo so the camera is back the moment Stop is pressed: the
+ * recording is moved into app storage and this row delivers it whenever the
+ * network allows, with the queue banner showing it is still on the phone. It
+ * used to upload inline behind a full-screen "Uploading video 42%" wait.
+ */
+export type VideoUploadPayload = {
+  userId: string;
+  projectId: string;
+  durationSeconds: number;
+  /** When it was recorded (ISO), so a late send still captions the real time. */
+  recordedAt: string;
+};
 
 export type ChecklistItemPatchPayload = {
   itemId: string;
@@ -321,6 +339,25 @@ const handlers: Record<OutboxKind, Handler> = {
         completed_by: payload.userId,
       });
     }
+  },
+
+  video_upload: async (row) => {
+    const payload = JSON.parse(row.payload) as VideoUploadPayload;
+
+    if (!row.local_uri) {
+      throw new PermanentError("Queued video has no file on this device");
+    }
+
+    await saveSiteVideo({
+      userId: payload.userId,
+      projectId: payload.projectId,
+      localUri: row.local_uri,
+      durationSeconds: payload.durationSeconds,
+      recordedAt: payload.recordedAt,
+      // Keyed on the row id, so a repeated send converges on one video.
+      storagePath: queuedSiteVideoPath(payload.userId, payload.projectId, row.id),
+    });
+    void queryClient.invalidateQueries({ queryKey: ["project-videos", payload.projectId] });
   },
 
   checklist_item_patch: async (row) => {

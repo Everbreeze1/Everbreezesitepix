@@ -2,15 +2,14 @@ import { createContext, useCallback, useContext, useMemo, useState, type ReactNo
 import { Modal, Platform, Pressable, ScrollView, useWindowDimensions, View } from "react-native";
 import { router, usePathname } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useQuery } from "@tanstack/react-query";
 import * as WebBrowser from "expo-web-browser";
-import { checkIsPlatformAdmin } from "@/api/admin";
+import { canSeeGatedItem } from "@/lib/access";
 import { webAppLink } from "@/lib/api";
 import { APP_MENU, isMenuItemActive, type AppMenuIcon, type AppMenuItem } from "@/lib/app-menu";
+import { useAccountOwner, usePlatformAdmin } from "@/lib/use-access";
 import { radius, spacing, useTheme } from "@/theme";
 import {
   Activity,
-  Bell,
   Calendar,
   CircleQuestionMark,
   ExternalLink,
@@ -45,7 +44,6 @@ const ICONS: Record<AppMenuIcon, LucideIcon> = {
   templates: LayoutTemplate,
   team: Users,
   portfolio: Layers,
-  notifications: Bell,
   account: UserRound,
   help: CircleQuestionMark,
   feedback: LifeBuoy,
@@ -105,13 +103,9 @@ function AppMenuPanel({ visible, onClose }: { visible: boolean; onClose: () => v
   const { width } = useWindowDimensions();
   const pathname = usePathname();
 
-  // Same query, and the same cache entry, as the staff row on Account.
-  const adminQuery = useQuery({
-    queryKey: ["is-platform-admin"],
-    queryFn: checkIsPlatformAdmin,
-    staleTime: 10 * 60 * 1000,
-    enabled: visible,
-  });
+  // The same server answers the web sidebar reads: staff for Admin, owner for Portfolio.
+  const { isAdmin } = usePlatformAdmin(visible);
+  const { isOwner } = useAccountOwner(visible);
   const canOpenWeb = webAppLink("/") !== null;
 
   const go = (item: AppMenuItem) => {
@@ -137,7 +131,9 @@ function AppMenuPanel({ visible, onClose }: { visible: boolean; onClose: () => v
   const groups = APP_MENU.map((group) => ({
     ...group,
     items: group.items.filter(
-      (item) => (!item.adminOnly || adminQuery.data === true) && (!item.web || canOpenWeb),
+      (item) =>
+        canSeeGatedItem(item, { isPlatformAdmin: isAdmin, isAccountOwner: isOwner }) &&
+        (!item.web || canOpenWeb),
     ),
   })).filter((group) => group.items.length > 0);
 

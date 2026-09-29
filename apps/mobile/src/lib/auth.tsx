@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -11,6 +12,7 @@ import * as AuthSession from "expo-auth-session";
 import * as WebBrowser from "expo-web-browser";
 import type { Session, User } from "@supabase/supabase-js";
 import type { SocialProvider } from "./auth-providers";
+import { queryClient } from "./query";
 import { supabase } from "./supabase";
 
 /*
@@ -35,6 +37,24 @@ const AuthContext = createContext<AuthValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+
+  /*
+   * A different account means a different cache.
+   *
+   * The query cache is persisted to disk and outlives a sign-out, so without
+   * this the next person to sign in on the phone is served the last person's
+   * answers until each query goes stale: their team, their role, and whether
+   * they are platform staff. That last one is how a subscriber could see the
+   * Admin row after the staff test account signed out on the same device.
+   */
+  const lastUserId = useRef<string | null | undefined>(undefined);
+  const userId = session?.user?.id ?? null;
+  useEffect(() => {
+    if (loading) return;
+    const previous = lastUserId.current;
+    lastUserId.current = userId;
+    if (previous !== undefined && previous !== userId) queryClient.clear();
+  }, [userId, loading]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {

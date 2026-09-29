@@ -26,7 +26,6 @@ import { router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { useQuery } from "@tanstack/react-query";
 import { ApiClientError } from "@everlumen/api-client";
-import { checkIsPlatformAdmin } from "@/api/admin";
 import { getMyProfile } from "@/api/profile";
 import { getUnreadNotificationCount } from "@/api/notifications";
 import { getTrashCounts } from "@/api/trash";
@@ -34,6 +33,7 @@ import { pushStatusLabel } from "@/api/push-view";
 import { usePush } from "@/push/use-push";
 import { api, webAppLink } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useAccountOwner, usePlatformAdmin } from "@/lib/use-access";
 import { useQueue } from "@/offline/use-queue";
 import { spacing } from "@/theme";
 import {
@@ -124,11 +124,9 @@ export default function AccountScreen() {
    * costs them a trip to the web console, and showing it to a customer exposes
    * other customers' reports.
    */
-  const adminQuery = useQuery({
-    queryKey: ["is-platform-admin"],
-    queryFn: checkIsPlatformAdmin,
-    staleTime: 10 * 60 * 1000,
-  });
+  const { isAdmin } = usePlatformAdmin();
+  // The Portfolio row is the owner's, as it is in the menu. See `lib/access.ts`.
+  const { isOwner } = useAccountOwner();
 
   useEffect(() => {
     let cancelled = false;
@@ -340,13 +338,17 @@ export default function AccountScreen() {
             subtitle="The checklists your crews start from"
             onPress={() => router.push("/templates")}
           />
-          <RowDivider />
-          <ListRow
-            icon={Sparkles}
-            title="Portfolio"
-            subtitle="Your public mini-site of finished work"
-            onPress={() => router.push("/portfolio")}
-          />
+          {isOwner ? (
+            <>
+              <RowDivider />
+              <ListRow
+                icon={Sparkles}
+                title="Portfolio"
+                subtitle="Your public mini-site of finished work"
+                onPress={() => router.push("/portfolio")}
+              />
+            </>
+          ) : null}
         </ListGroup>
       </View>
 
@@ -363,15 +365,15 @@ export default function AccountScreen() {
         </ListGroup>
       </View>
 
-      {adminQuery.data === true ? (
+      {isAdmin ? (
         <>
           <SectionHeader title="Everlumen staff" />
           <View style={{ paddingHorizontal: spacing.lg }}>
             <ListGroup>
               <ListRow
-                icon={LifeBuoy}
-                title="Feedback queue"
-                subtitle="Read, answer and move customer reports"
+                icon={Server}
+                title="Admin console"
+                subtitle="Users, teams, feedback, health and security"
                 onPress={() => router.push("/admin")}
               />
             </ListGroup>

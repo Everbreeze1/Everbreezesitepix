@@ -5,8 +5,8 @@ import { useRightRail } from "@/theme";
 import { Icon } from "@/ui";
 
 /**
- * The four top-level surfaces, plus the camera the custom bar draws between
- * them.
+ * The four top-level surfaces. The bar carries no camera: capture belongs to a
+ * job, so it is on Home and on each project page (see `TabBar`).
  *
  * Which four is a judgement about the field, not a mirror of the web sidebar.
  * The bar holds the set someone standing on a site opens: what needs them, the
@@ -19,17 +19,17 @@ import { Icon } from "@/ui";
  * first thing the app is for, and it is not: knowing whether anything needs you
  * is. Activity moved out of the bar entirely and is reached from the menu, because
  * "what everyone else did" is a browse surface rather than a reason to open the
- * app, and because a fifth tab would push the camera off centre. It kept its
+ * app. It kept its
  * `/activity` path, so nothing that linked to it broke.
  *
  * `headerShown` is off because the parent stack draws the header. Two
  * navigators both rendering one would stack two title bars on every tab.
  *
  * On a tablet or in landscape there is no bar: `TabBar` floats a menu button
- * and the camera on the right edge instead, and these four are rows in the
+ * on the right edge instead, and these four are rows in the
  * app menu with everything else. `tabBarPosition` is "right" there so the
  * navigator reports no bottom bar height to the screens, and the floating
- * buttons take no width from them. Read here, from the same hook the bar uses,
+ * button takes no width from them. Read here, from the same hook the bar uses,
  * so the two can never disagree after a rotation.
  */
 export default function TabsLayout() {

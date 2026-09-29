@@ -1,37 +1,67 @@
 import { useCallback, useMemo, useState } from "react";
 import { Alert, View } from "react-native";
 import { Image } from "expo-image";
-import { Stack } from "expo-router";
+import { Redirect, Stack } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { can } from "@everlumen/shared/team-permissions";
 import {
   createBlank,
   createFromProject,
   deletePortfolioProject,
+  getMyPortfolio,
   listPortfolio,
+  reorderPortfolioShowcases,
   setPortfolioShare,
+  updatePortfolio,
   updatePortfolioProject,
+  updateShowcaseSite,
 } from "@/api/portfolio";
 import {
   isPortfolioProjectEmpty,
   isPublished,
   LAYOUTS,
+  movedIds,
   normaliseLayout,
+  portfolioPageUrl,
+  portfolioSiteUrl,
   portfolioSummary,
   portfolioTitleError,
   publishedCount,
+  siteListingLabel,
+  taglineError,
   type PortfolioProject,
 } from "@/api/portfolio-view";
 import { listProjects } from "@/api/projects";
 import { openShareSheet, publicUrl } from "@/api/sharing";
-import { getMyTeam } from "@/api/team";
+import { EmbedsPanel } from "@/components/portfolio/EmbedsPanel";
+import { SiteEditor } from "@/components/portfolio/SiteEditor";
+import { SwitchRow } from "@/components/portfolio/SwitchRow";
+import { webAppLink } from "@/lib/api";
+import { useAccountOwner } from "@/lib/use-access";
 import { radius, spacing, useTheme } from "@/theme";
-import { FolderKanban, ImageOff, Plus, Send, Share2, Sparkles, Trash2 } from "@/ui/icons";
+import {
+  ChevronDown,
+  ChevronUp,
+  Code,
+  ExternalLink,
+  FolderKanban,
+  Globe,
+  ImageOff,
+  Layers,
+  Plus,
+  Send,
+  Share2,
+  Sparkles,
+  Star,
+  Trash2,
+} from "@/ui/icons";
 import {
   ActionSheet,
   Badge,
   Button,
   Card,
+  Chip,
+  ChipGroup,
   EmptyState,
   ErrorState,
   Field,
@@ -65,26 +95,80 @@ import {
  * is a thing a desktop tool cannot offer at all.
  */
 export default function PortfolioScreen() {
+  /*
+   * The account owner's screen, and nobody else's. The Portfolio is the
+   * company's public face: the owner decides what is on it. The menu row and
+   * the Account row are hidden for everybody else too; this is the same rule
+   * for somebody who arrives by a link or a stale route.
+   */
+  const { isOwner, isLoading } = useAccountOwner();
+  if (isLoading) {
+    return (
+      <>
+        <Stack.Screen options={{ title: "Portfolio" }} />
+        <SkeletonList rows={4} />
+      </>
+    );
+  }
+  if (!isOwner) return <Redirect href="/" />;
+  return <OwnerPortfolio />;
+}
+
+type PortfolioTab = "site" | "projects" | "embeds";
+
+const TABS = [
+  { id: "site" as const, label: "Site", icon: Globe },
+  { id: "projects" as const, label: "Projects", icon: Layers },
+  { id: "embeds" as const, label: "Embeds", icon: Code },
+];
+
+function OwnerPortfolio() {
   const theme = useTheme();
   const queryClient = useQueryClient();
 
   const [picking, setPicking] = useState(false);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<PortfolioProject | null>(null);
+  const [listing, setListing] = useState<PortfolioProject | null>(null);
+  const [listingDraft, setListingDraft] = useState({
+    serviceType: "",
+    summary: "",
+    city: "",
+    state: "",
+    completedOn: "",
+  });
   const [actionsFor, setActionsFor] = useState<PortfolioProject | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
   const [draftTagline, setDraftTagline] = useState("");
   const [titleError, setTitleError] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
+  const [tab, setTab] = useState<PortfolioTab>("site");
+  const [publishing, setPublishing] = useState(false);
+  const [order, setOrder] = useState<string[] | null>(null);
 
+  const siteQuery = useQuery({ queryKey: ["my-portfolio"], queryFn: getMyPortfolio });
   const portfolioQuery = useQuery({ queryKey: ["portfolio"], queryFn: listPortfolio });
   const projectsQuery = useQuery({ queryKey: ["projects"], queryFn: listProjects });
-  const teamQuery = useQuery({ queryKey: ["my-team"], queryFn: getMyTeam });
 
-  const canManage = can(teamQuery.data?.myRole, "manage_templates");
+  // Only owners reach this screen, and an owner can always edit. `canEdit` is
+  // still read so an older API that says otherwise is believed.
+  const canManage = siteQuery.data?.canEdit ?? true;
+  const site = siteQuery.data?.portfolio ?? null;
+  const webBase = webAppLink("/")?.replace(/\/+$/, "") ?? null;
+  const siteUrl = portfolioSiteUrl(webBase, site?.slug);
+  const cards = useMemo(
+    () => new Map((siteQuery.data?.showcases ?? []).map((card) => [card.id, card])),
+    [siteQuery.data],
+  );
   // The service already returns these in the portfolio's running order. See
   // the note in `portfolio-view.ts` for why re-sorting here was wrong.
-  const pages = useMemo(() => portfolioQuery.data ?? [], [portfolioQuery.data]);
+  const pages = useMemo(() => {
+    const rows = portfolioQuery.data ?? [];
+    if (!order) return rows;
+    // A reorder shows at once and is kept until the refetch agrees with it.
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    return order.map((id) => byId.get(id)).filter((row): row is PortfolioProject => !!row);
+  }, [portfolioQuery.data, order]);
   const live = publishedCount(pages);
   const projects = useMemo(
     () => (projectsQuery.data ?? []).filter((project) => !project.archived),
@@ -95,6 +179,7 @@ export default function PortfolioScreen() {
     mutationFn: async (work: () => Promise<unknown>) => work(),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["portfolio"] });
+      void queryClient.invalidateQueries({ queryKey: ["my-portfolio"] });
       setFailure(null);
     },
     onError: (error: unknown) =>
@@ -109,6 +194,63 @@ export default function PortfolioScreen() {
     }
     await openShareSheet(url, project.title);
   }, []);
+
+  const refreshSite = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ["my-portfolio"] });
+    void queryClient.invalidateQueries({ queryKey: ["portfolio"] });
+  }, [queryClient]);
+
+  /** The whole site live or not, the web's publish switch. */
+  const togglePublished = useCallback(
+    async (published: boolean) => {
+      setPublishing(true);
+      try {
+        await updatePortfolio({ published });
+        setFailure(null);
+        refreshSite();
+      } catch (error) {
+        setFailure(error instanceof Error ? error.message : "Could not change publish state.");
+      } finally {
+        setPublishing(false);
+      }
+    },
+    [refreshSite],
+  );
+
+  const openSite = useCallback(async (url: string | null) => {
+    if (!url) {
+      setFailure("This build has no website address to open.");
+      return;
+    }
+    await WebBrowser.openBrowserAsync(url);
+  }, []);
+
+  /** Up or down one place; the web drags, a phone taps. */
+  const move = useCallback(
+    (id: string, direction: -1 | 1) => {
+      const previous = pages.map((page) => page.id);
+      const next = movedIds(previous, id, direction);
+      if (next === previous) return;
+      setOrder(next);
+      reorderPortfolioShowcases(next)
+        .then(() => {
+          void queryClient
+            .invalidateQueries({ queryKey: ["portfolio"] })
+            .then(() => setOrder(null));
+        })
+        .catch((error: unknown) => {
+          setOrder(null);
+          setFailure(error instanceof Error ? error.message : "Could not save the new order.");
+        });
+    },
+    [pages, queryClient],
+  );
+
+  const patchListing = useCallback(
+    (project: PortfolioProject, patch: { onSite?: boolean; featured?: boolean }) =>
+      run.mutate(() => updateShowcaseSite(project.id, patch)),
+    [run],
+  );
 
   const confirmDelete = useCallback(
     (project: PortfolioProject) => {
@@ -169,6 +311,28 @@ export default function PortfolioScreen() {
       if (isPublished(project)) {
         actions.push({ label: "Send the link", icon: Send, onPress: () => void share(project) });
       }
+      const pageUrl = portfolioPageUrl(webBase, site?.slug, project.slug);
+      actions.push({
+        label: "View on site",
+        icon: ExternalLink,
+        disabled: !site?.published || !project.on_site || !pageUrl || !isPublished(project),
+        onPress: () => void openSite(pageUrl),
+      });
+      actions.push({
+        label: "Site listing",
+        icon: Globe,
+        onPress: () => {
+          const card = cards.get(project.id);
+          setListingDraft({
+            serviceType: project.service_type ?? card?.service_type ?? "",
+            summary: card?.summary ?? "",
+            city: project.city ?? "",
+            state: project.state ?? "",
+            completedOn: card?.completed_on ?? "",
+          });
+          setListing(project);
+        },
+      });
       actions.push({
         label: "Rename",
         onPress: () => {
@@ -186,11 +350,11 @@ export default function PortfolioScreen() {
       });
       return actions;
     },
-    [confirmPublish, confirmDelete, share],
+    [confirmPublish, confirmDelete, share, webBase, site, openSite, cards],
   );
 
   const saveEdit = useCallback(() => {
-    const error = portfolioTitleError(draftTitle);
+    const error = portfolioTitleError(draftTitle) ?? taglineError(draftTagline);
     if (error) {
       setTitleError(error);
       return;
@@ -243,15 +407,79 @@ export default function PortfolioScreen() {
       <Screen
         scroll
         padded={false}
-        refreshing={portfolioQuery.isRefetching}
-        onRefresh={() => void portfolioQuery.refetch()}
+        refreshing={portfolioQuery.isRefetching || siteQuery.isRefetching}
+        onRefresh={() => {
+          void portfolioQuery.refetch();
+          void siteQuery.refetch();
+        }}
         bottomInset={spacing.xxl}
       >
-        <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.lg, gap: spacing.xs }}>
+        <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.lg, gap: spacing.md }}>
           <Text variant="caption" tone="muted">
-            A shareable mini-site of your best work, one page per project.
-            {pages.length > 0 ? ` ${live} of ${pages.length} live.` : ""}
+            A shareable mini-site of your best work, one page per project, plus embeds for your own
+            website.
+            {pages.length > 0 ? ` ${live} of ${pages.length} pages live.` : ""}
           </Text>
+
+          {siteQuery.isLoading ? (
+            <SkeletonList rows={1} />
+          ) : siteQuery.error ? (
+            <ErrorState
+              title="Could not load your portfolio site"
+              message={siteQuery.error instanceof Error ? siteQuery.error.message : undefined}
+              onRetry={() => void siteQuery.refetch()}
+            />
+          ) : site ? (
+            /*
+              The publish band, above the tabs as on the web: "is my site live,
+              and what is the link?" is the question people open this to answer.
+            */
+            <Card>
+              <View style={{ gap: spacing.md }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
+                  <Badge
+                    label={site.published ? "Live" : "Draft"}
+                    tone={site.published ? "success" : "neutral"}
+                    variant={site.published ? "soft" : "outline"}
+                  />
+                  <Text variant="caption" tone="muted" style={{ flex: 1 }} numberOfLines={2}>
+                    {site.published
+                      ? (siteUrl ?? `/p/${site.slug}`)
+                      : "Your site is not public yet. Publish to get a shareable link and turn on embeds."}
+                  </Text>
+                </View>
+                <SwitchRow
+                  label="Publish site"
+                  value={site.published}
+                  disabled={publishing || !canManage}
+                  onChange={(next) => void togglePublished(next)}
+                />
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }}>
+                  <Button
+                    label="View website"
+                    icon={ExternalLink}
+                    size="sm"
+                    variant="secondary"
+                    disabled={!site.published || !siteUrl}
+                    onPress={() => void openSite(siteUrl)}
+                  />
+                  <Button
+                    label="Share link"
+                    icon={Share2}
+                    size="sm"
+                    variant="secondary"
+                    disabled={!site.published || !siteUrl}
+                    onPress={() =>
+                      siteUrl
+                        ? void openShareSheet(siteUrl, site.business_name ?? "Our work")
+                        : undefined
+                    }
+                  />
+                </View>
+              </View>
+            </Card>
+          ) : null}
+
           {failure ? (
             <Text variant="caption" tone="destructive">
               {failure}
@@ -259,7 +487,25 @@ export default function PortfolioScreen() {
           ) : null}
         </View>
 
-        {portfolioQuery.isLoading ? (
+        <View style={{ paddingTop: spacing.md }}>
+          <ChipGroup label="Portfolio sections" options={TABS} value={tab} onChange={setTab} />
+        </View>
+
+        {tab === "site" ? (
+          <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.lg }}>
+            {site ? (
+              <SiteEditor site={site} onSaved={refreshSite} />
+            ) : siteQuery.isLoading ? null : (
+              <EmptyState icon={Globe} title="No portfolio site yet" />
+            )}
+          </View>
+        ) : tab === "embeds" ? (
+          <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.lg }}>
+            {site ? <EmbedsPanel site={site} webBase={webBase} onKeyRotated={refreshSite} /> : null}
+          </View>
+        ) : null}
+
+        {tab !== "projects" ? null : portfolioQuery.isLoading ? (
           <SkeletonList rows={4} />
         ) : portfolioQuery.error ? (
           <ErrorState
@@ -287,7 +533,7 @@ export default function PortfolioScreen() {
                 }
               />
             ) : (
-              pages.map((project) => (
+              pages.map((project, index) => (
                 <Card key={project.id}>
                   <View style={{ gap: spacing.md }}>
                     {project.cover_image_url ? (
@@ -346,12 +592,58 @@ export default function PortfolioScreen() {
                     ) : null}
 
                     {canManage ? (
-                      <Button
-                        label="Manage"
-                        size="sm"
-                        variant="secondary"
-                        onPress={() => setActionsFor(project)}
-                      />
+                      <>
+                        <SwitchRow
+                          label="On site"
+                          hint={
+                            siteListingLabel(project) === "Draft"
+                              ? "Publish this page before it can be listed."
+                              : `${siteListingLabel(project)}${
+                                  cards.get(project.id)?.service_type
+                                    ? ` · ${cards.get(project.id)?.service_type}`
+                                    : ""
+                                }`
+                          }
+                          value={Boolean(project.on_site)}
+                          disabled={run.isPending || !isPublished(project)}
+                          onChange={(next) => patchListing(project, { onSite: next })}
+                        />
+                        <View
+                          style={{ flexDirection: "row", alignItems: "center", gap: spacing.xs }}
+                        >
+                          <Button
+                            label="Manage"
+                            size="sm"
+                            variant="secondary"
+                            onPress={() => setActionsFor(project)}
+                          />
+                          <View style={{ flex: 1 }} />
+                          <IconButton
+                            icon={Star}
+                            tone={project.featured ? "safety" : "default"}
+                            accessibilityLabel={
+                              project.featured ? "Remove featured badge" : "Badge as featured"
+                            }
+                            surface={false}
+                            disabled={run.isPending}
+                            onPress={() => patchListing(project, { featured: !project.featured })}
+                          />
+                          <IconButton
+                            icon={ChevronUp}
+                            accessibilityLabel={`Move ${project.title} up`}
+                            surface={false}
+                            disabled={index === 0}
+                            onPress={() => move(project.id, -1)}
+                          />
+                          <IconButton
+                            icon={ChevronDown}
+                            accessibilityLabel={`Move ${project.title} down`}
+                            surface={false}
+                            disabled={index === pages.length - 1}
+                            onPress={() => move(project.id, 1)}
+                          />
+                        </View>
+                      </>
                     ) : null}
                   </View>
                 </Card>
@@ -377,14 +669,9 @@ export default function PortfolioScreen() {
               </Text>
             ) : null}
 
-            {/*
-              Layout and the long-form intro and outro stay on the web. They are
-              page-design choices made once, on a big screen, and a phone editor
-              for them would be worse than the browser the person already has.
-            */}
             <Text variant="caption" tone="muted">
-              Page layout, the intro and the closing text are edited on the web. What is here is
-              what you would want on site: build a page from a job, publish it, send the link.
+              Each page&apos;s photos, sections and long-form intro are edited in the page builder
+              on the website.
             </Text>
           </View>
         )}
@@ -483,6 +770,82 @@ export default function PortfolioScreen() {
           ) : null}
 
           <Button label="Save" fullWidth onPress={saveEdit} />
+        </View>
+      </Sheet>
+      <Sheet
+        visible={listing !== null}
+        onClose={() => setListing(null)}
+        title="Site listing"
+        subtitle="How this page is filed and filtered on your portfolio site."
+      >
+        <View style={{ gap: spacing.lg }}>
+          <Field
+            label="Service"
+            value={listingDraft.serviceType}
+            onChangeText={(next) => setListingDraft((d) => ({ ...d, serviceType: next }))}
+            placeholder="Roofing"
+          />
+          {(siteQuery.data?.serviceTypes ?? []).length > 0 ? (
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.xs }}>
+              {(siteQuery.data?.serviceTypes ?? []).map((type) => (
+                <Chip
+                  key={type}
+                  label={type}
+                  selected={listingDraft.serviceType === type}
+                  onPress={() => setListingDraft((d) => ({ ...d, serviceType: type }))}
+                />
+              ))}
+            </View>
+          ) : null}
+          <Field
+            label="Summary"
+            value={listingDraft.summary}
+            onChangeText={(next) => setListingDraft((d) => ({ ...d, summary: next }))}
+            hint="One or two lines under the card."
+            multiline
+            rows={3}
+          />
+          <Field
+            label="Town or city"
+            value={listingDraft.city}
+            onChangeText={(next) => setListingDraft((d) => ({ ...d, city: next }))}
+          />
+          <Field
+            label="County or state"
+            value={listingDraft.state}
+            onChangeText={(next) => setListingDraft((d) => ({ ...d, state: next }))}
+          />
+          <Field
+            label="Completed on"
+            value={listingDraft.completedOn}
+            onChangeText={(next) => setListingDraft((d) => ({ ...d, completedOn: next }))}
+            placeholder="YYYY-MM-DD"
+            error={
+              listingDraft.completedOn.trim() &&
+              !/^\d{4}-\d{2}-\d{2}$/.test(listingDraft.completedOn.trim())
+                ? "Use YYYY-MM-DD"
+                : undefined
+            }
+          />
+          <Button
+            label="Save listing"
+            fullWidth
+            onPress={() => {
+              const target = listing;
+              const done = listingDraft.completedOn.trim();
+              if (!target || (done && !/^\d{4}-\d{2}-\d{2}$/.test(done))) return;
+              setListing(null);
+              run.mutate(() =>
+                updateShowcaseSite(target.id, {
+                  serviceType: listingDraft.serviceType.trim() || null,
+                  summary: listingDraft.summary.trim() || null,
+                  city: listingDraft.city.trim() || null,
+                  state: listingDraft.state.trim() || null,
+                  completedOn: done || null,
+                }),
+              );
+            }}
+          />
         </View>
       </Sheet>
     </>

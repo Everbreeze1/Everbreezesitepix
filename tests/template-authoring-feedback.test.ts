@@ -63,7 +63,7 @@ describe("bug report subject", () => {
     const rules = read("apps/mobile/src/api/feedback-view.ts");
     const submit = read("apps/mobile/src/api/feedback.ts");
     const queueType = read("apps/mobile/src/api/admin-view.ts");
-    const queue = read("apps/mobile/app/(app)/admin.tsx");
+    const queue = read("apps/mobile/app/(app)/admin/feedback.tsx");
     const form = read("apps/mobile/app/(app)/report-issue.tsx");
 
     expect(rules).toContain("MAX_SUBJECT = 160");

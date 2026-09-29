@@ -67,28 +67,54 @@ export function siteVideoPath(userId: string, projectId: string, extension = "mp
 }
 
 /**
+ * Where a queued site video is stored: keyed on its outbox row, so a retry
+ * uploads over the same object instead of leaving a second copy behind.
+ */
+export function queuedSiteVideoPath(userId: string, projectId: string, rowId: string): string {
+  return `${userId}/${projectId}/${rowId}.mp4`;
+}
+
+/**
  * Save a recorded site video to a project: the file to `site-videos`, then
  * the `videos` row the project page lists, as web's `onVideoSave` does.
+ *
+ * Run by the offline queue (`video_upload`), never while someone waits on the
+ * camera. Repeatable: the upload overwrites the same path, and the row is only
+ * written when no row for that path exists yet, so a send that died between
+ * the insert and the queue marking it done does not list the video twice.
  *
  * The object is removed again when the row cannot be written. A video the
  * table never recorded is unreachable forever (every delete path keys off
  * `videos.storage_path`), and videos are the largest objects the app stores.
+ * The file is still on the phone, so a retry uploads it again.
  */
 export async function saveSiteVideo(input: {
   userId: string;
   projectId: string;
   localUri: string;
   durationSeconds: number;
+  /** Fixed by the caller for a repeatable send; a fresh one otherwise. */
+  storagePath?: string;
+  /** When it was recorded, for the caption; now when omitted. */
+  recordedAt?: string;
   onProgress?: (percent: number) => void;
 }): Promise<void> {
   const mimeType = "video/mp4";
-  const path = siteVideoPath(input.userId, input.projectId);
+  const path = input.storagePath ?? siteVideoPath(input.userId, input.projectId);
   await uploadWalkthroughVideo({
     localUri: input.localUri,
     storagePath: path,
     mimeType,
     onProgress: input.onProgress,
   });
+
+  const { data: existing, error: lookupError } = await supabase
+    .from("videos")
+    .select("id")
+    .eq("storage_path", path)
+    .limit(1);
+  if (lookupError) throw new Error(lookupError.message);
+  if ((existing as unknown[] | null)?.length) return;
 
   let size: number | null = null;
   try {
@@ -97,6 +123,7 @@ export async function saveSiteVideo(input: {
     size = null;
   }
 
+  const recordedAt = input.recordedAt ? new Date(input.recordedAt) : new Date();
   const { error } = await supabase.from("videos").insert({
     project_id: input.projectId,
     uploaded_by: input.userId,
@@ -104,7 +131,7 @@ export async function saveSiteVideo(input: {
     size_bytes: size,
     duration_seconds: Math.max(1, Math.round(input.durationSeconds)),
     transcript: null,
-    caption: `Site video ${new Date().toLocaleString()}`,
+    caption: `Site video ${recordedAt.toLocaleString()}`,
     mime_type: mimeType,
   } as never);
   if (error) {

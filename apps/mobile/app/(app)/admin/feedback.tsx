@@ -1,10 +1,8 @@
 import { useCallback, useMemo, useState } from "react";
 import { FlatList, View } from "react-native";
-import { Stack } from "expo-router";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { relativeTime } from "@everlumen/shared";
 import {
-  checkIsPlatformAdmin,
   getFeedbackSummary,
   listFeedback,
   replyToFeedback,
@@ -20,12 +18,12 @@ import {
   replyError,
   reportSummary,
   STATUS_LABELS,
-  WEB_ONLY_ADMIN,
   type FeedbackReport,
   type FeedbackStatus,
 } from "@/api/admin-view";
 import { spacing } from "@/theme";
-import { LifeBuoy, Send, Server } from "@/ui/icons";
+import { AdminGate } from "@/components/admin/AdminKit";
+import { LifeBuoy, Send } from "@/ui/icons";
 import {
   ActionSheet,
   Badge,
@@ -35,11 +33,7 @@ import {
   EmptyState,
   ErrorState,
   Field,
-  ListGroup,
-  ListRow,
-  RowDivider,
   Screen,
-  SectionHeader,
   Sheet,
   SkeletonList,
   Text,
@@ -63,7 +57,15 @@ import {
  * customers' reports; hiding it from a staff member costs them one trip to the
  * web console.
  */
-export default function AdminScreen() {
+export default function AdminFeedbackScreen() {
+  return (
+    <AdminGate title="Feedback queue">
+      <FeedbackQueue />
+    </AdminGate>
+  );
+}
+
+function FeedbackQueue() {
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<FeedbackStatus | "all">("new");
   const [actionsFor, setActionsFor] = useState<FeedbackReport | null>(null);
@@ -72,19 +74,9 @@ export default function AdminScreen() {
   const [formError, setFormError] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
 
-  const adminQuery = useQuery({
-    queryKey: ["is-platform-admin"],
-    queryFn: checkIsPlatformAdmin,
-    // Staff membership does not change during a session, and re-asking on every
-    // focus spends a request to learn what it already knows.
-    staleTime: 10 * 60 * 1000,
-  });
-  const isAdmin = adminQuery.data === true;
-
   const summaryQuery = useQuery({
     queryKey: ["feedback-summary"],
     queryFn: getFeedbackSummary,
-    enabled: isAdmin,
   });
 
   const queueQuery = useInfiniteQuery({
@@ -96,7 +88,6 @@ export default function AdminScreen() {
       }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last: FeedbackPage) => last.nextCursor ?? undefined,
-    enabled: isAdmin,
   });
 
   const reports = useMemo(
@@ -167,35 +158,10 @@ export default function AdminScreen() {
     [run],
   );
 
-  if (adminQuery.isLoading) {
-    return (
-      <>
-        <Stack.Screen options={{ title: "Admin" }} />
-        <SkeletonList rows={4} />
-      </>
-    );
-  }
-
-  /*
-   * Not an error state, and deliberately not a "you are not allowed" message
-   * either. Somebody who reaches this route without being staff should learn
-   * nothing about what is behind it.
-   */
-  if (!isAdmin) {
-    return (
-      <>
-        <Stack.Screen options={{ title: "Admin" }} />
-        <EmptyState icon={Server} title="Nothing here" body="This screen is for Everlumen staff." />
-      </>
-    );
-  }
-
-  const statusCounts = (summaryQuery.data?.status ?? {}) as Partial<Record<FeedbackStatus, number>>;
+  const statusCounts = summaryQuery.data?.status ?? {};
 
   return (
     <>
-      <Stack.Screen options={{ title: "Feedback queue" }} />
-
       <Screen padded={false} scroll={false} bottomInset={0}>
         <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.lg, gap: spacing.sm }}>
           <Text variant="bodyStrong">{queueHeadline(statusCounts)}</Text>
@@ -316,25 +282,6 @@ export default function AdminScreen() {
                     onPress={() => void queueQuery.fetchNextPage()}
                   />
                 ) : null}
-
-                {/*
-                  Said out loud. Without it a staff member concludes the console
-                  is half-built rather than deliberately narrow, and goes hunting
-                  for a delete button that is missing on purpose.
-                */}
-                <SectionHeader title="Still on the web" />
-                <ListGroup>
-                  {WEB_ONLY_ADMIN.map((item, index) => (
-                    <View key={item}>
-                      {index > 0 ? <RowDivider inset={false} /> : null}
-                      <ListRow title={item} />
-                    </View>
-                  ))}
-                </ListGroup>
-                <Text variant="caption" tone="muted">
-                  Each of those is irreversible or a configuration change, and a phone is the wrong
-                  place for both.
-                </Text>
               </View>
             }
           />

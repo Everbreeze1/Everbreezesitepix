@@ -12,6 +12,10 @@
  * Groups) and the activity feed, which used to be the Browse grid at the
  * bottom of Home, a place nobody scrolled to.
  *
+ * Notifications is not a row either. The bell sits in the header at the top of
+ * the page, where it shows the unread count, and a second copy in this list
+ * only repeated it (Jon, 2026-09-29: "leave it on top of the page").
+ *
  * Two web rows are not here, on purpose. "Upgrade" is a purchase, and an app
  * store will not ship an app that links out to one from its main menu; plan
  * and billing stay on Account, which opens the web page. Blueprints,
@@ -32,7 +36,6 @@ export type AppMenuIcon =
   | "templates"
   | "team"
   | "portfolio"
-  | "notifications"
   | "account"
   | "help"
   | "feedback"
@@ -53,6 +56,11 @@ export type AppMenuItem = {
   web?: boolean;
   /** Staff only, gated on the same server check as the Account row. */
   adminOnly?: boolean;
+  /**
+   * The account owner only (team role `owner`). The Portfolio is the company's
+   * public face, so invited members of any role do not get the row.
+   */
+  ownerOnly?: boolean;
 };
 
 export type AppMenuGroup = {
@@ -85,12 +93,11 @@ export const APP_MENU: AppMenuGroup[] = [
   },
   {
     title: "Client-facing",
-    items: [{ label: "Portfolio", href: "/portfolio", icon: "portfolio" }],
+    items: [{ label: "Portfolio", href: "/portfolio", icon: "portfolio", ownerOnly: true }],
   },
   {
     title: null,
     items: [
-      { label: "Notifications", href: "/notifications", icon: "notifications" },
       { label: "Account and settings", href: "/account", icon: "account", tab: true },
       { label: "Knowledge Base", href: "/help", icon: "help", web: true },
       { label: "Feedback", href: "/report-issue", icon: "feedback" },

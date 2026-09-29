@@ -83,6 +83,13 @@ export class File {
     files.set(target, files.get(this.uri) ?? 0);
   }
 
+  moveSync(destination: File | Directory): void {
+    const target = destination instanceof File ? destination.uri : join(destination.uri, "moved");
+    files.set(target, files.get(this.uri) ?? 0);
+    files.delete(this.uri);
+    this.uri = target;
+  }
+
   delete(): void {
     files.delete(this.uri);
   }

@@ -1,5 +1,18 @@
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  ADMIN_SECTIONS,
+  auditLabel,
+  deleteConfirmMatches,
+  feedbackStatusCounts,
+  formatBytes,
+  formatRate,
+  formatUsd,
+  normaliseFeedbackReport,
+  notificationError,
+  reasonError,
+  SHARE_KIND_LABELS,
   canReply,
   FEEDBACK_STATUSES,
   nextStatuses,
@@ -168,16 +181,107 @@ describe("queueHeadline", () => {
 });
 
 describe("WEB_ONLY_ADMIN", () => {
-  it("lists what the phone deliberately will not do", () => {
+  it("leaves only table work to the web, not the one-account controls", () => {
     /*
-     * Listed so the screen can say it. Without that, a staff member concludes
-     * the console is half-built rather than deliberately narrow, and goes
-     * hunting for a delete button that is missing on purpose.
+     * Jon, 2026-09-29: "That admin page should reflect the controls we have on
+     * the website." Deleting an account, granting platform admin and changing a
+     * plan are on the phone now, behind the same reason prompt and the same
+     * server capability checks. What stays on the web is selecting many rows
+     * at once and reading a chart.
      */
     expect(WEB_ONLY_ADMIN.length).toBeGreaterThan(0);
     const all = WEB_ONLY_ADMIN.join(" ").toLowerCase();
-    // The irreversible ones are the point of the list.
-    expect(all).toContain("deleting");
-    expect(all).toContain("platform admin");
+    expect(all).not.toContain("deleting a user");
+    expect(all).not.toContain("granting or removing platform admin");
+    expect(all).toContain("bulk");
+  });
+});
+
+describe("normaliseFeedbackReport", () => {
+  it("reads the camelCase shape listFeedback actually sends", () => {
+    /*
+     * The service sends `createdAt`, `userAgent` and a nested `reporter`. The
+     * phone read snake_case, so every report had no date, an Unknown origin
+     * and "Nobody to reply to".
+     */
+    const r = normaliseFeedbackReport({
+      id: "r9",
+      status: "triaged",
+      kind: "idea",
+      source: "page",
+      subject: "Dark mode",
+      description: "Please",
+      userAgent: "EverlumenApp v1 (ios 18) iPhone",
+      createdAt: "2026-09-01T00:00:00.000Z",
+      projectId: "p1",
+      projectName: "Riverside",
+      reporter: { id: "u7", name: "Sam", email: "sam@site.test" },
+    });
+    expect(r.created_at).toBe("2026-09-01T00:00:00.000Z");
+    expect(r.user_id).toBe("u7");
+    expect(r.email).toBe("sam@site.test");
+    expect(canReply(r)).toBe(true);
+    expect(reportOrigin(r)).toBe("(ios 18) iPhone");
+  });
+
+  it("still reads the old snake_case shape", () => {
+    expect(normaliseFeedbackReport(report()).user_id).toBe("u1");
+  });
+
+  it("reads the summary's byStatus counts", () => {
+    expect(feedbackStatusCounts({ byStatus: { new: 4 } })).toEqual({ new: 4 });
+    expect(feedbackStatusCounts(null)).toEqual({});
+  });
+});
+
+describe("the rest of the console", () => {
+  it("offers every section of the web's admin navigation", () => {
+    const web = readFileSync(
+      join(process.cwd(), "apps/web/src/features/admin/pages/AdminLayout.tsx"),
+      "utf8",
+    );
+    for (const section of ADMIN_SECTIONS) {
+      expect(web).toContain(`to: "/admin/${section.id}"`);
+      expect(
+        existsSync(join(process.cwd(), `apps/mobile/app/(app)/admin/${section.id}.tsx`)),
+        section.id,
+      ).toBe(true);
+    }
+    expect(ADMIN_SECTIONS.map((s) => s.id)).toHaveLength(8);
+  });
+
+  it("asks for a reason the way the web does, three characters at least", () => {
+    expect(reasonError("ok")).not.toBeNull();
+    expect(reasonError("  T-1 ")).toBeNull();
+  });
+
+  it("checks the typed email before a delete, case-insensitively", () => {
+    expect(deleteConfirmMatches("Sam@Site.test", " sam@site.test ")).toBe(true);
+    expect(deleteConfirmMatches("sam@site.test", "sam@site")).toBe(false);
+    expect(deleteConfirmMatches(null, "")).toBe(false);
+  });
+
+  it("checks a notification's audience before sending", () => {
+    const base = { title: "New", audience: "all" as const, teamId: null, userId: null };
+    expect(notificationError(base)).toBeNull();
+    expect(notificationError({ ...base, title: " " })).toContain("title");
+    expect(notificationError({ ...base, audience: "team" })).toContain("team");
+    expect(notificationError({ ...base, audience: "user", userId: "u1" })).toBeNull();
+  });
+
+  it("labels audit actions as the web does", () => {
+    expect(auditLabel("delete_user")).toBe("Deleted an account");
+    expect(auditLabel("view_user")).toBe("Viewed a user");
+  });
+
+  it("never calls a portfolio page a showcase in the share filter", () => {
+    expect(SHARE_KIND_LABELS.showcase.toLowerCase()).not.toContain("showcase");
+  });
+
+  it("formats sizes and money", () => {
+    expect(formatBytes(0)).toBe("0 B");
+    expect(formatBytes(1536)).toBe("1.5 KB");
+    expect(formatUsd(1.234)).toBe("$1.23");
+    expect(formatRate(0.051)).toBe("5.1%");
   });
 });
