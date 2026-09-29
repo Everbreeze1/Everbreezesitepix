@@ -355,6 +355,13 @@ export default function AccountScreen() {
               />
               <RowDivider />
               <ListRow
+                icon={Palette}
+                title="Company"
+                subtitle="Logo, watermark, contact details, storage"
+                onPress={() => router.push("/settings/company")}
+              />
+              <RowDivider />
+              <ListRow
                 icon={Building2}
                 title="Workspace settings"
                 subtitle="Business profile, labels"

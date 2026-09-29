@@ -1,6 +1,7 @@
 import { api } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 import type { PipelineStage, ProjectBoard, StagedProject } from "./pipeline-view";
+import type { StageInput } from "./pipeline-edit-view";
 
 /**
  * Pipelines: which stage each job is standing in.
@@ -20,6 +21,32 @@ import type { PipelineStage, ProjectBoard, StagedProject } from "./pipeline-view
 export async function listProjectBoards(): Promise<ProjectBoard[]> {
   const result = await api.rpc<{ boards?: ProjectBoard[] }>("listProjectBoards");
   return result?.boards ?? [];
+}
+
+/**
+ * New pipeline, with its stages. The same op the web's New Pipeline dialog
+ * calls; the server refuses a name another pipeline on the team already has.
+ */
+export async function createPipeline(name: string, stages: StageInput[]): Promise<ProjectBoard> {
+  return api.rpc<ProjectBoard>("createProjectBoard", { name, stages });
+}
+
+/**
+ * Rename a pipeline and set its stages, as the web's Pipeline Settings sheet
+ * does. `stages` is the whole list in order: a stage left out is deleted and
+ * its jobs fall out of the pipeline, they are not deleted with it.
+ */
+export async function updatePipeline(
+  id: string,
+  name: string,
+  stages: StageInput[],
+): Promise<ProjectBoard> {
+  return api.rpc<ProjectBoard>("updateProjectBoard", { id, name, stages });
+}
+
+/** Delete a pipeline and its stages. The projects stay, off any pipeline. */
+export async function deletePipeline(id: string): Promise<void> {
+  await api.rpc("deleteProjectBoard", { id });
 }
 
 /**

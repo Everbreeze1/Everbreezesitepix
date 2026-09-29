@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, ScrollView, useWindowDimensions, View } from "react-native";
 import * as WebBrowser from "expo-web-browser";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -22,14 +22,14 @@ import {
   nextSectionPosition,
   removePhoto,
   renumberSections,
-  sectionBodyToText,
   setPhotoCaption,
-  textToSectionBody,
   type CoverOptions,
   type ReportSection,
   type SectionPhoto,
 } from "@/api/report-builder-view";
 import { deleteReport, draftReportSummary } from "@/api/reports";
+import { docHtml, parseDoc, type DocBlock } from "@/api/rich-doc";
+import { FormattedTextEditor } from "@/components/FormattedTextEditor";
 import {
   isReportEmpty,
   isReportShared,
@@ -39,7 +39,7 @@ import {
   shareTogglePatch,
 } from "@/api/report-view";
 import { openShareSheet, publicUrl } from "@/api/sharing";
-import { radius, spacing, useLayout, useTheme } from "@/theme";
+import { spacing, useLayout, useTheme } from "@/theme";
 import {
   Check,
   ChevronDown,
@@ -837,9 +837,25 @@ function SectionCard({
   onAddPhotos: () => void;
   onPhotos: (photos: SectionPhoto[]) => void;
 }) {
-  const theme = useTheme();
-  const body = useMemo(() => sectionBodyToText(section.body), [section.body]);
-  const [text, setText] = useState(body.editable ? body.text : "");
+  /*
+   * The body in the web's format (the HTML its RichTextEditor writes), seeded
+   * once per section. What the phone cannot edit stays a locked block and is
+   * written back untouched; an `<hr>` is the web's page break and is offered
+   * from the toolbar here too.
+   */
+  const [blocks, setBlocks] = useState<DocBlock[]>(() => parseDoc(section.body));
+  // Compared in the phone's own serialisation, so an untouched body is never re-sent.
+  const savedBody = useRef(docHtml(parseDoc(section.body)));
+  const commitBody = useCallback(() => {
+    const html = docHtml(blocks);
+    if (html === savedBody.current) return;
+    savedBody.current = html;
+    onBody(html);
+  }, [blocks, onBody]);
+  // A change made only with the toolbar never blurs a field; leaving saves it.
+  const commitRef = useRef(commitBody);
+  commitRef.current = commitBody;
+  useEffect(() => () => commitRef.current(), []);
   const [captions, setCaptions] = useState<Record<string, string>>({});
   const [savedTitle, setSavedTitle] = useState(section.title);
 
@@ -891,33 +907,18 @@ function SectionCard({
           placeholder="e.g. Before work, Issues found"
         />
 
-        {body.editable ? (
-          <Field
-            label="Text"
-            value={text}
-            onChangeText={setText}
-            onBlur={() => onBody(textToSectionBody(text))}
+        <View style={{ gap: spacing.xs }}>
+          <Text variant="caption" tone="muted">
+            Text
+          </Text>
+          <FormattedTextEditor
+            blocks={blocks}
+            onChange={setBlocks}
+            onCommit={commitBody}
+            pageBreaks
             placeholder="Describe what is in this section"
-            hint="Start a line with ## for a heading or - for a bullet."
-            multiline
-            rows={5}
           />
-        ) : (
-          <View
-            style={{
-              gap: spacing.xs,
-              padding: spacing.md,
-              borderRadius: radius.md,
-              backgroundColor: theme.colors.secondary,
-            }}
-          >
-            <Text variant="body">{body.preview || "(formatted text)"}</Text>
-            <Text variant="caption" tone="muted">
-              This text has formatting the phone cannot rebuild, such as bold, links or tables, so
-              it is read-only here. Edit it on the web.
-            </Text>
-          </View>
-        )}
+        </View>
 
         {section.photos.map((photo, i) => (
           <View

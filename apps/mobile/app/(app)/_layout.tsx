@@ -158,6 +158,7 @@ export default function AppLayout() {
         <Stack.Screen name="map" options={{ title: "Map", ...MENU_DESTINATION }} />
         <Stack.Screen name="timeline" options={{ title: "Timeline", ...MENU_DESTINATION }} />
         <Stack.Screen name="pipelines" options={{ title: "Pipelines", ...MENU_DESTINATION }} />
+        <Stack.Screen name="schedule" options={{ title: "Schedule", ...MENU_DESTINATION }} />
         <Stack.Screen name="groups" options={{ title: "Groups", ...MENU_DESTINATION }} />
         <Stack.Screen name="portfolio" options={{ title: "Portfolio", ...MENU_DESTINATION }} />
         <Stack.Screen name="team" options={{ title: "Team", ...MENU_DESTINATION }} />

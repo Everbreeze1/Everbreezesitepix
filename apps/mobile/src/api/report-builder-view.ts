@@ -1,5 +1,3 @@
-import { parsePage, serialiseBlocks, newBlockId, type Block } from "./doc-blocks";
-
 /**
  * The report builder's rules, free of React and the network so they can be
  * tested.
@@ -111,76 +109,11 @@ export function setPhotoCaption(
   return existing.map((p) => (p.photo_id === photoId ? { ...p, caption } : p));
 }
 
-/* --------------------------------------------------- section body text ---- */
-
-/**
- * A section body as text the phone can edit, or a refusal.
- *
- * Bodies are HTML written by the web's rich text editor. The phone edits them
- * as plain lines: `## ` starts a heading, `- ` a bullet, anything else is a
- * paragraph. It only offers to edit when that round trip is exact, which is
- * the same promise `doc-blocks` makes for pages: a body with a table, a link or
- * bold text is shown read-only rather than flattened on save.
+/*
+ * Section bodies are HTML written by the web's rich text editor, and are
+ * edited on the phone in that same format by `FormattedTextEditor` (see
+ * `rich-doc.ts`), which keeps anything it cannot edit exactly as it was.
  */
-export type EditableBody = { editable: true; text: string } | { editable: false; preview: string };
-
-const HEADING_MARK = "## ";
-const BULLET_MARK = "- ";
-
-export function sectionBodyToText(html: string | null): EditableBody {
-  const source = (html ?? "").trim();
-  if (!source || source === "<p></p>") return { editable: true, text: "" };
-  const parsed = parsePage(source);
-  if (parsed.refusal) return { editable: false, preview: plainPreview(source) };
-  const lines: string[] = [];
-  for (const block of parsed.blocks) {
-    // A paragraph that already starts with a marker would come back as a
-    // different kind of block, so it is not something this can rebuild.
-    if (
-      block.kind === "paragraph" &&
-      (block.text.startsWith(HEADING_MARK) || block.text.startsWith(BULLET_MARK))
-    ) {
-      return { editable: false, preview: plainPreview(source) };
-    }
-    if (block.text.includes("\n")) return { editable: false, preview: plainPreview(source) };
-    if (block.kind === "heading") lines.push(`${HEADING_MARK}${block.text}`);
-    else if (block.kind === "bullet") lines.push(`${BULLET_MARK}${block.text}`);
-    else lines.push(block.text);
-  }
-  return { editable: true, text: lines.join("\n") };
-}
-
-/** The inverse: one block per non-empty line. */
-export function textToSectionBody(text: string): string {
-  const blocks: Block[] = [];
-  for (const raw of text.split("\n")) {
-    const line = raw.trim();
-    if (!line) continue;
-    if (line.startsWith(HEADING_MARK)) {
-      blocks.push({ id: newBlockId(), kind: "heading", text: line.slice(HEADING_MARK.length) });
-    } else if (line.startsWith(BULLET_MARK)) {
-      blocks.push({ id: newBlockId(), kind: "bullet", text: line.slice(BULLET_MARK.length) });
-    } else {
-      blocks.push({ id: newBlockId(), kind: "paragraph", text: line });
-    }
-  }
-  return serialiseBlocks(blocks);
-}
-
-function plainPreview(html: string): string {
-  return html
-    .replace(/<\/(p|h[1-6]|li|div)>/gi, "\n")
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
 
 /* -------------------------------------------------------- plan gating ---- */
 

@@ -51,12 +51,19 @@ export function SnippetSheet({
   onInsertHtml,
   /** The composer's current content, offered as something to save. */
   saveableHtml,
+  /**
+   * The screen edits formatted text (`FormattedTextEditor`), so any snippet can
+   * go in as its HTML: what the phone cannot edit stays a locked block rather
+   * than making the whole document read-only, and there is nothing to warn about.
+   */
+  insertsFormatted = false,
 }: {
   visible: boolean;
   onClose: () => void;
   onInsertBlocks: (blocks: Block[]) => void;
   onInsertHtml: (html: string) => void;
   saveableHtml?: string;
+  insertsFormatted?: boolean;
 }) {
   const theme = useTheme();
   // Inner lists shrink on a phone held on its side, so they fit in the sheet.
@@ -165,6 +172,11 @@ export function SnippetSheet({
   }
 
   function insert(snippet: TextSnippet) {
+    if (insertsFormatted) {
+      onInsertHtml(snippet.content_html ?? "");
+      onClose();
+      return;
+    }
     const plan = insertPlan(snippet);
     if (plan.mode === "blocks") {
       onInsertBlocks(plan.blocks);

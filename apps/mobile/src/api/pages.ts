@@ -145,13 +145,19 @@ export async function savePage(args: {
   expectedUpdatedAt: string;
   title?: string;
   contentHtml?: string;
-}): Promise<void> {
-  await api.rpc("updateProjectPage", {
+}): Promise<{ updatedAt: string | null }> {
+  /*
+   * The op answers with the row's new `updated_at`. It is the token for the
+   * NEXT save: sending the one the screen loaded again would be refused as a
+   * conflict with our own previous write.
+   */
+  const result = await api.rpc<{ updatedAt?: string }>("updateProjectPage", {
     pageId: args.pageId,
     expectedUpdatedAt: args.expectedUpdatedAt,
     ...(args.title !== undefined ? { title: args.title } : {}),
     ...(args.contentHtml !== undefined ? { contentHtml: args.contentHtml } : {}),
   });
+  return { updatedAt: result?.updatedAt ?? null };
 }
 
 export async function deletePage(pageId: string): Promise<void> {

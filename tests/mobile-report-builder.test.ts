@@ -10,10 +10,8 @@ import {
   normaliseSectionPhotos,
   removePhoto,
   renumberSections,
-  sectionBodyToText,
   setPhotoCaption,
   templatesLockedFor,
-  textToSectionBody,
 } from "../apps/mobile/src/api/report-builder-view";
 import { pagesForProject, searchReportIndex } from "../apps/mobile/src/api/report-index-view";
 
@@ -81,38 +79,20 @@ describe("section photos", () => {
 });
 
 describe("section body text", () => {
-  it("round trips paragraphs, headings and bullets", () => {
-    const html = textToSectionBody(
-      "## Findings\nWater under the sink.\n- Valve loose\n- Trap cracked",
-    );
-    expect(html).toBe(
-      "<h2>Findings</h2>\n<p>Water under the sink.</p>\n<ul><li>Valve loose</li><li>Trap cracked</li></ul>",
-    );
-    expect(sectionBodyToText(html)).toEqual({
-      editable: true,
-      text: "## Findings\nWater under the sink.\n- Valve loose\n- Trap cracked",
-    });
-  });
-
-  it("an empty body is editable", () => {
-    expect(sectionBodyToText(null)).toEqual({ editable: true, text: "" });
-    expect(sectionBodyToText("<p></p>")).toEqual({ editable: true, text: "" });
-  });
-
-  it("refuses rich text rather than flattening it on save", () => {
-    const body = sectionBodyToText("<p>Replace the <strong>main</strong> valve</p>");
-    expect(body.editable).toBe(false);
-    if (!body.editable) expect(body.preview).toBe("Replace the main valve");
-  });
-
-  it("refuses a paragraph that would come back as a bullet", () => {
-    expect(sectionBodyToText("<p>- not a list</p>").editable).toBe(false);
-  });
-
-  it("escapes what it writes", () => {
-    expect(textToSectionBody("Pipes < 2in & fittings")).toBe(
-      "<p>Pipes &lt; 2in &amp; fittings</p>",
-    );
+  it("is edited in the web's own format, keeping what the phone cannot edit", async () => {
+    // Replaces the old line-marker text box, which refused bold, links and
+    // tables outright. The format and its guarantees are in mobile-rich-doc.
+    const { parseDoc, serialiseDoc } = await import("../apps/mobile/src/api/rich-doc");
+    const body =
+      "<h2>Findings</h2><p>Replace the <strong>main</strong> valve</p><table><tr><td>t</td></tr></table><hr><ul><li><p>Trap cracked</p></li></ul>";
+    expect(serialiseDoc(parseDoc(body))).toBe(body);
+    expect(parseDoc(body).map((b) => b.kind)).toEqual([
+      "heading",
+      "paragraph",
+      "raw",
+      "raw",
+      "bullet",
+    ]);
   });
 });
 

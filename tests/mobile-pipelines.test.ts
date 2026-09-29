@@ -1,4 +1,7 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import * as edit from "../apps/mobile/src/api/pipeline-edit-view";
 import {
   boardColumnWidth,
   boardSummary,
@@ -237,5 +240,75 @@ describe("the board card helpers", () => {
   it("shows the edge of the next column on a phone", () => {
     expect(boardColumnWidth(390)).toBeLessThan(390 - 32);
     expect(boardColumnWidth(1024)).toBe(280);
+  });
+});
+
+describe("editing a pipeline", () => {
+  const read = (p: string) => readFileSync(join(process.cwd(), p), "utf8");
+
+  it("starts a new pipeline with the standard stages", () => {
+    const drafts = edit.defaultStageDrafts();
+    expect(drafts.map((d) => d.name)).toEqual([
+      "Lead/Quoted",
+      "Scheduled",
+      "In Progress",
+      "Completed",
+      "Invoiced",
+      "Paid",
+    ]);
+    expect(edit.looksStandard(drafts)).toBe(true);
+    expect(edit.stageDraftsIssue(drafts)).toBeNull();
+  });
+
+  it("adds, renames, recolours, reorders and removes stages", () => {
+    let drafts = edit.defaultStageDrafts().slice(0, 2);
+    drafts = edit.withNewStage(drafts);
+    expect(drafts).toHaveLength(3);
+    expect(edit.stageDraftsIssue(drafts)).toBe("Every stage needs a name.");
+    const key = drafts[2].key;
+    drafts = edit.renameDraft(drafts, key, "Paid");
+    // The bucket follows the name until somebody sets it.
+    expect(drafts[2].status).toBe("completed");
+    drafts = edit.patchDraft(drafts, key, { status: "on_hold", color: "#ef4444" });
+    drafts = edit.renameDraft(drafts, key, "Invoiced later");
+    expect(drafts[2]).toMatchObject({ status: "on_hold", color: "#ef4444" });
+    drafts = edit.moveDraft(drafts, key, -1);
+    expect(drafts.map((d) => d.name)).toEqual(["Lead/Quoted", "Invoiced later", "Scheduled"]);
+    expect(edit.moveDraft(drafts, drafts[0].key, -1)).toEqual(drafts);
+    drafts = edit.removeDraft(drafts, key);
+    expect(drafts.map((d) => d.name)).toEqual(["Lead/Quoted", "Scheduled"]);
+  });
+
+  it("never removes the last stage and refuses duplicate names", () => {
+    const one = edit.defaultStageDrafts().slice(0, 1);
+    expect(edit.removeDraft(one, one[0].key)).toHaveLength(1);
+    const dup = edit.renameDraft(edit.defaultStageDrafts(), edit.defaultStageDrafts()[0].key, "x");
+    const twice = edit.renameDraft(dup, dup[1].key, dup[0].name);
+    expect(edit.stageDraftsIssue(twice)).toContain("are both called");
+  });
+
+  it("keeps existing stage ids so their jobs stay attached, and counts the jobs a save drops", () => {
+    const original = [stage("a", 0), stage("b", 1)];
+    const drafts = edit.draftsFromStages(original);
+    expect(edit.draftsToInput(drafts).map((s) => s.id)).toEqual(["a", "b"]);
+    const kept = edit.removeDraft(drafts, "b");
+    expect(edit.droppedStageCount(original, kept, new Map([["b", 3]]))).toBe(3);
+    expect(edit.droppedStageWarning(1)).toContain("1 project will drop out");
+    const fresh = edit.draftsToInput(edit.withNewStage(kept));
+    expect("id" in fresh[1]).toBe(false);
+  });
+
+  it("goes through the web's ops, and asks before anything destructive", () => {
+    const api = read("apps/mobile/src/api/pipelines.ts");
+    expect(api).toContain('api.rpc<ProjectBoard>("createProjectBoard", { name, stages })');
+    expect(api).toContain('api.rpc<ProjectBoard>("updateProjectBoard", { id, name, stages })');
+    expect(api).toContain('api.rpc("deleteProjectBoard", { id })');
+    const sheet = read("apps/mobile/src/components/PipelineEditorSheet.tsx");
+    expect(sheet).toContain('"Delete this pipeline?"');
+    expect(sheet).toContain('"Remove stages that still hold work?"');
+    const screen = read("apps/mobile/app/(app)/pipelines.tsx");
+    expect(screen).toContain('accessibilityLabel="New pipeline"');
+    expect(screen).toContain('accessibilityLabel="Pipeline settings"');
+    expect(screen).toContain("<MenuButton />");
   });
 });
