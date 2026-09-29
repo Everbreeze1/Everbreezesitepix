@@ -10,6 +10,7 @@ import {
 } from "@/api/report-builder";
 import type { CoverOptions, PhotosPerPage } from "@/api/report-builder-view";
 import { defaultReportTitle, reportTitleError } from "@/api/report-view";
+import { ATTACHED_SECTION_TITLE, type AttachablePhoto } from "@/api/photo-selection-view";
 import { spacing } from "@/theme";
 import { Check, FileText, LayoutTemplate, Lock } from "@/ui/icons";
 import {
@@ -50,6 +51,7 @@ export function NewBuiltReportSheet({
   projectId,
   projectName,
   templatesLocked,
+  attachPhotos,
   onClose,
   onCreated,
 }: {
@@ -57,6 +59,8 @@ export function NewBuiltReportSheet({
   projectId: string;
   projectName: string;
   templatesLocked: boolean;
+  /** Selected photos to file under a "Photos" section, as the web's bulk bar does. */
+  attachPhotos?: readonly AttachablePhoto[];
   onClose: () => void;
   onCreated: (report: BuiltReport) => void;
 }) {
@@ -92,6 +96,7 @@ export function NewBuiltReportSheet({
         photosPerPage: perPage,
         cover,
         start,
+        attachPhotos,
       }),
     onSuccess: ({ report, warning }) => {
       if (warning) Alert.alert("Report created", warning);
@@ -142,6 +147,13 @@ export function NewBuiltReportSheet({
       }
     >
       <View style={{ gap: spacing.md }}>
+        {attachPhotos?.length ? (
+          <Text variant="caption" tone="muted">
+            {`${attachPhotos.length} selected photo${
+              attachPhotos.length === 1 ? "" : "s"
+            } will be filed under "${ATTACHED_SECTION_TITLE}". Rename or move them in the report.`}
+          </Text>
+        ) : null}
         <Field
           label="Title"
           value={title}

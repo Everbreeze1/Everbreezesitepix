@@ -58,6 +58,7 @@ export { default as Flag } from "lucide-react-native/dist/esm/icons/flag";
 export { default as FolderInput } from "lucide-react-native/dist/esm/icons/folder-input";
 export { default as FolderKanban } from "lucide-react-native/dist/esm/icons/folder-kanban";
 export { default as FolderPlus } from "lucide-react-native/dist/esm/icons/folder-plus";
+export { default as FilePlus } from "lucide-react-native/dist/esm/icons/file-plus";
 export { default as Folders } from "lucide-react-native/dist/esm/icons/folders";
 export { default as GitMerge } from "lucide-react-native/dist/esm/icons/git-merge";
 export { default as History } from "lucide-react-native/dist/esm/icons/history";
@@ -99,6 +100,9 @@ export { default as SquareCheckBig } from "lucide-react-native/dist/esm/icons/sq
 export { default as Star } from "lucide-react-native/dist/esm/icons/star";
 export { default as Tag } from "lucide-react-native/dist/esm/icons/tag";
 export { default as Trash2 } from "lucide-react-native/dist/esm/icons/trash-2";
+export { default as Printer } from "lucide-react-native/dist/esm/icons/printer";
+export { default as ListPlus } from "lucide-react-native/dist/esm/icons/list-plus";
+export { default as ClipboardPaste } from "lucide-react-native/dist/esm/icons/clipboard-paste";
 export { default as TriangleAlert } from "lucide-react-native/dist/esm/icons/triangle-alert";
 export { default as User } from "lucide-react-native/dist/esm/icons/user";
 export { default as UserPlus } from "lucide-react-native/dist/esm/icons/user-plus";
@@ -129,6 +133,7 @@ export { default as Minimize } from "lucide-react-native/dist/esm/icons/minimize
 export { default as StickyNote } from "lucide-react-native/dist/esm/icons/sticky-note";
 export { default as ZoomIn } from "lucide-react-native/dist/esm/icons/zoom-in";
 export { default as ZoomOut } from "lucide-react-native/dist/esm/icons/zoom-out";
+export { default as QrCode } from "lucide-react-native/dist/esm/icons/qr-code";
 export { default as Download } from "lucide-react-native/dist/esm/icons/download";
 export { default as EllipsisVertical } from "lucide-react-native/dist/esm/icons/ellipsis-vertical";
 export { default as Eye } from "lucide-react-native/dist/esm/icons/eye";

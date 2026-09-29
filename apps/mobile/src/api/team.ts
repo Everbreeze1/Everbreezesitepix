@@ -36,6 +36,8 @@ export type MyTeam = {
   memberLimit: number;
   subscriptionStatus: string;
   isActive: boolean;
+  /** Staff workspaces, which the web treats as Team regardless of plan. */
+  isInternal: boolean;
 };
 
 /**
@@ -58,6 +60,7 @@ export async function getMyTeam(): Promise<MyTeam> {
     memberLimit: result?.memberLimit ?? 2,
     subscriptionStatus: result?.subscriptionStatus ?? "inactive",
     isActive: result?.isActive ?? false,
+    isInternal: result?.isInternal ?? false,
   };
 }
 

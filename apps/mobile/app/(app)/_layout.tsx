@@ -129,6 +129,7 @@ export default function AppLayout() {
           options={{ presentation: "fullScreenModal", headerShown: false, ...MODAL_ANIMATION }}
         />
         <Stack.Screen name="project/[id]/trash" options={{ title: "Trash" }} />
+        <Stack.Screen name="project/[id]/qr" options={{ title: "QR code" }} />
         <Stack.Screen name="project/[id]/checklists" options={{ title: "Checklists" }} />
         <Stack.Screen name="project/[id]/tasks" options={{ title: "Tasks" }} />
         <Stack.Screen name="task/[id]" options={{ title: "Task" }} />

@@ -362,6 +362,21 @@ export default function GalleryScreen() {
 
   const showSearch = searchOpen || search.length > 0;
 
+  /*
+   * The selected photos for Save, Share, Report and Document. A library
+   * selection can span jobs; the hand-over refuses a report or a document for
+   * a mixed one and says why.
+   */
+  const handOver = useMemo(() => {
+    const picked = photos.filter((photo) => selected.has(photo.id));
+    return {
+      photos: picked,
+      projectIds: picked.map((photo) => photo.project_id),
+      projectName: picked[0]?.project_name ?? undefined,
+      onFinished: endSelection,
+    };
+  }, [photos, selected, endSelection]);
+
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
       {/*
@@ -648,6 +663,7 @@ export default function GalleryScreen() {
           }
           onCancel={endSelection}
           onAction={(action) => void applyBulk(action)}
+          handOver={handOver}
         />
       ) : null}
 

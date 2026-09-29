@@ -4,9 +4,9 @@ import type { TaskPriority, TaskStatus } from "./task-status";
 /**
  * Project tasks.
  *
- * Read and progress only. Creating, assigning, and re-prioritising are manager
- * actions that belong on the web board; what the field needs is to see what is
- * outstanding on this job and move it along.
+ * Read, raise, edit, progress and delete, through the same direct table
+ * writes the web board makes. Most writes go through the offline outbox; a
+ * delete does not (see `deleteTask`).
  */
 
 export type TaskRow = {
@@ -24,10 +24,16 @@ export type TaskRow = {
   photo_ids: string[] | null;
   position: number;
   updated_at: string;
+  /**
+   * Who raised it. Optional because rows built elsewhere (the photo viewer's
+   * select, an optimistic insert) do not carry it; it decides whether Delete is
+   * offered, and a missing value simply hides it.
+   */
+  created_by?: string | null;
 };
 
 const TASK_FIELDS =
-  "id, project_id, title, description, status, priority, due_date, completed_at, assignee_user_id, assignee_email, photo_ids, position, updated_at";
+  "id, project_id, title, description, status, priority, due_date, completed_at, assignee_user_id, assignee_email, photo_ids, position, updated_at, created_by";
 
 export async function listProjectTasks(projectId: string): Promise<TaskRow[]> {
   const { data, error } = await supabase
@@ -134,4 +140,22 @@ export async function applyTaskEdit(taskId: string, draft: TaskDraft): Promise<v
     .eq("id", taskId);
 
   if (error) throw new Error(error.message);
+}
+
+/**
+ * Delete a task, the same direct delete the web board runs.
+ *
+ * Not queued: a delete is deliberate and confirmed, and one that lands twenty
+ * minutes later, after somebody else has started working the task, is worse
+ * than one that fails now and says so. The deleted row is selected back because
+ * RLS refuses a delete by matching nothing rather than raising an error, and a
+ * task that vanished from the phone and reappears on the next refresh reads as
+ * a bug.
+ */
+export async function deleteTask(taskId: string): Promise<void> {
+  const { data, error } = await supabase.from("tasks").delete().eq("id", taskId).select("id");
+  if (error) throw new Error(error.message);
+  if (!data || data.length === 0) {
+    throw new Error("Only the person who created this task can delete it.");
+  }
 }

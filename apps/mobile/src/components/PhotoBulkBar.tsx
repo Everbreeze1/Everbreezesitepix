@@ -5,7 +5,18 @@ import { projectDisplayName } from "@everlumen/shared";
 import { formatAddress, listProjects } from "@/api/projects";
 import type { PhotoPhase } from "@/api/photos";
 import { spacing, useTheme } from "@/theme";
-import { FolderInput, MapPin, Sparkles, Tag, Trash2, X } from "@/ui/icons";
+import {
+  Download,
+  FileText,
+  FilePlus,
+  FolderInput,
+  MapPin,
+  Share2,
+  Sparkles,
+  Tag,
+  Trash2,
+  X,
+} from "@/ui/icons";
 import {
   Badge,
   Button,
@@ -19,6 +30,7 @@ import {
   SkeletonList,
   Text,
 } from "@/ui";
+import { usePhotoHandOver, type HandOverSelection } from "./PhotoHandOver";
 
 /**
  * The bar that appears when photos are selected.
@@ -27,10 +39,11 @@ import {
  * the grid is the whole screen and a floating bar covers the photos being
  * chosen. Docking costs one row of height and keeps every thumbnail visible.
  *
- * The four actions are the ones the web bulk bar offers that make sense in the
- * field. Download and Print are deliberately absent: a photo is already on the
- * phone that took it, and nobody prints from a job site. Share is Block A5 and
- * lands with the rest of sharing rather than alone here.
+ * The patch actions (phase, tags, move, trash) go through the offline outbox.
+ * The hand-over actions the web bar also offers (save, share links, a report,
+ * a document) live in `PhotoHandOver` and show when the screen passes the
+ * selected photos in `handOver`. Print is the one web action left out: nobody
+ * prints from a job site, and the phone has no print module.
  */
 
 export type PhotoBulkAction =
@@ -55,16 +68,21 @@ export function PhotoBulkBar({
   onAction,
   /** Hidden when the selection is already the whole of one project. */
   currentProjectId,
-  busy = false,
+  busy: patchBusy = false,
+  handOver,
 }: {
   count: number;
   onCancel: () => void;
   onAction: (action: PhotoBulkAction) => void;
   currentProjectId?: string;
   busy?: boolean;
+  /** The selected photos themselves, for Save, Share, Report and Document. */
+  handOver?: HandOverSelection;
 }) {
   const theme = useTheme();
   const [sheet, setSheet] = useState<"phase" | "tags" | "move" | null>(null);
+  const handOverFlow = usePhotoHandOver(handOver);
+  const busy = patchBusy || handOverFlow.busy;
 
   return (
     <>
@@ -97,6 +115,28 @@ export function PhotoBulkBar({
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={{ gap: spacing.sm, paddingLeft: spacing.sm }}
         >
+          {handOver ? (
+            <>
+              <Button
+                label="Save"
+                icon={Download}
+                size="sm"
+                variant="outline"
+                accessibilityHint="Saves the photos to this phone"
+                disabled={busy}
+                onPress={() => handOverFlow.start("save")}
+              />
+              <Button
+                label="Share"
+                icon={Share2}
+                size="sm"
+                variant="outline"
+                accessibilityHint="Sends a link to each photo"
+                disabled={busy}
+                onPress={() => handOverFlow.start("share")}
+              />
+            </>
+          ) : null}
           <Button
             label="Phase"
             size="sm"
@@ -112,6 +152,28 @@ export function PhotoBulkBar({
             disabled={busy}
             onPress={() => setSheet("tags")}
           />
+          {handOver ? (
+            <>
+              <Button
+                label="Report"
+                icon={FilePlus}
+                size="sm"
+                variant="outline"
+                accessibilityHint="Adds the photos to a new or existing report"
+                disabled={busy}
+                onPress={() => handOverFlow.start("report")}
+              />
+              <Button
+                label="Document"
+                icon={FileText}
+                size="sm"
+                variant="outline"
+                accessibilityHint="Makes a report, summary or document from these photos"
+                disabled={busy}
+                onPress={() => handOverFlow.start("document")}
+              />
+            </>
+          ) : null}
           {/*
             Placed before the destructive one and after the cheap ones, because
             it is the only button here that costs anything to press.
@@ -142,6 +204,8 @@ export function PhotoBulkBar({
           />
         </ScrollView>
       </View>
+
+      {handOverFlow.ui}
 
       <PhaseSheet
         visible={sheet === "phase"}

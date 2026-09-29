@@ -29,6 +29,7 @@ import {
   NotebookPen,
   PenLine,
   Send,
+  QrCode,
   Share2,
   SlidersHorizontal,
   Sparkles,
@@ -1299,6 +1300,12 @@ export default function ProjectDetailScreen() {
             currentProjectId={id}
             onCancel={endSelection}
             onAction={(action) => void applyBulk(action)}
+            handOver={{
+              photos: photos.filter((photo) => selected.has(photo.id)),
+              projectIds: [String(id)],
+              projectName: project?.name ?? undefined,
+              onFinished: endSelection,
+            }}
           />
         ) : selecting ? null : (
           <ActionRail
@@ -1409,6 +1416,16 @@ export default function ProjectDetailScreen() {
             itself, which is what a customer standing next to the tech needs.
           */
           { label: "Share public link", icon: Share2, onPress: () => void shareProject() },
+          /*
+            The web's QR code dialog, as its own screen: the code for this same
+            link, drawn big enough to scan off the phone.
+          */
+          {
+            label: "QR code",
+            icon: QrCode,
+            onPress: () =>
+              router.push({ pathname: "/project/[id]/qr", params: { id: String(id) } }),
+          },
           /*
             Only when there is something to switch off. Offering "Stop sharing"
             on a job that was never shared invites somebody to press it and

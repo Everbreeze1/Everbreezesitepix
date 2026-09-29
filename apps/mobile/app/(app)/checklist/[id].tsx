@@ -1,11 +1,21 @@
 import { useCallback, useMemo, useState } from "react";
-import { Pressable, RefreshControl, ScrollView, View } from "react-native";
+import { Alert, Keyboard, Pressable, RefreshControl, ScrollView, View } from "react-native";
+import * as WebBrowser from "expo-web-browser";
 import { router, useLocalSearchParams } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CHECKLIST_TYPE_LABELS, type ChecklistItemType } from "@everlumen/shared";
 import {
+  addChecklistItems,
+  applyItemPatch,
   choicesFor,
+  completeChecklist,
+  deleteChecklist,
+  deleteChecklistItem,
   getChecklist,
+  listItemPhotoIds,
+  patchChecklist,
+  saveChecklistAsTemplate,
+  saveChecklistItemPositions,
   hasResponse,
   parseNumericAnswer,
   responsePatch,
@@ -13,16 +23,60 @@ import {
   type ChecklistDetail,
   type ChecklistItem,
 } from "@/api/checklists";
+import {
+  canReopenRecord,
+  CHECKLIST_OVERRIDE_DETAIL,
+  checklistCompletedMessage,
+  checklistCompletionBlock,
+  checklistDeleteMessage,
+  checklistSnapshot,
+  completionRights,
+  overrideConfirm,
+  pendingAnswerWrites,
+  recordPrintLinks,
+  reopenChecklistPatch,
+} from "@/api/record-edit-rules";
+import { getProjectContributors } from "@/api/task-comments";
+import { memberLabel } from "@/api/task-mentions";
 import { isShareLive, openShareSheet, publicUrl, setRecordShareEnabled } from "@/api/sharing";
+import { moved, nextPosition, ordered, positionChanges } from "@/api/template-edit";
+import { ChecklistEditPanel, NameSheet } from "@/components/ChecklistEditor";
 import { ProjectSubPageHeader } from "@/components/ProjectSubPageHeader";
 import { QueueBanner } from "@/components/QueueBanner";
+import { webAppUrl } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useRecordAuthoring } from "@/lib/use-access";
 import { checklistItemRowId, type ChecklistItemPatchPayload } from "@/offline/handlers";
-import { enqueue } from "@/offline/outbox";
+import { enqueue, listRows } from "@/offline/outbox";
 import { refreshQueue, requestSync } from "@/offline/sync";
 import { HIT_TARGET, radius, spacing, useLayout, useTheme } from "@/theme";
-import { Camera, CircleCheck, Share2, Star } from "@/ui/icons";
-import { Badge, Button, Card, ErrorState, Field, Icon, IconButton, SkeletonList, Text } from "@/ui";
+import {
+  Camera,
+  Check,
+  CircleCheck,
+  LayoutTemplate,
+  PenLine,
+  Printer,
+  SquareCheckBig,
+  RotateCcw,
+  Share2,
+  Star,
+  Trash2,
+} from "@/ui/icons";
+import {
+  ActionSheet,
+  Badge,
+  Button,
+  Card,
+  ErrorState,
+  Field,
+  Icon,
+  IconButton,
+  KebabButton,
+  SkeletonList,
+  Text,
+  type SheetAction,
+} from "@/ui";
 
 /**
  * The checklist runner: the screen someone actually stands in a building and
@@ -36,7 +90,7 @@ import { Badge, Button, Card, ErrorState, Field, Icon, IconButton, SkeletonList,
  * numbers. It is a bar now.
  */
 export default function ChecklistRunnerScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, edit } = useLocalSearchParams<{ id: string; edit?: string }>();
   const theme = useTheme();
   // A form column, not a stretched phone layout, on a tablet.
   // Centred upright on a tablet; spread and clear of the notch on its side.
@@ -45,6 +99,14 @@ export default function ChecklistRunnerScreen() {
   const queryClient = useQueryClient();
 
   const [shareError, setShareError] = useState<string | null>(null);
+  // Edit mode holds everything that changes the checklist's shape, so the
+  // runner itself stays a plain list of answers. A blank checklist opens in it.
+  const [editing, setEditing] = useState(edit === "1");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [naming, setNaming] = useState<"rename" | "template" | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const { canAuthor, isManager } = useRecordAuthoring();
 
   const queryKey = useMemo(() => ["checklist", id], [id]);
 
@@ -158,6 +220,347 @@ export default function ChecklistRunnerScreen() {
     }
   }, [data, refetch]);
 
+  /*
+   * Three locks, as on the web. Structure is an authoring right and a sealed
+   * checklist is a compliance record, so neither may move once it is complete.
+   * Reopening is the reviewing half of the assignment loop and has its own rule.
+   */
+  const sealed = Boolean(data?.completed_at);
+  const canStructure = canAuthor && !sealed;
+  const mayReopen =
+    sealed &&
+    canReopenRecord(
+      {
+        assignedTo: data?.assigned_to ?? null,
+        assignedBy: data?.assigned_by ?? null,
+        createdBy: data?.created_by ?? null,
+        completedBy: data?.completed_by ?? null,
+      },
+      { userId: user?.id ?? null, isManager },
+    );
+
+  /**
+   * Run one structure edit: online, not queued, and refetched afterwards so the
+   * list shows what the server now holds. Returns whether it worked.
+   */
+  const runEdit = useCallback(
+    async (work: () => Promise<void>, fallback: string): Promise<boolean> => {
+      setBusy(true);
+      setEditError(null);
+      try {
+        await work();
+        await refetch();
+        void queryClient.invalidateQueries({ queryKey: ["project-checklists", data?.project_id] });
+        return true;
+      } catch (e) {
+        setEditError(e instanceof Error ? e.message : fallback);
+        return false;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [data?.project_id, queryClient, refetch],
+  );
+
+  const sortedItems = useMemo(() => ordered(data?.items ?? []), [data?.items]);
+
+  /*
+   * Names for the assignment sentences. The web says "Unknown" for an id it
+   * cannot name; "the assignee" reads better in a sentence and is what the
+   * shared rule falls back to anyway.
+   */
+  const membersQuery = useQuery({
+    queryKey: ["project-contributors", data?.project_id],
+    queryFn: () => getProjectContributors(data!.project_id),
+    enabled: Boolean(data?.project_id),
+    staleTime: 10 * 60 * 1000,
+  });
+  const nameOf = useCallback(
+    (userId: string | null) => {
+      const member = userId ? membersQuery.data?.find((m) => m.user_id === userId) : null;
+      return member ? memberLabel(member) : "";
+    },
+    [membersQuery.data],
+  );
+
+  const rights = completionRights(
+    { assignedTo: data?.assigned_to ?? null, assignedBy: data?.assigned_by ?? null },
+    { userId: user?.id ?? null, isManager },
+    nameOf(data?.assigned_to ?? null),
+  );
+  const completionBlock = checklistCompletionBlock(sortedItems);
+  const [completing, setCompleting] = useState(false);
+
+  /**
+   * Mark as complete, in the web's order: who may close it (an override is
+   * confirmed), every queued answer landed, required items answered, then one
+   * update that seals it with a copy of every answer.
+   */
+  const seal = useCallback(async () => {
+    if (!data || !user?.id) return;
+    const userId = user.id;
+    setCompleting(true);
+    setEditError(null);
+    try {
+      // Commit a note or number still being typed (they save on blur), then
+      // wait for the queue to carry every answer up, as the web flushes first.
+      Keyboard.dismiss();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const itemIds = data.items.map((item) => item.id);
+      let waiting = 0;
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        requestSync();
+        const rows = await listRows(500);
+        waiting = pendingAnswerWrites(
+          rows.map((row) => row.id),
+          itemIds,
+        );
+        if (waiting === 0) break;
+        await new Promise((resolve) => setTimeout(resolve, 400));
+      }
+      if (waiting > 0) {
+        setEditError(
+          `${waiting} answer${waiting === 1 ? " is" : "s are"} still waiting to upload. Complete the checklist once ${waiting === 1 ? "it has" : "they have"} synced.`,
+        );
+        return;
+      }
+
+      const fresh = (await refetch()).data ?? data;
+      const block = checklistCompletionBlock(fresh.items);
+      if (block) {
+        setEditError(block);
+        return;
+      }
+      const now = new Date().toISOString();
+      const photos = await listItemPhotoIds(fresh.items.map((item) => item.id));
+      await completeChecklist(fresh.id, {
+        completedAt: now,
+        userId,
+        snapshot: checklistSnapshot(fresh.name, now, fresh.items, photos),
+      });
+      await refetch();
+      void queryClient.invalidateQueries({ queryKey: ["project-checklists", fresh.project_id] });
+      setEditing(false);
+      Alert.alert(
+        "Checklist complete",
+        checklistCompletedMessage(fresh.assigned_by, userId, nameOf(fresh.assigned_by) || "They"),
+      );
+    } catch (e) {
+      setEditError(e instanceof Error ? e.message : "Could not complete the checklist");
+    } finally {
+      setCompleting(false);
+    }
+  }, [data, nameOf, queryClient, refetch, user?.id]);
+
+  const confirmComplete = useCallback(() => {
+    if (!data) return;
+    if (!rights.canComplete) {
+      Alert.alert("Cannot complete", rights.reason ?? "You can't mark this complete.");
+      return;
+    }
+    if (!rights.isOverride) {
+      void seal();
+      return;
+    }
+    const copy = overrideConfirm({
+      what: data.name,
+      who: nameOf(data.assigned_to) || "the assignee",
+      detail: CHECKLIST_OVERRIDE_DETAIL,
+    });
+    Alert.alert(copy.title, copy.description, [
+      { text: "Cancel", style: "cancel" },
+      { text: copy.confirmText, onPress: () => void seal() },
+    ]);
+  }, [data, nameOf, rights, seal]);
+
+  /** Print, as the workflow runner does: the web's print sheet in the in-app browser. */
+  const print = useCallback(async () => {
+    if (!data) return;
+    const links = recordPrintLinks({
+      kind: "checklists",
+      webOrigin: webAppUrl,
+      projectId: data.project_id,
+      recordId: data.id,
+      shareToken: data.share_token,
+      revokedAt: data.revoked_at,
+    });
+    if (links.publicUrl) {
+      void WebBrowser.openBrowserAsync(links.publicUrl);
+      return;
+    }
+    if (!links.webUrl) {
+      Alert.alert("Printing is not set up", "This build has no web address to print from.");
+      return;
+    }
+    const webUrl = links.webUrl;
+    Alert.alert(
+      "Print this checklist",
+      "Printing opens the checklist's print sheet in the browser. Its share link is off: turn it on to print without signing in, or open it on the web and sign in there.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Open on web", onPress: () => void WebBrowser.openBrowserAsync(webUrl) },
+        {
+          text: "Turn on link",
+          onPress: async () => {
+            try {
+              await setRecordShareEnabled("project_checklists", data.id, true);
+              await refetch();
+              const url = publicUrl("checklists", data.share_token);
+              if (url) void WebBrowser.openBrowserAsync(url);
+            } catch (e) {
+              Alert.alert(
+                "Could not turn on the link",
+                e instanceof Error ? e.message : "Try again when you have signal.",
+              );
+            }
+          },
+        },
+      ],
+    );
+  }, [data, refetch]);
+
+  const addItems = useCallback(
+    (labels: string[], itemType: string) =>
+      runEdit(async () => {
+        if (!data) return;
+        await addChecklistItems(data.id, labels, itemType, nextPosition(data.items));
+      }, "Could not add those items"),
+    [data, runEdit],
+  );
+
+  const moveItem = useCallback(
+    (item: ChecklistItem, by: -1 | 1) => {
+      const before = sortedItems;
+      const after = moved(before, item.id, by);
+      const changes = positionChanges(before, after);
+      if (changes.length === 0) return;
+      void runEdit(() => saveChecklistItemPositions(changes), "Could not move that item");
+    },
+    [runEdit, sortedItems],
+  );
+
+  const toggleRequired = useCallback(
+    (item: ChecklistItem) =>
+      void runEdit(
+        () => applyItemPatch(item.id, { required: !item.required }),
+        "Could not change that item",
+      ),
+    [runEdit],
+  );
+
+  const confirmDeleteItem = useCallback(
+    (item: ChecklistItem) => {
+      Alert.alert("Remove this item?", `"${item.label}" and any answer on it will be removed.`, [
+        { text: "Keep", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: () =>
+            void runEdit(() => deleteChecklistItem(item.id), "Could not remove that item"),
+        },
+      ]);
+    },
+    [runEdit],
+  );
+
+  const rename = useCallback(
+    async (name: string) => {
+      if (!data) return;
+      if (name === data.name) {
+        setNaming(null);
+        return;
+      }
+      const ok = await runEdit(() => patchChecklist(data.id, { name }), "Could not rename it");
+      if (ok) setNaming(null);
+    },
+    [data, runEdit],
+  );
+
+  const saveTemplate = useCallback(
+    async (name: string) => {
+      if (!data || !user?.id) return;
+      const userId = user.id;
+      const ok = await runEdit(
+        () => saveChecklistAsTemplate({ name, userId, items: data.items }),
+        "Could not save that template",
+      );
+      if (!ok) return;
+      setNaming(null);
+      void queryClient.invalidateQueries({ queryKey: ["checklist-templates"] });
+      Alert.alert("Template saved", `"${name}" is in your checklist templates now.`);
+    },
+    [data, queryClient, runEdit, user?.id],
+  );
+
+  const confirmReopen = useCallback(() => {
+    if (!data) return;
+    Alert.alert(
+      "Reopen this checklist?",
+      "The sealed record will be cleared so the checklist can be edited again. Anyone holding its share link will see the reopened version.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Reopen",
+          onPress: () =>
+            void runEdit(
+              () => patchChecklist(data.id, reopenChecklistPatch()),
+              "Could not reopen it",
+            ),
+        },
+      ],
+    );
+  }, [data, runEdit]);
+
+  const confirmDeleteChecklist = useCallback(() => {
+    if (!data) return;
+    Alert.alert("Delete this checklist?", checklistDeleteMessage(data.name, data.items.length), [
+      { text: "Keep", style: "cancel" },
+      {
+        text: "Delete checklist",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await deleteChecklist(data.id);
+            queryClient.removeQueries({ queryKey });
+            await queryClient.invalidateQueries({
+              queryKey: ["project-checklists", data.project_id],
+            });
+            if (router.canGoBack()) router.back();
+            else router.replace(`/project/${data.project_id}/checklists`);
+          } catch (e) {
+            Alert.alert(
+              "Could not delete the checklist",
+              e instanceof Error ? e.message : "Try again when you have signal.",
+            );
+          }
+        },
+      },
+    ]);
+  }, [data, queryClient, queryKey]);
+
+  const menuActions: SheetAction[] = [
+    { label: "Print or save as PDF", icon: Printer, onPress: () => void print() },
+    ...(canStructure
+      ? [{ label: "Rename", icon: PenLine, onPress: () => setNaming("rename") }]
+      : []),
+    ...(mayReopen ? [{ label: "Reopen checklist", icon: RotateCcw, onPress: confirmReopen }] : []),
+    ...(canAuthor
+      ? [
+          {
+            label: "Save as template",
+            icon: LayoutTemplate,
+            onPress: () => setNaming("template"),
+          },
+          {
+            label: "Delete checklist",
+            icon: Trash2,
+            destructive: true,
+            onPress: confirmDeleteChecklist,
+          },
+        ]
+      : []),
+  ];
+
   const items = data?.items ?? [];
   const done = items.filter((item) => item.completed_at).length;
   const outstandingRequired = items.filter((item) => item.required && !item.completed_at).length;
@@ -190,21 +593,40 @@ export default function ChecklistRunnerScreen() {
           }
           actions={
             data ? (
-              <IconButton
-                icon={Share2}
-                accessibilityLabel={
-                  isShareLive(data.share_token, data.revoked_at)
-                    ? "Share this checklist"
-                    : "Turn on sharing for this checklist"
-                }
-                /*
-                 * Tinted while the link is live, muted while it is off, so the
-                 * header says whether this record is currently public without
-                 * anyone having to open the sheet to find out.
-                 */
-                tone={isShareLive(data.share_token, data.revoked_at) ? "primary" : "muted"}
-                onPress={() => void shareChecklist()}
-              />
+              <View style={{ flexDirection: "row", gap: spacing.sm }}>
+                {canStructure ? (
+                  <IconButton
+                    icon={editing ? Check : PenLine}
+                    accessibilityLabel={editing ? "Done editing" : "Edit items"}
+                    tone="primary"
+                    onPress={() => {
+                      setEditError(null);
+                      setEditing((current) => !current);
+                    }}
+                  />
+                ) : null}
+                <IconButton
+                  icon={Share2}
+                  accessibilityLabel={
+                    isShareLive(data.share_token, data.revoked_at)
+                      ? "Share this checklist"
+                      : "Turn on sharing for this checklist"
+                  }
+                  /*
+                   * Tinted while the link is live, muted while it is off, so the
+                   * header says whether this record is currently public without
+                   * anyone having to open the sheet to find out.
+                   */
+                  tone={isShareLive(data.share_token, data.revoked_at) ? "primary" : "muted"}
+                  onPress={() => void shareChecklist()}
+                />
+                {menuActions.length > 0 ? (
+                  <KebabButton
+                    accessibilityLabel="Checklist actions"
+                    onPress={() => setMenuOpen(true)}
+                  />
+                ) : null}
+              </View>
             ) : null
           }
         />
@@ -244,19 +666,119 @@ export default function ChecklistRunnerScreen() {
               />
             }
           >
-            {items.map((item) => (
-              <ChecklistRow
-                key={item.id}
-                item={item}
-                projectId={data.project_id}
-                onSetResponse={setResponse}
-                onToggleDone={toggleDone}
-                onSetNote={setNote}
+            {sealed ? (
+              <Card
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: spacing.md,
+                  borderColor: theme.colors.success,
+                }}
+              >
+                <Icon icon={CircleCheck} size="md" tone="success" />
+                <Text variant="body" style={{ flex: 1 }}>
+                  Completed. The record is sealed, so answers cannot change until it is reopened.
+                </Text>
+                {mayReopen ? (
+                  <Button
+                    label="Reopen"
+                    icon={RotateCcw}
+                    variant="outline"
+                    size="sm"
+                    disabled={busy}
+                    onPress={confirmReopen}
+                  />
+                ) : null}
+              </Card>
+            ) : null}
+
+            {editing && canStructure ? (
+              <ChecklistEditPanel
+                items={sortedItems}
+                busy={busy}
+                error={editError}
+                onAdd={addItems}
+                onDelete={confirmDeleteItem}
+                onMove={moveItem}
+                onToggleRequired={toggleRequired}
               />
-            ))}
+            ) : (
+              <View
+                // A sealed checklist is read, not filled: the same lock the web
+                // runner applies.
+                pointerEvents={sealed ? "none" : "auto"}
+                style={{ gap: spacing.md, opacity: sealed ? 0.75 : 1 }}
+              >
+                {sortedItems.map((item) => (
+                  <ChecklistRow
+                    key={item.id}
+                    item={item}
+                    projectId={data.project_id}
+                    onSetResponse={setResponse}
+                    onToggleDone={toggleDone}
+                    onSetNote={setNote}
+                  />
+                ))}
+              </View>
+            )}
+
+            {!sealed && !editing ? (
+              <Card style={{ gap: spacing.sm }}>
+                {completionBlock ? (
+                  <Text variant="caption" tone="safety">
+                    {completionBlock}
+                  </Text>
+                ) : null}
+                {!rights.canComplete && rights.reason ? (
+                  <Text variant="caption" tone="muted">
+                    {rights.reason}
+                  </Text>
+                ) : null}
+                <Button
+                  label={
+                    rights.isOverride
+                      ? `Complete for ${nameOf(data.assigned_to) || "the assignee"}`
+                      : "Mark as complete"
+                  }
+                  icon={SquareCheckBig}
+                  fullWidth
+                  loading={completing}
+                  disabled={Boolean(completionBlock) || !rights.canComplete || busy}
+                  onPress={confirmComplete}
+                />
+              </Card>
+            ) : null}
+
+            {!editing && editError ? (
+              <Text variant="caption" tone="destructive">
+                {editError}
+              </Text>
+            ) : null}
           </ScrollView>
         )}
       </View>
+
+      <ActionSheet
+        visible={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        title={data?.name}
+        actions={menuActions}
+      />
+
+      <NameSheet
+        visible={naming !== null}
+        title={naming === "template" ? "Save as template" : "Rename checklist"}
+        subtitle={
+          naming === "template" ? "Reuse this checklist's items on other projects." : undefined
+        }
+        label={naming === "template" ? "Template name" : "Name"}
+        initial={data?.name ?? ""}
+        confirmLabel={naming === "template" ? "Save template" : "Save"}
+        busy={busy}
+        error={naming ? editError : null}
+        onClose={() => setNaming(null)}
+        onSubmit={(name) => void (naming === "template" ? saveTemplate(name) : rename(name))}
+      />
     </>
   );
 }

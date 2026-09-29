@@ -439,3 +439,33 @@ export async function createReportFromWalkthrough(
     alreadyExisted: Boolean(result?.alreadyExisted),
   };
 }
+
+/**
+ * Rename a walkthrough and edit its notes (the write-up kept on the row).
+ *
+ * The web detail page's Save: a direct RLS update of `title` and
+ * `summary_markdown`, nothing else. The AI Summary is a separate row with its
+ * own editor and is not touched.
+ */
+export async function updateWalkthroughDetails(
+  walkthroughId: string,
+  patch: { title: string; summary_markdown: string | null },
+): Promise<void> {
+  const { error } = await supabase
+    .from("walkthroughs")
+    .update(patch as never)
+    .eq("id", walkthroughId);
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Delete a walkthrough recording.
+ *
+ * The web's delete: the row goes, and with it the recording's link from this
+ * job. The photos taken along the way stay in the project and any AI Summary
+ * written from it stays under Walkthroughs, which is what the confirm says.
+ */
+export async function deleteWalkthrough(walkthroughId: string): Promise<void> {
+  const { error } = await supabase.from("walkthroughs").delete().eq("id", walkthroughId);
+  if (error) throw new Error(error.message);
+}

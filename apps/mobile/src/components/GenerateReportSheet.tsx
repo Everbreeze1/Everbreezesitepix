@@ -55,6 +55,7 @@ export function GenerateReportSheet({
   projectName,
   scope = "reports",
   title = "New report",
+  photoIds,
   onClose,
   onOpenBuiltReport,
 }: {
@@ -63,6 +64,12 @@ export function GenerateReportSheet({
   scope?: "reports" | "all";
   /** "Create" when it is the project header's menu, which also makes documents. */
   title?: string;
+  /**
+   * Photos already chosen, from a selection on a grid. The kinds that pick
+   * photos open with these ticked, as the web's menu does from its bulk bar,
+   * rather than asking for the photos twice.
+   */
+  photoIds?: string[];
   onClose: () => void;
   /** Where a hand-built report opens. Defaults to its own screen. */
   onOpenBuiltReport?: (report: BuiltReport) => void;
@@ -298,6 +305,7 @@ export function GenerateReportSheet({
         visible={step === "summary"}
         projectId={projectId}
         title="Photos for the summary"
+        initial={photoIds}
         max={MAX_GENERATE_PHOTOS}
         confirmLabel={summary.isPending ? "Writing the summary" : "Write the summary"}
         busy={summary.isPending}
@@ -320,6 +328,7 @@ export function GenerateReportSheet({
         visible={step === "photo_report"}
         projectId={projectId}
         title="Photos for the report"
+        initial={photoIds}
         max={MAX_GENERATE_PHOTOS}
         confirmLabel={photoReport.isPending ? "Writing the report" : "Generate report"}
         busy={photoReport.isPending}

@@ -4,9 +4,9 @@ import { isItemComplete, type WorkflowItemLike, type WorkflowPhaseLike } from ".
 /**
  * Project workflows: multi-phase job runs with sign-off.
  *
- * Read and advance only on mobile. Designing a workflow, adding phases, and
- * changing what a phase requires are manager actions that stay on the web app;
- * the field needs to see where the job is and move it forward.
+ * Read, advance, reopen and delete on mobile. Designing a workflow, adding
+ * phases, and changing what a phase requires stay on the web app; the field
+ * needs to see where the job is and move it forward.
  */
 
 export type WorkflowSummary = {
@@ -46,6 +46,9 @@ export type WorkflowDetail = {
   project_id: string;
   description: string | null;
   completed_at: string | null;
+  /** Who holds it and who handed it over: the completion rule reads both. */
+  assigned_to: string | null;
+  assigned_by: string | null;
   /*
    * Same pair as a checklist: the token is minted with the row and kept, and
    * sharing is switched off with a revoked timestamp rather than by destroying
@@ -120,7 +123,9 @@ export async function listProjectWorkflows(projectId: string): Promise<WorkflowS
 export async function getWorkflow(workflowId: string): Promise<WorkflowDetail | null> {
   const { data: workflow, error } = await supabase
     .from("project_workflows")
-    .select("id, name, project_id, description, completed_at, share_token, revoked_at")
+    .select(
+      "id, name, project_id, description, completed_at, assigned_to, assigned_by, share_token, revoked_at",
+    )
     .eq("id", workflowId)
     .maybeSingle();
 
@@ -181,5 +186,50 @@ export async function applyPhasePatch(
     .eq("id", phaseId);
   // The completion trigger raises its own sentence for an unauthorised
   // sign-off; pass it through rather than replacing it with a generic message.
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Reopen a completed workflow, as the web's Reopen does: clear `completed_at`.
+ *
+ * Not queued. It changes what the shared link and the printout say, so it
+ * should either happen now or visibly fail.
+ */
+export async function reopenWorkflow(workflowId: string): Promise<void> {
+  const { error } = await supabase
+    .from("project_workflows")
+    .update({ completed_at: null } as never)
+    .eq("id", workflowId);
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Delete a workflow and, by cascade, its phases and steps.
+ *
+ * Selected back because RLS refuses a delete by matching nothing, which would
+ * otherwise look like success.
+ */
+export async function deleteWorkflow(workflowId: string): Promise<void> {
+  const { data, error } = await supabase
+    .from("project_workflows")
+    .delete()
+    .eq("id", workflowId)
+    .select("id");
+  if (error) throw new Error(error.message);
+  if (!data || data.length === 0) {
+    throw new Error("You do not have permission to delete this workflow.");
+  }
+}
+
+/**
+ * Mark a workflow complete: the web writes `completed_at` and nothing else.
+ * The completion trigger refuses someone who may not close it, and its
+ * sentence is passed through.
+ */
+export async function completeWorkflow(workflowId: string, completedAt: string): Promise<void> {
+  const { error } = await supabase
+    .from("project_workflows")
+    .update({ completed_at: completedAt } as never)
+    .eq("id", workflowId);
   if (error) throw new Error(error.message);
 }
