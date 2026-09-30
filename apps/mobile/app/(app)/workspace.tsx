@@ -15,7 +15,7 @@ import { can } from "@everlumen/shared/team-permissions";
 import { getMyTeam } from "@/api/team";
 import { saveCompanyProfile, type CompanyProfilePatch } from "@/api/workspace";
 import { spacing } from "@/theme";
-import { PenLine, Tag } from "@/ui/icons";
+import { Building2, PenLine, Tag } from "@/ui/icons";
 import {
   Button,
   Chip,
@@ -215,6 +215,13 @@ export default function WorkspaceScreen() {
         <SectionHeader title="Elsewhere" />
         <View style={{ paddingHorizontal: spacing.lg }}>
           <ListGroup>
+            <ListRow
+              icon={Building2}
+              title="Company details and branding"
+              subtitle="Logo, watermark, contact details, report layout"
+              onPress={() => router.push("/settings/company")}
+            />
+            <RowDivider />
             <ListRow
               icon={Tag}
               title="Labels"

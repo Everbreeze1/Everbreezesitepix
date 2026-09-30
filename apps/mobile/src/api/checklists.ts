@@ -40,6 +40,11 @@ export type ChecklistDetail = {
   name: string;
   project_id: string;
   completed_at: string | null;
+  /** Who made it, holds it, handed it over and sealed it: the reopen rule reads all four. */
+  created_by: string | null;
+  assigned_to: string | null;
+  assigned_by: string | null;
+  completed_by: string | null;
   /*
    * Minted when the checklist is created and kept for good. Sharing is switched
    * off by stamping a revoked timestamp, not by destroying the token, so turning
@@ -98,7 +103,9 @@ export async function listProjectChecklists(projectId: string): Promise<Checklis
 export async function getChecklist(checklistId: string): Promise<ChecklistDetail | null> {
   const { data: list, error } = await supabase
     .from("project_checklists")
-    .select("id, name, project_id, completed_at, share_token, revoked_at")
+    .select(
+      "id, name, project_id, completed_at, created_by, assigned_to, assigned_by, completed_by, share_token, revoked_at",
+    )
     .eq("id", checklistId)
     .maybeSingle();
 
@@ -151,5 +158,180 @@ export async function attachPhotoToItem(
   const { error } = await supabase
     .from("checklist_item_photos")
     .insert({ item_id: itemId, photo_id: photoId, created_by: userId });
+  if (error) throw new Error(error.message);
+}
+
+/*
+ * Structure edits: the Edit mode of the runner.
+ *
+ * Direct table writes, the same ones `ChecklistDocumentPage` makes on the web.
+ * None are queued. Adding, removing and reordering items is deliberate office
+ * work done with a connection, and an item that appears twenty minutes later
+ * while someone else is working the list is worse than a write that fails now.
+ * The authoring trigger refuses these for anyone without the right, and its
+ * sentence is passed through.
+ */
+
+/** Append items, in order, after `startPosition`. Returns the new rows. */
+export async function addChecklistItems(
+  checklistId: string,
+  labels: string[],
+  itemType: string,
+  startPosition: number,
+): Promise<ChecklistItem[]> {
+  if (labels.length === 0) return [];
+  const { data, error } = await supabase
+    .from("project_checklist_items")
+    .insert(
+      labels.map((label, index) => ({
+        checklist_id: checklistId,
+        label,
+        position: startPosition + index,
+        item_type: itemType,
+      })) as never,
+    )
+    .select(ITEM_FIELDS);
+  if (error) throw new Error(error.message);
+  return (data as ChecklistItem[]) ?? [];
+}
+
+export async function deleteChecklistItem(itemId: string): Promise<void> {
+  const { error } = await supabase.from("project_checklist_items").delete().eq("id", itemId);
+  if (error) throw new Error(error.message);
+}
+
+/** Write the positions that changed after a move. */
+export async function saveChecklistItemPositions(
+  changes: { id: string; position: number }[],
+): Promise<void> {
+  const results = await Promise.all(
+    changes.map((change) =>
+      supabase
+        .from("project_checklist_items")
+        .update({ position: change.position } as never)
+        .eq("id", change.id),
+    ),
+  );
+  const failed = results.find((result) => result.error);
+  if (failed?.error) throw new Error(failed.error.message);
+}
+
+export async function patchChecklist(
+  checklistId: string,
+  patch: Record<string, unknown>,
+): Promise<void> {
+  const { error } = await supabase
+    .from("project_checklists")
+    .update(patch as never)
+    .eq("id", checklistId);
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Delete a checklist and, by cascade, its items.
+ *
+ * The row is selected back because RLS refuses by matching nothing, and a
+ * checklist that disappears and returns on the next refresh reads as a bug.
+ */
+export async function deleteChecklist(checklistId: string): Promise<void> {
+  const { data, error } = await supabase
+    .from("project_checklists")
+    .delete()
+    .eq("id", checklistId)
+    .select("id");
+  if (error) throw new Error(error.message);
+  if (!data || data.length === 0) {
+    throw new Error("You do not have permission to delete this checklist.");
+  }
+}
+
+/** The name the web gives a blank checklist until someone renames it. */
+export const UNTITLED_CHECKLIST = "Untitled checklist";
+
+/** Start an empty checklist on a project, as the web's "Blank checklist" does. */
+export async function createBlankChecklist(projectId: string, userId: string): Promise<string> {
+  const { data, error } = await supabase
+    .from("project_checklists")
+    .insert({ project_id: projectId, name: UNTITLED_CHECKLIST, created_by: userId } as never)
+    .select("id")
+    .single();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Could not create that checklist");
+  return (data as { id: string }).id;
+}
+
+/**
+ * Copy this checklist's items into a new workspace template.
+ *
+ * Two inserts, like the web. If the items fail, the empty template is removed
+ * again so the library is not left with a name that has nothing under it.
+ */
+export async function saveChecklistAsTemplate(args: {
+  name: string;
+  userId: string;
+  items: ChecklistItem[];
+}): Promise<void> {
+  const { data: template, error } = await supabase
+    .from("checklist_templates")
+    .insert({ created_by: args.userId, name: args.name } as never)
+    .select("id")
+    .single();
+  if (error) throw new Error(error.message);
+  const templateId = (template as { id: string } | null)?.id;
+  if (!templateId) throw new Error("Could not save that template");
+
+  if (args.items.length === 0) return;
+  const ordered = [...args.items].sort((a, b) => a.position - b.position);
+  const { error: itemsError } = await supabase.from("checklist_template_items").insert(
+    ordered.map((item, index) => ({
+      template_id: templateId,
+      position: index,
+      label: item.label,
+      required: item.required,
+      item_type: item.item_type ?? "checkbox",
+      description: item.description,
+    })) as never,
+  );
+  if (itemsError) {
+    await supabase.from("checklist_templates").delete().eq("id", templateId);
+    throw new Error(itemsError.message);
+  }
+}
+
+/** Photo ids attached to each item, for the sealed copy written on completion. */
+export async function listItemPhotoIds(itemIds: string[]): Promise<Map<string, string[]>> {
+  const map = new Map<string, string[]>();
+  if (itemIds.length === 0) return map;
+  const { data, error } = await supabase
+    .from("checklist_item_photos")
+    .select("item_id, photo_id, created_at")
+    .in("item_id", itemIds)
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(error.message);
+  for (const row of (data as { item_id: string; photo_id: string }[]) ?? []) {
+    const list = map.get(row.item_id) ?? [];
+    list.push(row.photo_id);
+    map.set(row.item_id, list);
+  }
+  return map;
+}
+
+/**
+ * Seal a checklist: the same single update the web's Mark as complete writes.
+ * The completion trigger refuses someone who may not close it, and its
+ * sentence is passed through.
+ */
+export async function completeChecklist(
+  checklistId: string,
+  args: { completedAt: string; userId: string; snapshot: unknown },
+): Promise<void> {
+  const { error } = await supabase
+    .from("project_checklists")
+    .update({
+      completed_at: args.completedAt,
+      completed_by: args.userId,
+      snapshot: args.snapshot,
+    } as never)
+    .eq("id", checklistId);
   if (error) throw new Error(error.message);
 }

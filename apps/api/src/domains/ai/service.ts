@@ -7,7 +7,7 @@ import type { AuthedContext } from "../../lib/user-context";
 const VISION_MODEL = "google/gemini-2.5-pro";
 const CHAT_MODEL = "google/gemini-2.5-pro";
 
-function aiKeyConfigured() {
+export function aiKeyConfigured() {
   return !!process.env.GEMINI_API_KEY;
 }
 

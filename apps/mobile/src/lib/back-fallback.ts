@@ -48,12 +48,26 @@ export function parentHref(routeName: string, params?: Params): string {
 
   if (name === "group/[id]") return "/groups";
   if (name === "template/[id]" || name === "workflow-template/[templateId]") return "/templates";
+  // Each template library sits under Templates, and each template under its library.
+  if (name === "blueprint/[id]") return "/blueprints";
+  if (name === "document-template/[id]") return "/document-templates";
+  if (name === "report-template/[id]") return "/report-templates";
+  if (name === "walkthrough-template/[id]") return "/walkthrough-templates";
+  if (
+    name === "blueprints" ||
+    name === "document-templates" ||
+    name === "report-templates" ||
+    name === "walkthrough-templates"
+  ) {
+    return "/templates";
+  }
 
   if (name.startsWith("admin/") && name !== "admin") return "/admin";
 
   if (
     name.startsWith("settings/") ||
     name === "workspace" ||
+    name === "help" ||
     name === "labels" ||
     name === "collaborators" ||
     name === "close-account" ||

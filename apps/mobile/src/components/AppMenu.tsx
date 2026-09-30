@@ -11,6 +11,7 @@ import { radius, spacing, useTheme } from "@/theme";
 import {
   Activity,
   Calendar,
+  CalendarClock,
   CircleQuestionMark,
   ExternalLink,
   FileText,
@@ -38,6 +39,7 @@ const ICONS: Record<AppMenuIcon, LucideIcon> = {
   reports: FileText,
   map: MapPin,
   pipelines: Kanban,
+  schedule: CalendarClock,
   timeline: Calendar,
   groups: Folders,
   activity: Activity,

@@ -133,7 +133,7 @@ type FileJob = { gen: number; running: boolean; edited: boolean };
 
 /**
  * The note editor, for the shots still to come or for one saved shot.
- * `start` opens it straight into dictation ("voice") or typing.
+ * `start` opens it straight into recording ("voice") or typing.
  */
 type Panel =
   | { kind: "next"; start?: "voice" | "type" }
@@ -1119,7 +1119,7 @@ export default function CaptureScreen() {
 
   /*
    * Share the photo just taken, the way the photo viewer shares one: its
-   * share sheet (the link switch, and on iOS the photo itself), once the
+   * share sheet (the link switch and the photo itself), once the
    * photo is on the server. Until then iOS sends the file on this phone
    * straight away; Android, whose share sheet takes no files from here,
    * waits a few seconds for the upload and opens the sheet when it lands.
@@ -1462,6 +1462,7 @@ export default function CaptureScreen() {
             : []
         }
         startWith={panel.start}
+        voiceAfterClose
         wide={wide}
         insets={panelInsets}
         onDone={closePanel}
@@ -1500,6 +1501,7 @@ export default function CaptureScreen() {
         actions={actions}
         message={panelShot.failed ? "Not saved on this device yet." : null}
         startWith={panel.start}
+        voiceAfterClose
         wide={wide}
         insets={panelInsets}
         onDone={closePanel}
@@ -1846,7 +1848,7 @@ export default function CaptureScreen() {
           photoId={shareFor.photoId}
           caption={shareFor.caption}
           imageUrl={null}
-          localFileUri={Platform.OS === "ios" ? shareFor.fileUri : null}
+          localFileUri={shareFor.fileUri}
         />
       ) : null}
 

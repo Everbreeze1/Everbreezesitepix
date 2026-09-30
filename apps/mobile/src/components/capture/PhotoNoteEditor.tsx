@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   BackHandler,
   Keyboard,
   Pressable,
@@ -15,14 +16,20 @@ import type { PhotoPhase } from "@/api/photos";
 import {
   DICTATION_DETAIL,
   DICTATION_HINT,
+  TRANSCRIBING_LABEL,
   VOICE_NOTE_LABEL,
+  VOICE_NOTE_MAX_SECONDS,
+  appendTranscript,
+  fallbackMessage,
+  formatElapsed,
   voiceNoteMode,
 } from "@/lib/voice-note";
 import { HIT_TARGET, radius, spacing, useTheme } from "@/theme";
 import { Icon, type LucideIcon } from "@/ui";
-import { Check, Mic, Tag, X } from "@/ui/icons";
+import { Check, Mic, Square, Tag, X } from "@/ui/icons";
 import { useKeyboardOverlap } from "./keyboard-overlap";
 import { noteEditorLayout } from "./note-editor-layout";
+import { useVoiceNoteRecorder } from "./use-voice-note-recorder";
 
 /** A secondary action in the editor's footer: an icon, named for a screen reader. */
 export type NoteEditorAction = {
@@ -46,6 +53,14 @@ const PHASES: { id: PhotoPhase; label: string }[] = [
  * written and corrected in the same place. One photo at a time: the strip of
  * several photos belongs to walkthroughs only, where the AI reads them
  * together.
+ *
+ * **The voice note records.** "Add voice note" starts the microphone at once
+ * and turns into a recording bar with the time and a Stop button; Stop sends
+ * the clip for transcription ("Transcribing...") and the words are added to
+ * the end of the note, still editable, saving as the caption as typing does.
+ * When recording cannot be used (no microphone permission, a server without
+ * voice notes yet, a failed transcription) it says so in one line and opens
+ * the keyboard, whose own mic dictates instead. See `lib/voice-note.ts`.
  *
  * **The keyboard never covers it.** At rest it shows the photo, its
  * Before/None/After, an "Add voice note" button, the note, its tags and Done.
@@ -77,6 +92,7 @@ export function PhotoNoteEditor({
   onPhaseChange,
   actions = [],
   startWith,
+  voiceAfterClose = false,
   message,
   wide,
   insets,
@@ -96,8 +112,13 @@ export function PhotoNoteEditor({
   phase?: PhotoPhase;
   onPhaseChange?: (phase: PhotoPhase) => void;
   actions?: NoteEditorAction[];
-  /** "voice" opens straight into dictation, "type" with the keyboard up. */
+  /** "voice" opens straight into recording, "type" with the keyboard up. */
   startWith?: "voice" | "type" | null;
+  /**
+   * `onCaptionChange` still saves after the editor closes, so Done need not
+   * wait for a voice note's words. See `finishVoice`.
+   */
+  voiceAfterClose?: boolean;
   /** A line under the note, such as a failed save. */
   message?: string | null;
   wide: boolean;
@@ -111,7 +132,41 @@ export function PhotoNoteEditor({
   const inputRef = useRef<TextInput>(null);
   const screen = useWindowDimensions();
   const keyboard = useKeyboardOverlap();
-  const [dictating, setDictating] = useState(startWith === "voice");
+  const [dictating, setDictating] = useState(
+    startWith === "voice" && voiceNoteMode() === "dictation",
+  );
+  /** Why the recorder handed over to the keyboard, until the keyboard goes. */
+  const [voiceMessage, setVoiceMessage] = useState<string | null>(null);
+
+  /*
+   * The latest note, read when the words come back: typing carries on while
+   * the clip is transcribed, and the words are added to what is there then.
+   */
+  const captionRef = useRef(caption);
+  captionRef.current = caption;
+  const open = useRef(true);
+  /** Done or close was tapped: the editor is on its way out. */
+  const closing = useRef(false);
+  useEffect(() => {
+    open.current = true;
+    return () => {
+      open.current = false;
+    };
+  }, []);
+
+  const voice = useVoiceNoteRecorder({
+    onText: (text) => {
+      if (open.current) setVoiceMessage(null);
+      onCaptionChange(appendTranscript(captionRef.current, text));
+    },
+    onFallback: (reason) => {
+      if (!open.current || closing.current) return;
+      setVoiceMessage(fallbackMessage(reason));
+      // Nothing was heard: the mic is still the way to try again.
+      if (reason !== "silent") startDictation();
+    },
+  });
+  const listening = voice.phase !== "idle";
 
   const layout = noteEditorLayout({
     width: screen.width - insets.left - insets.right,
@@ -126,8 +181,12 @@ export function PhotoNoteEditor({
   useEffect(() => {
     if (!startWith) return;
     // After the overlay has laid out, or the focus is dropped on Android.
-    const timer = setTimeout(() => inputRef.current?.focus(), 150);
+    const timer = setTimeout(() => {
+      if (startWith === "voice" && voiceNoteMode() === "record") void voice.start();
+      else inputRef.current?.focus();
+    }, 150);
     return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startWith]);
 
   /*
@@ -136,34 +195,72 @@ export function PhotoNoteEditor({
    */
   const wasUp = useRef(false);
   useEffect(() => {
-    if (wasUp.current && !keyboard.visible) setDictating(false);
+    if (wasUp.current && !keyboard.visible) {
+      setDictating(false);
+      setVoiceMessage(null);
+    }
     wasUp.current = keyboard.visible;
   }, [keyboard.visible]);
 
   /* Android's Back closes the editor, not the camera behind it. */
+  const closeRef = useRef(close);
+  closeRef.current = close;
   useEffect(() => {
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
-      onClose();
+      closeRef.current();
       return true;
     });
     return () => sub.remove();
-  }, [onClose]);
+  }, []);
 
   /**
-   * The voice action. Dictation today: the note takes focus, the editor
-   * folds onto the keyboard, and says to use the keyboard's microphone.
-   * `voice-note.ts` is where a recorder plugs in.
+   * The voice action: record, or with no recorder on this build, dictation
+   * (the note takes focus, the editor folds onto the keyboard, and says to
+   * use the keyboard's microphone).
    */
   function startVoiceNote() {
-    if (voiceNoteMode() === "dictation") {
-      setDictating(true);
-      inputRef.current?.focus();
+    setVoiceMessage(null);
+    if (voiceNoteMode() === "record") {
+      Keyboard.dismiss();
+      void voice.start();
+    } else {
+      startDictation();
     }
   }
 
+  function startDictation() {
+    setDictating(true);
+    inputRef.current?.focus();
+  }
+
+  /* The parent's latest handlers: after a wait, the ones captured at the tap are stale. */
+  const exits = useRef({ onDone, onClose });
+  exits.current = { onDone, onClose };
+
   function done() {
     Keyboard.dismiss();
-    onDone();
+    void finishVoice().finally(() => exits.current.onDone());
+  }
+
+  function close() {
+    void finishVoice().finally(() => exits.current.onClose());
+  }
+
+  /*
+   * Done or close while recording keeps what was said. Where `onCaptionChange`
+   * still lands after the editor has gone (the camera's shots), the clip is
+   * finished and sent and the editor closes at once, so the camera is back
+   * for the next shot straight away. Elsewhere (the viewer saves on close)
+   * it waits for the words first, showing "Transcribing...".
+   */
+  async function finishVoice() {
+    if (closing.current) return new Promise<void>(() => undefined);
+    closing.current = true;
+    await voice.stop();
+    if (voiceAfterClose || voice.phase === "idle") return;
+    await voice.settled();
+    // One render for the parent to take the words in, so it saves them.
+    await new Promise((resolve) => setTimeout(resolve, 50));
   }
 
   const showTags = tags !== undefined && onEditTags !== undefined;
@@ -193,7 +290,7 @@ export function PhotoNoteEditor({
     >
       <Pressable
         style={[StyleSheet.absoluteFill, styles.backdrop]}
-        onPress={onClose}
+        onPress={close}
         accessibilityLabel="Close note"
       />
       <View
@@ -230,7 +327,7 @@ export function PhotoNoteEditor({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Close"
-                onPress={onClose}
+                onPress={close}
                 hitSlop={8}
                 style={styles.close}
               >
@@ -281,11 +378,46 @@ export function PhotoNoteEditor({
                 </View>
               ) : null}
 
-              {!typing ? (
+              {listening ? (
+                <View
+                  style={[styles.recording, typing && styles.recordingTyping]}
+                  accessibilityLiveRegion="polite"
+                >
+                  {voice.phase === "recording" ? (
+                    <View style={styles.recordingDot} />
+                  ) : (
+                    <ActivityIndicator size="small" color={FG} />
+                  )}
+                  <Text style={styles.recordingText} numberOfLines={1}>
+                    {voice.phase === "transcribing"
+                      ? TRANSCRIBING_LABEL
+                      : voice.phase === "starting"
+                        ? "Starting the mic..."
+                        : `Recording ${formatElapsed(voice.elapsedMs)}`}
+                  </Text>
+                  {voice.phase === "recording" && !typing ? (
+                    <Text style={styles.recordingLimit} numberOfLines={1}>
+                      {`max ${formatElapsed(VOICE_NOTE_MAX_SECONDS * 1000)}`}
+                    </Text>
+                  ) : null}
+                  {voice.phase === "recording" ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Stop recording"
+                      accessibilityHint="Stops and adds your words to the note"
+                      onPress={() => void voice.stop()}
+                      style={styles.stop}
+                    >
+                      <Icon icon={Square} size="sm" color={FG} />
+                      <Text style={styles.stopText}>Stop</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              ) : !typing ? (
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={VOICE_NOTE_LABEL}
-                  accessibilityHint="Opens the note with the keyboard up. Speak using the keyboard's microphone."
+                  accessibilityHint="Records a spoken note. Tap Stop when finished."
                   onPress={startVoiceNote}
                   style={[styles.voice, { backgroundColor: theme.colors.primary }]}
                 >
@@ -299,8 +431,8 @@ export function PhotoNoteEditor({
               {typing && dictating ? (
                 <View style={styles.hintRow} accessibilityLiveRegion="polite">
                   <Icon icon={Mic} size="sm" color={theme.colors.primary} />
-                  <Text style={[styles.hint, { color: FG }]} numberOfLines={1}>
-                    {DICTATION_HINT}
+                  <Text style={[styles.hint, { color: FG }]} numberOfLines={voiceMessage ? 2 : 1}>
+                    {voiceMessage ?? DICTATION_HINT}
                   </Text>
                 </View>
               ) : null}
@@ -317,7 +449,7 @@ export function PhotoNoteEditor({
                 accessibilityHint="Shown as the caption under the photo"
               />
 
-              {typing && dictating && layout.typingThumb > 40 ? (
+              {typing && dictating && !voiceMessage && layout.typingThumb > 40 ? (
                 <Text style={styles.detail} numberOfLines={1}>
                   {DICTATION_DETAIL}
                 </Text>
@@ -347,6 +479,12 @@ export function PhotoNoteEditor({
                     <Text style={styles.tagsEmpty}>Add tags</Text>
                   )}
                 </Pressable>
+              ) : null}
+
+              {!typing && voiceMessage ? (
+                <Text style={styles.voiceMessage} accessibilityLiveRegion="polite">
+                  {voiceMessage}
+                </Text>
               ) : null}
 
               {!typing && message ? <Text style={styles.message}>{message}</Text> : null}
@@ -402,6 +540,8 @@ export function PhotoNoteEditor({
 }
 
 const FG = "#ffffff";
+/** Recording, as every phone's recorder shows it. */
+const RECORDING_RED = "#dc2626";
 
 /** The watermark pill's own colours (`watermark.ts`), as the toggle shows them. */
 const PHASE_FILL: Record<"before" | "after", string> = {
@@ -459,6 +599,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
   voiceText: { fontSize: 16, fontWeight: "800" },
+  recording: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    minHeight: HIT_TARGET,
+    borderRadius: radius.pill,
+    paddingLeft: spacing.lg,
+    paddingRight: 4,
+    backgroundColor: "rgba(255,255,255,0.1)",
+  },
+  recordingTyping: { paddingLeft: spacing.md },
+  recordingDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: RECORDING_RED },
+  recordingText: { flexShrink: 1, color: FG, fontSize: 16, fontWeight: "800" },
+  recordingLimit: { flex: 1, color: "rgba(255,255,255,0.6)", fontSize: 13, fontWeight: "600" },
+  stop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginLeft: "auto",
+    minHeight: HIT_TARGET - 8,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.pill,
+    backgroundColor: RECORDING_RED,
+  },
+  stopText: { color: FG, fontSize: 15, fontWeight: "800" },
+  voiceMessage: { color: "#fde68a", fontSize: 13, fontWeight: "600" },
   hintRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   hint: { flex: 1, fontSize: 14, fontWeight: "800" },
   detail: { color: "rgba(255,255,255,0.7)", fontSize: 12, lineHeight: 16 },

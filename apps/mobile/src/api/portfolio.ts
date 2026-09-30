@@ -1,4 +1,14 @@
+import { File } from "expo-file-system";
+import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import { api } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
+import {
+  builderPayload,
+  listingPayload,
+  type BuilderDraft,
+  type ListingDraft,
+  type ShowcaseDetail,
+} from "./portfolio-showcase";
 import type {
   GoogleApplyField,
   MyPortfolio,
@@ -127,20 +137,105 @@ export async function rotatePortfolioEmbedKey(): Promise<string> {
   return result.embedKey;
 }
 
-/** A page's listing on the site: shown or hidden, featured, and its facets. */
+/**
+ * A page's listing on the site: its own address, shown or hidden, featured,
+ * its facets and its map pin. Returns the slug as the service stored it,
+ * because the service slugifies what was typed.
+ */
 export async function updateShowcaseSite(
   id: string,
   patch: {
+    slug?: string | null;
     onSite?: boolean;
     featured?: boolean;
     serviceType?: string | null;
+    productsUsed?: string[];
     summary?: string | null;
     city?: string | null;
     state?: string | null;
+    latitude?: number | null;
+    longitude?: number | null;
     completedOn?: string | null;
   },
-): Promise<void> {
-  await api.rpc("updateShowcaseSite", { id, ...patch });
+): Promise<{ slug: string | null }> {
+  const result = await api.rpc<{ slug?: string | null }>("updateShowcaseSite", { id, ...patch });
+  return { slug: result?.slug ?? null };
+}
+
+/** Every field of the listing at once, as the web's "On your site" card saves it. */
+export async function saveShowcaseListing(
+  id: string,
+  draft: ListingDraft,
+): Promise<{ slug: string | null }> {
+  const { id: pageId, ...patch } = listingPayload(id, draft);
+  return updateShowcaseSite(pageId, patch);
+}
+
+/*
+ * ---------------------------------------------------------------------------
+ * One page's builder: the web's `ShowcaseBuilderPage`, through the same ops.
+ * ---------------------------------------------------------------------------
+ */
+
+/** The whole page: copy, design, cover and every section with its photos (signed). */
+export async function getShowcase(id: string): Promise<ShowcaseDetail | null> {
+  const result = await api.rpc<ShowcaseDetail | null>("getShowcase", { id });
+  if (!result?.id) return null;
+  return { ...result, sections: result.sections ?? [], products_used: result.products_used ?? [] };
+}
+
+/**
+ * The builder's one Save: the page's fields, then its body.
+ *
+ * Two ops in the web's order. `setShowcaseSections` replaces every section and
+ * photo, which is how a reorder, a removal and a caption all land at once.
+ */
+export async function saveShowcase(id: string, draft: BuilderDraft): Promise<void> {
+  const { showcase: page, sections: body } = builderPayload(id, draft);
+  await api.rpc("updateShowcase", {
+    id: page.id,
+    title: page.title,
+    tagline: page.tagline,
+    layout: page.layout,
+    accentColor: page.accentColor,
+    showContact: page.showContact,
+    showReviews: page.showReviews,
+    introHtml: page.introHtml,
+    outroHtml: page.outroHtml,
+    coverPhotoId: page.coverPhotoId,
+  });
+  await api.rpc("setShowcaseSections", { showcaseId: body.showcaseId, sections: body.sections });
+}
+
+/** Longest edge of an uploaded site logo; the site header draws it far smaller. */
+const LOGO_DIM = 1024;
+
+/**
+ * Upload the portfolio site's own logo.
+ *
+ * The web's `uploadLogo` in `site-draft.ts`: the same public `company-logos`
+ * bucket Settings uses, under `<uid>/portfolio-logo-<ts>`, but stored on the
+ * portfolio (through `updatePortfolio`'s `logoUrl`) rather than the profile, so
+ * the site's logo and the one on reports may differ. Re-encoded as PNG so a
+ * transparent background stays transparent.
+ */
+export async function uploadPortfolioLogo(
+  userId: string,
+  uri: string,
+  width?: number,
+): Promise<string> {
+  const context = ImageManipulator.manipulate(uri);
+  if (!width || width > LOGO_DIM) context.resize({ width: LOGO_DIM });
+  const rendered = await context.renderAsync();
+  const saved = await rendered.saveAsync({ format: SaveFormat.PNG });
+  const bytes = await new File(saved.uri).arrayBuffer();
+
+  const path = `${userId}/portfolio-logo-${Date.now()}.png`;
+  const { error } = await supabase.storage
+    .from("company-logos")
+    .upload(path, bytes, { contentType: "image/png", upsert: true });
+  if (error) throw new Error(error.message);
+  return supabase.storage.from("company-logos").getPublicUrl(path).data.publicUrl;
 }
 
 /** The site's running order, as the full list of page ids. */

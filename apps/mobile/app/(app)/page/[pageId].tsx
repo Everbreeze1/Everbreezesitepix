@@ -1,49 +1,22 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { readableErrorMessage } from "@everlumen/shared";
 import { View } from "react-native";
 import * as WebBrowser from "expo-web-browser";
-import { Stack, useLocalSearchParams } from "expo-router";
+import { Stack, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { exportPagePdf, getPage, savePage, setPageShare } from "@/api/pages";
 import { isShareLive, openShareSheet, publicUrl } from "@/api/sharing";
-import {
-  appendBlocks,
-  appendHtml,
-  BLOCK_LABELS,
-  emptyBlock,
-  insertBlock,
-  meaningfulBlocks,
-  moveBlock,
-  pagePreview,
-  parsePage,
-  refusalMessage,
-  removeBlock,
-  serialiseBlocks,
-  setBlockKind,
-  setBlockText,
-  type Block,
-  type BlockKind,
-} from "@/api/doc-blocks";
+import { serialiseBlocks } from "@/api/doc-blocks";
+import { docHtml, parseDoc, type DocBlock } from "@/api/rich-doc";
+import { FormattedTextEditor } from "@/components/FormattedTextEditor";
 import { spacing } from "@/theme";
-import {
-  ChevronDown,
-  ChevronUp,
-  FileText,
-  Library,
-  Link2,
-  Plus,
-  TriangleAlert,
-  Trash2,
-} from "@/ui/icons";
+import { FileText, Library, Link2, Save, TriangleAlert } from "@/ui/icons";
 import {
   Badge,
   Button,
   ButtonRow,
-  Card,
-  Chip,
   ErrorState,
   Field,
-  IconButton,
   Screen,
   SectionHeader,
   SkeletonList,
@@ -54,33 +27,34 @@ import {
 /**
  * One project page.
  *
- * The screen has two modes and which one it offers is decided by the document,
- * not by the person:
+ * The body is edited in place with `FormattedTextEditor`, in the web's own
+ * storage format: the HTML its TipTap editor writes. Headings, lists, bold,
+ * italic and links are edited here; tables, photos, checklists and anything
+ * else the phone cannot draw are locked blocks that are written back exactly as
+ * they were (see `rich-doc.ts`). So a page made from a rich template is
+ * editable on the phone, and saving it cannot lose the parts that are not.
  *
- * **Edit**, when `parsePage` could read the whole page into blocks and rebuild
- * it exactly. That is true of pages created here and of simple pages, and it is
- * the only case where writing the whole document back is safe.
- *
- * **Append**, always. Adding to the end never reads what is already there, so
- * it cannot lose a table, a logo or styled text. This is the mode that matters
- * on a phone: composing a document is desk work, adding today's entry to one is
- * not, and every page made from a seeded template lands here because those
- * contain markup the block model refuses.
- *
- * Saving always sends `expectedUpdatedAt`. Without it two people editing one
- * page means the second save silently overwrites the first, with no error and
- * nothing to notice.
+ * Saving always sends `expectedUpdatedAt`, and takes the new one from the
+ * answer for the next save. Without it two people editing one page means the
+ * second save silently overwrites the first.
  */
 export default function PageScreen() {
   const { pageId } = useLocalSearchParams<{ pageId: string }>();
   const queryClient = useQueryClient();
 
   const [title, setTitle] = useState("");
-  const [blocks, setBlocks] = useState<Block[]>([]);
-  const [draft, setDraft] = useState<Block[]>([]);
+  const [blocks, setBlocks] = useState<DocBlock[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const [snippetsOpen, setSnippetsOpen] = useState(false);
+  /** The HTML last loaded or saved: a save is only sent when the body differs. */
+  const savedHtml = useRef("");
+  /** The title last loaded or saved. */
+  const savedTitle = useRef("");
+  /** The `updated_at` the next save must match. */
+  const version = useRef<string | null>(null);
+  /** A save was asked for while one was in flight: run it once that lands. */
+  const again = useRef(false);
 
   const queryKey = useMemo(() => ["project-page", pageId], [pageId]);
 
@@ -91,9 +65,6 @@ export default function PageScreen() {
   });
   const page = query.data ?? null;
 
-  const parsed = useMemo(() => parsePage(page?.content_html ?? ""), [page?.content_html]);
-  const canEdit = parsed.refusal === null;
-
   /*
    * Seed once. Re-seeding on a background refetch would throw away whatever is
    * half-typed, which on a phone happens every time the app returns to the
@@ -101,65 +72,84 @@ export default function PageScreen() {
    */
   useEffect(() => {
     if (loaded || !page) return;
+    const parsed = parseDoc(page.content_html);
     setTitle(page.title);
-    setBlocks(parsed.blocks);
+    setBlocks(parsed);
+    // Compared in the phone's own serialisation, so opening a page and leaving
+    // it untouched never writes it back.
+    savedHtml.current = docHtml(parsed);
+    savedTitle.current = page.title;
+    version.current = page.updated_at;
     setLoaded(true);
-  }, [page, parsed.blocks, loaded]);
+  }, [page, loaded]);
 
   const save = useMutation({
     mutationFn: (args: { title?: string; contentHtml?: string }) =>
       savePage({
         pageId: pageId!,
-        // The copy the screen loaded. A rejection means somebody else has
-        // changed the page since, which is information rather than an error.
-        expectedUpdatedAt: page!.updated_at,
+        // A rejection means somebody else has changed the page since, which is
+        // information rather than an error.
+        expectedUpdatedAt: version.current ?? page!.updated_at,
         ...args,
       }),
-    onSuccess: () => {
+    onSuccess: (result, args) => {
+      if (result.updatedAt) version.current = result.updatedAt;
+      if (args.contentHtml !== undefined) savedHtml.current = args.contentHtml;
+      if (args.title !== undefined) savedTitle.current = args.title;
       void queryClient.invalidateQueries({ queryKey });
       setFailure(null);
+      if (again.current) {
+        again.current = false;
+        // After this render, so it reads the latest text and the new version.
+        setTimeout(() => commitRef.current(), 0);
+      }
     },
     onError: (error: unknown) => {
       const message = error instanceof Error ? error.message : "That did not save.";
       setFailure(
-        /conflict|modified|stale|updated/i.test(message)
+        /conflict|modified|stale|updated|changed by someone/i.test(message)
           ? "Somebody else changed this page while you had it open. Pull down to load their version, then make your change again."
           : message,
       );
     },
   });
 
-  /** Write the whole document back. Only reachable when the round trip is exact. */
-  const saveBody = useCallback(() => {
-    const keep = meaningfulBlocks(blocks);
-    save.mutate({ contentHtml: serialiseBlocks(keep) });
-    setBlocks(keep.length ? keep : [emptyBlock()]);
-  }, [blocks, save]);
-
-  /** Add to the end without reading what is there. Safe on every page. */
-  const appendDraft = useCallback(() => {
-    if (!page) return;
-    const keep = meaningfulBlocks(draft);
-    if (keep.length === 0) return;
-    save.mutate({ contentHtml: appendBlocks(page.content_html, keep) });
-    setDraft([]);
-  }, [draft, page, save]);
-
   /**
-   * Add a snippet's markup straight to the end of the page.
-   *
-   * Saved immediately rather than staged in the composer, because the composer
-   * holds plain blocks and this is markup that could not survive being turned
-   * into one. `appendHtml` never reads the existing page, so this is exactly as
-   * safe as appending typed text.
+   * Write back whatever differs from what was last saved, title and body in one
+   * call. One at a time: two saves in flight would each carry the same version
+   * token, and the second would be refused as somebody else's change.
    */
-  const appendSnippetHtml = useCallback(
-    (html: string) => {
-      if (!page) return;
-      save.mutate({ contentHtml: appendHtml(page.content_html, html) });
-    },
-    [page, save],
-  );
+  const commit = useCallback(() => {
+    if (!loaded) return;
+    if (save.isPending) {
+      again.current = true;
+      return;
+    }
+    const args: { title?: string; contentHtml?: string } = {};
+    const html = docHtml(blocks);
+    if (html !== savedHtml.current) args.contentHtml = html;
+    const trimmed = title.trim();
+    if (trimmed && trimmed !== savedTitle.current) args.title = trimmed;
+    if (args.title === undefined && args.contentHtml === undefined) return;
+    save.mutate(args);
+  }, [blocks, loaded, save, title]);
+
+  // Leaving the screen saves, so a change made only with the toolbar (which
+  // never blurs a field) is not lost to the back button.
+  const commitRef = useRef<() => void>(() => {});
+  commitRef.current = commit;
+  useFocusEffect(useCallback(() => () => commitRef.current(), []));
+
+  const dirty =
+    loaded &&
+    (docHtml(blocks) !== savedHtml.current ||
+      (title.trim() !== "" && title.trim() !== savedTitle.current));
+  const lockedParts = useMemo(() => blocks.some((b) => b.kind === "raw"), [blocks]);
+
+  /** A snippet goes in at the end as its HTML; anything uneditable stays locked. */
+  const insertSnippetHtml = useCallback((html: string) => {
+    setBlocks((cur) => [...cur, ...parseDoc(html)]);
+  }, []);
 
   /**
    * Turn this document's public link on or off.
@@ -252,11 +242,7 @@ export default function PageScreen() {
             label="Title"
             value={title}
             onChangeText={setTitle}
-            onBlur={() => {
-              const trimmed = title.trim();
-              if (!trimmed || trimmed === page.title) return;
-              save.mutate({ title: trimmed });
-            }}
+            onBlur={commit}
             returnKeyType="done"
           />
 
@@ -265,78 +251,49 @@ export default function PageScreen() {
           ) : null}
         </View>
 
-        {canEdit ? (
-          <>
-            <SectionHeader title="Page" />
-            <View style={{ paddingHorizontal: spacing.lg, gap: spacing.sm }}>
-              {blocks.length === 0 ? (
-                <Text variant="caption" tone="muted">
-                  This page is empty. Add the first block.
-                </Text>
-              ) : (
-                blocks.map((block, index) => (
-                  <BlockEditor
-                    key={block.id}
-                    block={block}
-                    first={index === 0}
-                    last={index === blocks.length - 1}
-                    onText={(text) => setBlocks((cur) => setBlockText(cur, block.id, text))}
-                    onKind={(kind) => setBlocks((cur) => setBlockKind(cur, block.id, kind))}
-                    onMove={(by) => setBlocks((cur) => moveBlock(cur, block.id, by))}
-                    onRemove={() => setBlocks((cur) => removeBlock(cur, block.id))}
-                    onCommit={saveBody}
-                  />
-                ))
-              )}
+        <SectionHeader title="Page" />
+        <View style={{ paddingHorizontal: spacing.lg, gap: spacing.md }}>
+          {lockedParts ? (
+            // Said once, above the document, as well as on each locked card.
+            <Text variant="caption" tone="muted">
+              Tables, photos and other parts made on the web are locked here and kept exactly as
+              they are. Everything else can be edited.
+            </Text>
+          ) : null}
 
-              <ButtonRow>
-                <Button
-                  label="Add block"
-                  icon={Plus}
-                  variant="secondary"
-                  size="sm"
-                  onPress={() =>
-                    setBlocks((cur) =>
-                      insertBlock(cur, cur.length ? cur[cur.length - 1].id : null, "paragraph"),
-                    )
-                  }
-                />
-                <Button label="Save" size="sm" disabled={save.isPending} onPress={saveBody} />
-              </ButtonRow>
-            </View>
-          </>
-        ) : (
-          <>
-            {/*
-              Read-only, and it says why. The alternative is letting somebody
-              type into a page whose save would delete a table they cannot see
-              from here.
-            */}
-            <SectionHeader title="This page is read-only here" />
-            <View style={{ paddingHorizontal: spacing.lg, gap: spacing.md }}>
-              <Card>
-                <View style={{ gap: spacing.sm }}>
-                  <Badge label="Cannot edit on the phone" tone="warning" icon={TriangleAlert} />
-                  <Text variant="body">{refusalMessage(parsed.refusal)}</Text>
-                </View>
-              </Card>
+          <FormattedTextEditor
+            blocks={blocks}
+            onChange={setBlocks}
+            onCommit={commit}
+            placeholder="Start writing"
+          />
 
-              <Text variant="caption" tone="muted">
-                {pagePreview(page.content_html, 400)}
-              </Text>
-            </View>
-          </>
-        )}
+          <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
+            <Button
+              label="Snippets"
+              icon={Library}
+              variant="secondary"
+              size="sm"
+              onPress={() => setSnippetsOpen(true)}
+            />
+            <Text variant="caption" tone="muted" style={{ flex: 1, textAlign: "right" }}>
+              {save.isPending ? "Saving" : dirty ? "Not saved yet" : "Saved"}
+            </Text>
+            {/* The primary action sits on the right, on a phone and a tablet alike. */}
+            <Button
+              label="Save"
+              icon={Save}
+              size="sm"
+              disabled={save.isPending || !dirty}
+              onPress={commit}
+            />
+          </View>
+        </View>
 
         {/*
-          Appending is offered on every page, including the read-only ones. It
-          never reads the existing content, so it cannot lose any of it, and it
-          is the thing a phone is actually for.
-        */}
-        {/*
-          Sharing sits above the composer because it is about the document as it
-          stands, not about what is being added to it. A live link is stated
-          plainly: the page is on the open internet with no login in front of it.
+          Export and sharing are about the document as it stands. A live link is
+          stated plainly: the page is on the open internet with no login in front
+          of it.
         */}
         <SectionHeader title="Export" />
         <View style={{ paddingHorizontal: spacing.lg, gap: spacing.sm }}>
@@ -350,9 +307,9 @@ export default function PageScreen() {
           />
           <Text variant="caption" tone="muted">
             {/*
-              Offered on read-only pages too, and that is the point: a document
-              the phone cannot restructure is still one a technician has to hand
-              somebody on site.
+              Includes the locked parts the phone cannot edit, which is the
+              point: the document a technician hands somebody on site is the
+              whole of it.
             */}
             Saved into this job's Documents, then opened. A phone has no downloads folder, so filing
             it is what makes it findable later.
@@ -415,167 +372,18 @@ export default function PageScreen() {
             </>
           )}
         </View>
-
-        <SectionHeader title="Add to the end" />
-        <View style={{ paddingHorizontal: spacing.lg, gap: spacing.sm }}>
-          {draft.length === 0 ? (
-            <Text variant="caption" tone="muted">
-              Add today's entry without touching anything above it.
-            </Text>
-          ) : (
-            draft.map((block, index) => (
-              <BlockEditor
-                key={block.id}
-                block={block}
-                first={index === 0}
-                last={index === draft.length - 1}
-                onText={(text) => setDraft((cur) => setBlockText(cur, block.id, text))}
-                onKind={(kind) => setDraft((cur) => setBlockKind(cur, block.id, kind))}
-                onMove={(by) => setDraft((cur) => moveBlock(cur, block.id, by))}
-                onRemove={() => setDraft((cur) => removeBlock(cur, block.id))}
-              />
-            ))
-          )}
-
-          <ButtonRow>
-            <Button
-              label="Add block"
-              icon={Plus}
-              variant="secondary"
-              size="sm"
-              onPress={() =>
-                setDraft((cur) =>
-                  insertBlock(cur, cur.length ? cur[cur.length - 1].id : null, "paragraph"),
-                )
-              }
-            />
-            {/*
-              The library is worth more here than it is on the web. Retyping a
-              standing safety note is tedious on a keyboard and genuinely
-              expensive on a phone, standing on a job in gloves.
-            */}
-            <Button
-              label="Snippets"
-              icon={Library}
-              variant="secondary"
-              size="sm"
-              onPress={() => setSnippetsOpen(true)}
-            />
-            <Button
-              label="Append"
-              size="sm"
-              disabled={save.isPending || meaningfulBlocks(draft).length === 0}
-              onPress={appendDraft}
-            />
-          </ButtonRow>
-        </View>
       </Screen>
 
       <SnippetSheet
         visible={snippetsOpen}
         onClose={() => setSnippetsOpen(false)}
-        // Loaded into the composer rather than saved, so it can be edited
-        // before it goes in. That is most of the value of a snippet: it is a
-        // starting point, not a stamp.
-        onInsertBlocks={(inserted) => setDraft((cur) => [...cur, ...inserted])}
-        onInsertHtml={appendSnippetHtml}
-        // Only offered when there is something to save. Serialised from the
-        // composer, so what gets stored is what is on screen.
-        saveableHtml={
-          meaningfulBlocks(draft).length > 0 ? serialiseBlocks(meaningfulBlocks(draft)) : undefined
-        }
+        insertsFormatted
+        onInsertBlocks={(inserted) => insertSnippetHtml(serialiseBlocks(inserted))}
+        onInsertHtml={insertSnippetHtml}
+        // The whole body, in the web's format, so a standing note written here
+        // can be saved for next time.
+        saveableHtml={docHtml(blocks) || undefined}
       />
     </>
-  );
-}
-
-/**
- * One block: a kind picker, a text field, and the controls to move or drop it.
- *
- * A plain multiline `TextInput` rather than anything rich, which is the whole
- * point of the block model: the OS already handles a text field well, and
- * selection-based formatting with a finger is the worst interaction in mobile
- * software.
- */
-function BlockEditor({
-  block,
-  first,
-  last,
-  onText,
-  onKind,
-  onMove,
-  onRemove,
-  onCommit,
-}: {
-  block: Block;
-  first: boolean;
-  last: boolean;
-  onText: (text: string) => void;
-  onKind: (kind: BlockKind) => void;
-  onMove: (by: -1 | 1) => void;
-  onRemove: () => void;
-  onCommit?: () => void;
-}) {
-  return (
-    <Card>
-      <View style={{ gap: spacing.sm }}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.xs }}>
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.xs, flex: 1 }}>
-            {(Object.keys(BLOCK_LABELS) as BlockKind[]).map((kind) => (
-              <Chip
-                key={kind}
-                label={BLOCK_LABELS[kind]}
-                selected={block.kind === kind}
-                onPress={() => onKind(kind)}
-              />
-            ))}
-          </View>
-          {/*
-            Disabled at the ends rather than hidden, so the control count does
-            not change as a block moves and shove everything sideways.
-          */}
-          <IconButton
-            icon={ChevronUp}
-            tone="muted"
-            surface={false}
-            accessibilityLabel="Move up"
-            disabled={first}
-            onPress={() => onMove(-1)}
-          />
-          <IconButton
-            icon={ChevronDown}
-            tone="muted"
-            surface={false}
-            accessibilityLabel="Move down"
-            disabled={last}
-            onPress={() => onMove(1)}
-          />
-          <IconButton
-            icon={Trash2}
-            tone="destructive"
-            surface={false}
-            accessibilityLabel="Remove this block"
-            onPress={onRemove}
-          />
-        </View>
-
-        <Field
-          value={block.text}
-          onChangeText={onText}
-          // On blur, like every long-lived field in this app: a write per
-          // keystroke is a write per keystroke on one bar of signal.
-          onBlur={onCommit}
-          placeholder={
-            block.kind === "heading"
-              ? "Section heading"
-              : block.kind === "bullet"
-                ? "One point"
-                : "Write here"
-          }
-          multiline
-          rows={block.kind === "heading" ? 1 : 3}
-        />
-      </View>
-    </Card>
   );
 }

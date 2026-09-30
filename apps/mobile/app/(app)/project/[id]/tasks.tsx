@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { randomUUID } from "expo-crypto";
-import { Pressable, RefreshControl, ScrollView, View } from "react-native";
+import { Alert, Pressable, RefreshControl, ScrollView, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { calendarDueLabel } from "@everlumen/shared";
@@ -13,7 +13,8 @@ import {
   type TaskPriority,
   type TaskStatus,
 } from "@/api/task-status";
-import { listProjectTasks, type TaskDraft, type TaskRow } from "@/api/tasks";
+import { deleteTask, listProjectTasks, type TaskDraft, type TaskRow } from "@/api/tasks";
+import { canDeleteTask } from "@/api/record-edit-rules";
 import { ActionRail } from "@/components/ActionRail";
 import { ProjectSubPageHeader } from "@/components/ProjectSubPageHeader";
 import { QueueBanner } from "@/components/QueueBanner";
@@ -28,8 +29,9 @@ import {
 import { enqueue } from "@/offline/outbox";
 import { refreshQueue, requestSync } from "@/offline/sync";
 import { spacing, useTheme } from "@/theme";
-import { CircleCheck, Clock, Flag, ListTodo, Plus } from "@/ui/icons";
+import { CircleCheck, Clock, Flag, ListTodo, Plus, Trash2 } from "@/ui/icons";
 import {
+  ActionSheet,
   Avatar,
   CardGrid,
   ChipGroup,
@@ -61,6 +63,7 @@ export default function ProjectTasksScreen() {
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<Filter>("open");
   const [composing, setComposing] = useState(false);
+  const [menuFor, setMenuFor] = useState<TaskRow | null>(null);
 
   const queryKey = useMemo(() => ["project-tasks", id], [id]);
 
@@ -164,6 +167,7 @@ export default function ProjectTasksScreen() {
         // list until the next read replaces it.
         position: tasks.length,
         updated_at: new Date().toISOString(),
+        created_by: user.id,
       };
 
       queryClient.setQueryData<TaskRow[]>(queryKey, (current) => [...(current ?? []), optimistic]);
@@ -190,6 +194,47 @@ export default function ProjectTasksScreen() {
       requestSync();
     },
     [id, user?.id, tasks.length, queryClient, queryKey],
+  );
+
+  /**
+   * Delete a task from the list, after a confirm.
+   *
+   * Optimistic, then put back if the server refuses. Not queued: see
+   * `deleteTask`. Offered only on tasks this person created, which is the rule
+   * RLS applies.
+   */
+  const removeTask = useCallback(
+    async (task: TaskRow) => {
+      const previous = queryClient.getQueryData<TaskRow[]>(queryKey);
+      queryClient.setQueryData<TaskRow[]>(queryKey, (current) =>
+        (current ?? []).filter((row) => row.id !== task.id),
+      );
+      try {
+        await deleteTask(task.id);
+        void queryClient.invalidateQueries({ queryKey });
+      } catch (e) {
+        if (previous) queryClient.setQueryData(queryKey, previous);
+        Alert.alert(
+          "Could not delete the task",
+          e instanceof Error ? e.message : "Try again when you have signal.",
+        );
+      }
+    },
+    [queryClient, queryKey],
+  );
+
+  const confirmDelete = useCallback(
+    (task: TaskRow) => {
+      Alert.alert(
+        "Delete this task?",
+        `"${task.title}" will be removed for everybody. This cannot be undone.`,
+        [
+          { text: "Keep", style: "cancel" },
+          { text: "Delete", style: "destructive", onPress: () => void removeTask(task) },
+        ],
+      );
+    },
+    [removeTask],
   );
 
   const outstanding = tasks.filter((task) => normaliseStatus(task.status) !== "done").length;
@@ -276,6 +321,7 @@ export default function ProjectTasksScreen() {
                     task={task}
                     onCycle={() => void cycleStatus(task)}
                     onOpen={() => router.push(`/task/${task.id}?projectId=${task.project_id}`)}
+                    onMenu={canDeleteTask(task, user?.id) ? () => setMenuFor(task) : undefined}
                   />
                 ))}
               </CardGrid>
@@ -293,6 +339,29 @@ export default function ProjectTasksScreen() {
         )}
       </View>
 
+      <ActionSheet
+        visible={menuFor !== null}
+        onClose={() => setMenuFor(null)}
+        title={menuFor?.title}
+        actions={
+          menuFor
+            ? [
+                {
+                  label: "Open",
+                  icon: ListTodo,
+                  onPress: () => router.push(`/task/${menuFor.id}?projectId=${menuFor.project_id}`),
+                },
+                {
+                  label: "Delete this task",
+                  icon: Trash2,
+                  destructive: true,
+                  onPress: () => confirmDelete(menuFor),
+                },
+              ]
+            : []
+        }
+      />
+
       <TaskEditorSheet
         visible={composing}
         onClose={() => setComposing(false)}
@@ -307,10 +376,13 @@ function TaskCard({
   task,
   onCycle,
   onOpen,
+  onMenu,
 }: {
   task: TaskRow;
   onCycle: () => void;
   onOpen: () => void;
+  /** Absent when the only action it would hold is one this person cannot take. */
+  onMenu?: () => void;
 }) {
   const status = normaliseStatus(task.status);
   const done = status === "done";
@@ -334,6 +406,8 @@ function TaskCard({
       titleDone={done}
       meta={task.description}
       onPress={onOpen}
+      onMenu={onMenu}
+      menuLabel={`Actions for ${task.title}`}
       accessibilityLabel={task.title}
       status={
         /*

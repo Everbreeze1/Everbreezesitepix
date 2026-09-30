@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { Alert, Pressable, View } from "react-native";
 import { Image } from "expo-image";
-import { Redirect, Stack } from "expo-router";
+import { Redirect, router, Stack } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -49,6 +49,7 @@ import {
   Globe,
   ImageOff,
   Layers,
+  Pencil,
   Plus,
   Send,
   Share2,
@@ -117,6 +118,11 @@ export default function PortfolioScreen() {
 }
 
 type PortfolioTab = "site" | "projects" | "embeds";
+
+/** One page's builder: cover, copy, sections of photos, design and its site listing. */
+function openBuilder(id: string) {
+  router.push({ pathname: "/showcase/[id]", params: { id } });
+}
 
 const TABS = [
   { id: "site" as const, label: "Site", icon: Globe },
@@ -202,10 +208,13 @@ function OwnerPortfolio() {
 
   const run = useMutation({
     mutationFn: async (work: () => Promise<unknown>) => work(),
-    onSuccess: () => {
+    onSuccess: (result) => {
       void queryClient.invalidateQueries({ queryKey: ["portfolio"] });
       void queryClient.invalidateQueries({ queryKey: ["my-portfolio"] });
       setFailure(null);
+      // A page just made, from a job or blank, opens in its builder.
+      const made = (result as { id?: unknown } | undefined)?.id;
+      if (typeof made === "string") openBuilder(made);
     },
     onError: (error: unknown) =>
       setFailure(error instanceof Error ? error.message : "That did not work."),
@@ -327,6 +336,11 @@ function OwnerPortfolio() {
   const rowActions = useCallback(
     (project: PortfolioProject): SheetAction[] => {
       const actions: SheetAction[] = [
+        {
+          label: "Edit page",
+          icon: Pencil,
+          onPress: () => openBuilder(project.id),
+        },
         {
           label: isPublished(project) ? "Unpublish" : "Publish",
           icon: Share2,
@@ -467,6 +481,16 @@ function OwnerPortfolio() {
         tone={isPublished(project) ? "success" : "neutral"}
         variant={isPublished(project) ? "soft" : "outline"}
       />
+      {canManage ? (
+        <IconButton
+          icon={Pencil}
+          size="sm"
+          surface={false}
+          tone="primary"
+          accessibilityLabel={`Edit ${project.title}`}
+          onPress={() => openBuilder(project.id)}
+        />
+      ) : null}
     </Pressable>
   );
 
@@ -614,7 +638,16 @@ function OwnerPortfolio() {
           <View style={{ paddingHorizontal: inset, paddingTop: spacing.lg, gap: spacing.md }}>
             {tab === "site" ? (
               site ? (
-                <SiteEditor site={site} onSaved={refreshSite} />
+                <SiteEditor
+                  site={site}
+                  onSaved={refreshSite}
+                  siteUrl={siteUrl}
+                  listedProjects={
+                    (siteQuery.data?.showcases ?? []).filter((c) => c.on_site && !c.is_draft).length
+                  }
+                  onPublish={togglePublished}
+                  onGoToProjects={() => setTab("projects")}
+                />
               ) : siteQuery.isLoading ? null : (
                 <EmptyState icon={Globe} title="No portfolio site yet" />
               )
@@ -672,8 +705,8 @@ function OwnerPortfolio() {
                   </ListGroup>
                 )}
                 <Text variant="caption" tone="muted">
-                  Each page&apos;s photos, sections and long intro are edited in the page builder on
-                  the website.
+                  The pencil opens a page&apos;s builder: its cover, photos, sections, words and
+                  design.
                 </Text>
               </>
             )}

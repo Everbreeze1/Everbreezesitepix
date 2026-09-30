@@ -15,6 +15,7 @@ import {
   Palette,
   Server,
   Sparkles,
+  Star,
   Trash2,
   CloudUpload,
   UserPlus,
@@ -25,6 +26,7 @@ import {
 import { View } from "react-native";
 import { router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
+import Constants from "expo-constants";
 import { useQuery } from "@tanstack/react-query";
 import { ApiClientError } from "@everlumen/api-client";
 import { getMyProfile } from "@/api/profile";
@@ -131,7 +133,7 @@ export default function AccountScreen() {
    */
   const { isAdmin } = usePlatformAdmin();
   // The Portfolio row is the owner's, as it is in the menu. See `lib/access.ts`.
-  const { isOwner } = useAccountOwner();
+  const { isOwner, isMember, isLoading: teamLoading } = useAccountOwner();
 
   useEffect(() => {
     let cancelled = false;
@@ -354,10 +356,24 @@ export default function AccountScreen() {
               />
               <RowDivider />
               <ListRow
+                icon={Palette}
+                title="Company"
+                subtitle="Logo, watermark, contact details, storage"
+                onPress={() => router.push("/settings/company")}
+              />
+              <RowDivider />
+              <ListRow
                 icon={Building2}
                 title="Workspace settings"
                 subtitle="Business profile, labels"
                 onPress={() => router.push("/workspace")}
+              />
+              <RowDivider />
+              <ListRow
+                icon={Star}
+                title="Review links"
+                subtitle="Ask clients for a review on shared reports"
+                onPress={() => router.push("/settings/review-links")}
               />
               <RowDivider />
               <ListRow
@@ -380,20 +396,27 @@ export default function AccountScreen() {
             </ListGroup>
           </View>
         </View>
-        <View style={{ gap: spacing.md }}>
-          <SectionHeader title="Open on the web" />
-          <View style={{ paddingHorizontal: spacing.lg }}>
-            <ListGroup>
-              <ListRow
-                icon={CreditCard}
-                title="Plan and billing"
-                right={<ExternalLinkMark />}
-                disabled={!canOpenWeb}
-                onPress={() => void openOnWeb("/pricing")}
-              />
-            </ListGroup>
+        {/*
+          The owner's, or somebody's with no team yet (they will own the one
+          they start). An invited member is never shown what the workspace
+          pays for.
+        */}
+        {isOwner || (!isMember && !teamLoading) ? (
+          <View style={{ gap: spacing.md }}>
+            <SectionHeader title="Open on the web" />
+            <View style={{ paddingHorizontal: spacing.lg }}>
+              <ListGroup>
+                <ListRow
+                  icon={CreditCard}
+                  title="Plan and billing"
+                  right={<ExternalLinkMark />}
+                  disabled={!canOpenWeb}
+                  onPress={() => void openOnWeb("/pricing")}
+                />
+              </ListGroup>
+            </View>
           </View>
-        </View>
+        ) : null}
         <View style={{ gap: spacing.md }}>
           {isAdmin ? (
             <>
@@ -418,9 +441,8 @@ export default function AccountScreen() {
               <ListRow
                 icon={CircleQuestionMark}
                 title="Knowledge base"
-                right={<ExternalLinkMark />}
-                disabled={!canOpenWeb}
-                onPress={() => void openOnWeb("/help")}
+                subtitle="Guides, what's new and how to reach us"
+                onPress={() => router.push("/help")}
               />
               <RowDivider />
               <ListRow
@@ -488,6 +510,17 @@ export default function AccountScreen() {
               }}
             />
           </View>
+          <View
+            style={{
+              paddingHorizontal: spacing.lg,
+              paddingTop: spacing.lg,
+              paddingBottom: spacing.xl,
+            }}
+          >
+            <Text variant="caption" tone="muted" style={{ textAlign: "center" }}>
+              {buildLabel()}
+            </Text>
+          </View>
         </View>
       </Columns>
     </Screen>
@@ -497,4 +530,15 @@ export default function AccountScreen() {
 /** The glyph every web-bound row carries, so the boundary is visible at a glance. */
 function ExternalLinkMark() {
   return <Badge label="Web" icon={ExternalLink} tone="neutral" variant="outline" />;
+}
+
+/** "Version 0.1.0 (build 7) · 2026-09-29 21:40 UTC · a42bf8a", so testers can confirm the installed build. */
+function buildLabel(): string {
+  const extra = (Constants.expoConfig?.extra ?? {}) as { buildCommit?: string; builtAt?: string };
+  const parts = [`Version ${Constants.expoConfig?.version ?? "?"}`];
+  const code = Constants.expoConfig?.android?.versionCode ?? Constants.expoConfig?.ios?.buildNumber;
+  if (code) parts[0] += ` (build ${code})`;
+  if (extra.builtAt) parts.push(`${extra.builtAt} UTC`);
+  if (extra.buildCommit) parts.push(extra.buildCommit);
+  return parts.join(" · ");
 }

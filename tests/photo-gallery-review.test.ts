@@ -254,7 +254,8 @@ describe("a confirmation is never raised behind the screen that asked for it", (
 describe("the Gallery grid can select photos, which the Help Center has always said", () => {
   const SRC = read("apps/web/src/features/gallery/pages/GalleryPage.tsx");
   const CODE = stripComments(SRC);
-  const HELP = read("apps/web/src/features/settings/pages/HelpPage.tsx");
+  // The Help Center's articles moved to packages/shared so the app shows them too.
+  const HELP = read("packages/shared/src/help-guides.ts");
 
   it("still makes the promise the fix is here to keep", () => {
     // If this ever moves, the test below is measuring the wrong thing.

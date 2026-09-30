@@ -232,9 +232,17 @@ export function portfolioPageUrl(
 export type SiteDraft = {
   slug: string;
   businessName: string;
+  /** Public URL of the site's own logo, or "" for none. */
+  logoUrl: string;
   accentColor: string;
   heroHeadline: string;
   heroSubhead: string;
+  /** The chosen cover photo's id, or "" to fall back to the newest project's cover. */
+  heroPhotoId: string;
+  /**
+   * The About text as the web stores it: TipTap HTML, edited on the phone with
+   * `FormattedTextEditor`, so bold, lists and links made on either side survive.
+   */
   about: string;
   services: string;
   serviceAreas: string;
@@ -251,17 +259,16 @@ export type SiteDraft = {
 };
 
 /**
- * `about_html` as plain paragraphs, for a phone text box.
+ * `about_html` as plain paragraphs, for a one-line summary of the About text.
  *
- * The web edits it with a rich editor. The phone shows the words and only
- * writes the field back when they were changed, so formatting made on the web
- * survives any save that did not touch the About text.
+ * The field itself is edited as formatted text now (`FormattedTextEditor`),
+ * so this is only for reading.
  */
 export function htmlToPlain(html: string | null | undefined): string {
   if (!html) return "";
   return (
     html
-      // A paragraph ends in a blank line so `plainToHtml` reads it back as one.
+      // A paragraph ends in a blank line, so paragraphs stay apart in the summary.
       .replace(/<\/(p|div|h\d)\s*>/gi, "\n\n")
       .replace(/<(br|\/li)\s*\/?>/gi, "\n")
       .replace(/<[^>]+>/g, "")
@@ -274,24 +281,6 @@ export function htmlToPlain(html: string | null | undefined): string {
       .replace(/\n{3,}/g, "\n\n")
       .trim()
   );
-}
-
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-/** Plain paragraphs back to the simple HTML the public site renders. */
-export function plainToHtml(text: string): string | null {
-  const paragraphs = text
-    .split(/\n{2,}/)
-    .map((p) => p.trim())
-    .filter(Boolean);
-  if (paragraphs.length === 0) return null;
-  return paragraphs.map((p) => `<p>${escapeHtml(p).replace(/\n/g, "<br>")}</p>`).join("");
 }
 
 /** A comma or line separated list, trimmed and de-duplicated. */
@@ -312,10 +301,12 @@ export function toSiteDraft(site: PortfolioSite): SiteDraft {
   return {
     slug: site.slug,
     businessName: site.business_name ?? "",
+    logoUrl: site.logo_url ?? "",
     accentColor: site.accent_color ?? "",
     heroHeadline: site.hero_headline ?? "",
     heroSubhead: site.hero_subhead ?? "",
-    about: htmlToPlain(site.about_html),
+    heroPhotoId: site.hero_photo_id ?? "",
+    about: site.about_html ?? "",
     services: (site.services ?? []).join(", "),
     serviceAreas: (site.service_areas ?? []).join(", "),
     phone: site.phone ?? "",
@@ -335,9 +326,11 @@ export function toSiteDraft(site: PortfolioSite): SiteDraft {
 export type PortfolioPatch = {
   slug?: string;
   businessName?: string | null;
+  logoUrl?: string | null;
   accentColor?: string;
   heroHeadline?: string | null;
   heroSubhead?: string | null;
+  heroPhotoId?: string | null;
   aboutHtml?: string | null;
   services?: string[];
   serviceAreas?: string[];
@@ -359,9 +352,8 @@ const HEX = /^#[0-9a-f]{6}$/i;
 /**
  * Only what changed.
  *
- * Sending the whole form would write back fields the phone cannot show
- * faithfully (the About text's formatting, above all), and a slug that did not
- * move would be re-validated for nothing. So the patch is the difference
+ * Sending the whole form would write back fields nobody touched, and a slug
+ * that did not move would be re-validated for nothing. So the patch is the difference
  * between the form and the row it was read from, and an untouched form is an
  * empty patch.
  */
@@ -387,7 +379,10 @@ export function sitePatch(before: SiteDraft, after: SiteDraft): PortfolioPatch {
   if (after.heroSubhead.trim() !== before.heroSubhead.trim()) {
     patch.heroSubhead = text(after.heroSubhead);
   }
-  if (after.about.trim() !== before.about.trim()) patch.aboutHtml = plainToHtml(after.about);
+  if (after.logoUrl.trim() !== before.logoUrl.trim()) patch.logoUrl = text(after.logoUrl);
+  if (after.heroPhotoId !== before.heroPhotoId) patch.heroPhotoId = after.heroPhotoId || null;
+  // HTML from the formatted editor; "" is how an emptied editor saves.
+  if (after.about !== before.about) patch.aboutHtml = after.about.trim() ? after.about : null;
   if (listChanged(after.services, before.services)) patch.services = parseList(after.services);
   if (listChanged(after.serviceAreas, before.serviceAreas)) {
     patch.serviceAreas = parseList(after.serviceAreas);
@@ -427,6 +422,7 @@ export function siteDraftErrors(draft: SiteDraft): Partial<Record<keyof SiteDraf
   if (draft.businessName.trim().length > 160) errors.businessName = "Keep it under 160 characters.";
   if (draft.heroHeadline.trim().length > 200) errors.heroHeadline = "Keep it under 200 characters.";
   if (draft.heroSubhead.trim().length > 400) errors.heroSubhead = "Keep it under 400 characters.";
+  if (draft.about.length > 20_000) errors.about = "The About text is too long.";
   if (parseList(draft.services).length > 24) errors.services = "Up to 24 services.";
   if (parseList(draft.serviceAreas).length > 40) errors.serviceAreas = "Up to 40 areas.";
   if (draft.ctaLabel.trim().length > 60) errors.ctaLabel = "Keep it under 60 characters.";
@@ -596,7 +592,7 @@ export const SITE_SECTIONS: {
     label: "Business",
     question: "What's your business called?",
     hint: "Your name and colour set the tone for every page on the site.",
-    fields: ["businessName", "accentColor"],
+    fields: ["businessName", "logoUrl", "accentColor"],
   },
   {
     id: "services",
@@ -610,7 +606,7 @@ export const SITE_SECTIONS: {
     label: "Cover",
     question: "What should greet a visitor?",
     hint: "The headline over the photo at the top of the site.",
-    fields: ["heroHeadline", "heroSubhead"],
+    fields: ["heroPhotoId", "heroHeadline", "heroSubhead"],
   },
   {
     id: "areas",
@@ -652,7 +648,12 @@ export const SITE_SECTIONS: {
   },
 ];
 
-/** Whether a section has something in it, by the web's `isDone` rules. */
+/**
+ * Whether a section has something in it, by the web's `isDone` rules.
+ *
+ * The cover reads the draft's photo, since it is picked (and cleared) in the
+ * draft now, so the tick follows what Save would write.
+ */
 export function siteSectionDone(
   id: SiteSectionId,
   draft: SiteDraft,
@@ -664,11 +665,11 @@ export function siteSectionDone(
     case "services":
       return parseList(draft.services).length > 0;
     case "cover":
-      return !!site.hero_photo_id || draft.heroHeadline.trim().length > 0;
+      return !!draft.heroPhotoId || draft.heroHeadline.trim().length > 0;
     case "areas":
       return parseList(draft.serviceAreas).length > 0;
     case "about":
-      return draft.about.trim().length > 0;
+      return htmlToPlain(draft.about).length > 0;
     case "reviews":
       return !!site.google_place_id;
     case "contact":
@@ -708,13 +709,13 @@ export function siteSectionSummary(
         : list.slice(0, 3).join(", ") + (list.length > 3 ? ` and ${list.length - 3} more` : "");
     }
     case "cover":
-      return draft.heroHeadline.trim() || (site.hero_photo_id ? "Photo chosen" : "Not set");
+      return draft.heroHeadline.trim() || (draft.heroPhotoId ? "Photo chosen" : "Not set");
     case "areas": {
       const n = parseList(draft.serviceAreas).length;
       return `${n === 0 ? "No areas yet" : count(n, "area", "areas")}, map ${draft.showMap ? "on" : "off"}`;
     }
     case "about": {
-      const text = draft.about.trim().replace(/\s+/g, " ");
+      const text = htmlToPlain(draft.about).replace(/\s+/g, " ");
       return text ? (text.length > 60 ? `${text.slice(0, 57)}...` : text) : "Not written yet";
     }
     case "reviews":
@@ -735,4 +736,123 @@ export function sectionWithError(
 ): SiteSectionId | null {
   const keys = Object.keys(errors) as (keyof SiteDraft)[];
   return SITE_SECTIONS.find((s) => s.fields.some((f) => keys.includes(f)))?.id ?? null;
+}
+
+/*
+ * ---------------------------------------------------------------------------
+ * The guided build: the web's `PortfolioSetupWizard`, one question a screen.
+ * ---------------------------------------------------------------------------
+ */
+
+/** The three answers a site cannot go without: the web's `REQUIRED_STEP_IDS`. */
+export const REQUIRED_SECTION_IDS: SiteSectionId[] = ["business", "services", "cover"];
+
+/**
+ * Whether to offer the guided build instead of the section list.
+ *
+ * The web's `needsGuidedSetup`: strict, because a site missing any of the
+ * three load-bearing answers has nothing worth showing a prospect.
+ */
+export function needsGuidedSetup(
+  draft: SiteDraft,
+  site: Pick<PortfolioSite, "hero_photo_id" | "google_place_id">,
+): boolean {
+  return REQUIRED_SECTION_IDS.some((id) => !siteSectionDone(id, draft, site));
+}
+
+/** Where the guided build resumes: the first unanswered section, or the end. */
+export function firstUnansweredSection(
+  draft: SiteDraft,
+  site: Pick<PortfolioSite, "hero_photo_id" | "google_place_id">,
+): number {
+  const index = SITE_SECTIONS.findIndex((s) => !siteSectionDone(s.id, draft, site));
+  return index === -1 ? SITE_SECTIONS.length : index;
+}
+
+/** The sections skipped on the way through, offered back on the finish screen. */
+export function skippedSections(
+  draft: SiteDraft,
+  site: Pick<PortfolioSite, "hero_photo_id" | "google_place_id">,
+) {
+  return SITE_SECTIONS.filter((s) => s.id !== "address" && !siteSectionDone(s.id, draft, site));
+}
+
+/**
+ * Per person and per portfolio, as the web keeps it in localStorage: somebody
+ * who would rather use the section list should not have the guided build
+ * offered to them again, and their co-owner's choice is their own.
+ */
+export function setupDismissedKey(portfolioId: string): string {
+  return `everlumen.portfolio-setup-dismissed.${portfolioId}`;
+}
+
+/*
+ * ---------------------------------------------------------------------------
+ * The public site, block by block: the web's Portfolio overview
+ * (`PortfolioLibraryContent`), which draws Hero, Our story, Capabilities,
+ * Gallery, Testimonials and Contact from the fields above. Each block says
+ * where its words come from, so a tap opens the section that fills it.
+ * ---------------------------------------------------------------------------
+ */
+
+export type SitePreviewBlockId =
+  | "hero"
+  | "story"
+  | "capabilities"
+  | "gallery"
+  | "testimonials"
+  | "contact";
+
+export const SITE_PREVIEW_BLOCKS: {
+  id: SitePreviewBlockId;
+  label: string;
+  /** The section that fills it; the gallery is filled by the Projects tab. */
+  section: SiteSectionId | null;
+}[] = [
+  { id: "hero", label: "Hero", section: "cover" },
+  { id: "story", label: "Our story", section: "about" },
+  { id: "capabilities", label: "Capabilities", section: "services" },
+  { id: "gallery", label: "Gallery", section: null },
+  { id: "testimonials", label: "Testimonials", section: "reviews" },
+  { id: "contact", label: "Contact", section: "contact" },
+];
+
+/** What a visitor sees in each block now, in one line; the web's placeholders when empty. */
+export function sitePreviewLine(
+  id: SitePreviewBlockId,
+  draft: SiteDraft,
+  site: Pick<PortfolioSite, "show_reviews" | "google_rating" | "google_review_count">,
+  listedProjects: number,
+): string {
+  switch (id) {
+    case "hero":
+      return (
+        draft.heroHeadline.trim() ||
+        draft.businessName.trim() ||
+        "Your business name, over your cover photo"
+      );
+    case "story": {
+      const text = htmlToPlain(draft.about).replace(/\s+/g, " ");
+      if (!text) return "Tell visitors who is behind the work.";
+      return text.length > 90 ? `${text.slice(0, 87)}...` : text;
+    }
+    case "capabilities": {
+      const list = parseList(draft.services);
+      return list.length ? list.slice(0, 3).join(", ") : "Add the work you want to be known for.";
+    }
+    case "gallery":
+      return listedProjects > 0
+        ? `${listedProjects} project${listedProjects === 1 ? "" : "s"} on the site`
+        : "Published projects from your team will appear here.";
+    case "testimonials":
+      return site.show_reviews && site.google_rating != null
+        ? `${site.google_rating.toFixed(1)} rating on Google, ${site.google_review_count ?? 0} reviews`
+        : "Connect your Google listing to show live reviews here.";
+    case "contact":
+      return (
+        [draft.phone.trim(), draft.email.trim(), draft.address.trim()]
+          .filter(Boolean)
+          .join(" · ") || "Add a phone or email so visitors can reach you."
+      );
+  }
 }

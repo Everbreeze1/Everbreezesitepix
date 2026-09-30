@@ -11,11 +11,12 @@ import {
   type NativeSyntheticEvent,
   type TextInputSelectionChangeEventData,
 } from "react-native";
-import { useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { calendarDueLabel, photoIsDone, relativeTime, taskPhotoProgress } from "@everlumen/shared";
 import { Image } from "expo-image";
-import { listProjectTasks, type TaskDraft, type TaskRow } from "@/api/tasks";
+import { deleteTask, listProjectTasks, type TaskDraft, type TaskRow } from "@/api/tasks";
+import { canDeleteTask } from "@/api/record-edit-rules";
 import { getTaskPhotoState } from "@/api/task-photos";
 import {
   createTaskComment,
@@ -248,6 +249,44 @@ export default function TaskDetailScreen() {
     [id, projectId, queryClient, tasksKey],
   );
 
+  /**
+   * Delete the task, after a confirm.
+   *
+   * Offered to its creator only, which is who RLS lets delete it. On success the
+   * row leaves the cached list at once and the screen steps back to it, since a
+   * detail screen for a task that no longer exists has nothing left to show.
+   */
+  const removeTask = useMutation({
+    mutationFn: () => deleteTask(id!),
+    onSuccess: () => {
+      queryClient.setQueryData<TaskRow[]>(tasksKey, (current) =>
+        (current ?? []).filter((row) => row.id !== id),
+      );
+      void queryClient.invalidateQueries({ queryKey: tasksKey });
+      if (router.canGoBack()) router.back();
+      else if (projectId) router.replace(`/project/${projectId}/tasks`);
+      else router.replace("/");
+    },
+    onError: (error) => {
+      Alert.alert(
+        "Could not delete the task",
+        error instanceof Error ? error.message : "Try again when you have signal.",
+      );
+    },
+  });
+
+  const confirmDeleteTask = useCallback(() => {
+    if (!task) return;
+    Alert.alert(
+      "Delete this task?",
+      `"${task.title}" will be removed for everybody. This cannot be undone.`,
+      [
+        { text: "Keep", style: "cancel" },
+        { text: "Delete", style: "destructive", onPress: () => removeTask.mutate() },
+      ],
+    );
+  }, [removeTask, task]);
+
   const onSelectionChange = useCallback(
     (event: NativeSyntheticEvent<TextInputSelectionChangeEventData>) => {
       setCursor(event.nativeEvent.selection.start);
@@ -371,12 +410,23 @@ export default function TaskDetailScreen() {
         title="Task"
         actions={
           task ? (
-            <IconButton
-              icon={PenLine}
-              accessibilityLabel="Edit task"
-              tone="primary"
-              onPress={() => setEditing(true)}
-            />
+            <View style={{ flexDirection: "row", gap: spacing.sm }}>
+              {canDeleteTask(task, user?.id) ? (
+                <IconButton
+                  icon={Trash2}
+                  accessibilityLabel="Delete task"
+                  tone="destructive"
+                  disabled={removeTask.isPending}
+                  onPress={confirmDeleteTask}
+                />
+              ) : null}
+              <IconButton
+                icon={PenLine}
+                accessibilityLabel="Edit task"
+                tone="primary"
+                onPress={() => setEditing(true)}
+              />
+            </View>
           ) : null
         }
       />

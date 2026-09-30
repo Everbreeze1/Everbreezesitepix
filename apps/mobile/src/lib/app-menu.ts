@@ -8,8 +8,8 @@
  *
  * The groups and their order are the web's (`AppSidebar.tsx`): Workspace, Set
  * up, Client-facing, and the small utility rows at the foot. The app adds the
- * browse surfaces the web keeps inside its Projects page (Pipelines, Timeline,
- * Groups) and the activity feed, which used to be the Browse grid at the
+ * browse surfaces the web keeps inside its Projects page (Pipelines, Schedule,
+ * Timeline, Groups) and the activity feed, which used to be the Browse grid at the
  * bottom of Home, a place nobody scrolled to.
  *
  * Notifications is not a row either. The bell sits in the header at the top of
@@ -30,6 +30,7 @@ export type AppMenuIcon =
   | "reports"
   | "map"
   | "pipelines"
+  | "schedule"
   | "timeline"
   | "groups"
   | "activity"
@@ -79,6 +80,7 @@ export const APP_MENU: AppMenuGroup[] = [
       { label: "Reports", href: "/reports", icon: "reports" },
       { label: "Maps", href: "/map", icon: "map" },
       { label: "Pipelines", href: "/pipelines", icon: "pipelines" },
+      { label: "Schedule", href: "/schedule", icon: "schedule" },
       { label: "Timeline", href: "/timeline", icon: "timeline" },
       { label: "Groups", href: "/groups", icon: "groups" },
       { label: "Team activity", href: "/activity", icon: "activity" },
@@ -99,7 +101,9 @@ export const APP_MENU: AppMenuGroup[] = [
     title: null,
     items: [
       { label: "Account and settings", href: "/account", icon: "account", tab: true },
-      { label: "Knowledge Base", href: "/help", icon: "help", web: true },
+      // Native since the articles moved to packages/shared: the web page sits
+      // behind sign-in, and the in-app browser has no session to open it with.
+      { label: "Knowledge Base", href: "/help", icon: "help" },
       { label: "Feedback", href: "/report-issue", icon: "feedback" },
       { label: "Admin", href: "/admin", icon: "admin", adminOnly: true },
     ],

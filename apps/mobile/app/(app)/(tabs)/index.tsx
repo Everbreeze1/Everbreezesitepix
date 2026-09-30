@@ -31,6 +31,7 @@ import {
 import { getUnreadNotificationCount } from "@/api/notifications";
 import { listGalleryPhotoPage, listProjectCovers, type GalleryPhotoItem } from "@/api/photos";
 import { listProjects, type ProjectListItem } from "@/api/projects";
+import { AccountSetupCard } from "@/components/AccountSetup";
 import { ActionRail } from "@/components/ActionRail";
 import { FloatingMenuButton } from "@/components/AppMenu";
 import { BrandMark } from "@/components/BrandMark";
@@ -500,6 +501,12 @@ export default function HomeScreen() {
             <QueueBanner />
           </View>
         ) : null}
+
+        {/*
+          First-time setup, as on the web dashboard. Draws nothing once the
+          company profile is answered, for crew members, or after "not now".
+        */}
+        <AccountSetupCard />
 
         {/*
           The board in six numbers. Rows of two rather than a wrapped grid, so

@@ -129,6 +129,7 @@ export default function AppLayout() {
           options={{ presentation: "fullScreenModal", headerShown: false, ...MODAL_ANIMATION }}
         />
         <Stack.Screen name="project/[id]/trash" options={{ title: "Trash" }} />
+        <Stack.Screen name="project/[id]/qr" options={{ title: "QR code" }} />
         <Stack.Screen name="project/[id]/checklists" options={{ title: "Checklists" }} />
         <Stack.Screen name="project/[id]/tasks" options={{ title: "Tasks" }} />
         <Stack.Screen name="task/[id]" options={{ title: "Task" }} />
@@ -157,6 +158,7 @@ export default function AppLayout() {
         <Stack.Screen name="map" options={{ title: "Map", ...MENU_DESTINATION }} />
         <Stack.Screen name="timeline" options={{ title: "Timeline", ...MENU_DESTINATION }} />
         <Stack.Screen name="pipelines" options={{ title: "Pipelines", ...MENU_DESTINATION }} />
+        <Stack.Screen name="schedule" options={{ title: "Schedule", ...MENU_DESTINATION }} />
         <Stack.Screen name="groups" options={{ title: "Groups", ...MENU_DESTINATION }} />
         <Stack.Screen name="portfolio" options={{ title: "Portfolio", ...MENU_DESTINATION }} />
         <Stack.Screen name="team" options={{ title: "Team", ...MENU_DESTINATION }} />
@@ -174,6 +176,8 @@ export default function AppLayout() {
         />
         <Stack.Screen name="settings/security" options={{ title: "Email and password" }} />
         <Stack.Screen name="settings/appearance" options={{ title: "Appearance" }} />
+        <Stack.Screen name="settings/review-links" options={{ title: "Review links" }} />
+        <Stack.Screen name="help" options={{ title: "Help", ...MENU_DESTINATION }} />
         <Stack.Screen name="workspace" options={{ title: "Workspace" }} />
         <Stack.Screen name="labels" options={{ title: "Labels" }} />
         <Stack.Screen name="templates" options={{ title: "Templates", ...MENU_DESTINATION }} />
@@ -182,6 +186,17 @@ export default function AppLayout() {
           options={{ title: "Workflow template" }}
         />
         <Stack.Screen name="template/[id]" options={{ title: "Template" }} />
+        <Stack.Screen name="blueprints" options={{ title: "Blueprints" }} />
+        <Stack.Screen name="blueprint/[id]" options={{ title: "Blueprint" }} />
+        <Stack.Screen name="document-templates" options={{ title: "Document templates" }} />
+        <Stack.Screen name="document-template/[id]" options={{ title: "Document template" }} />
+        <Stack.Screen name="report-templates" options={{ title: "Report templates" }} />
+        <Stack.Screen name="report-template/[id]" options={{ title: "Report template" }} />
+        <Stack.Screen name="walkthrough-templates" options={{ title: "Walkthrough templates" }} />
+        <Stack.Screen
+          name="walkthrough-template/[id]"
+          options={{ title: "Walkthrough template" }}
+        />
         <Stack.Screen name="project/[id]/site-logs" options={{ title: "Site logs" }} />
         <Stack.Screen name="site-log/[logId]" options={{ title: "Site log" }} />
         <Stack.Screen name="project/[id]/reports" options={{ title: "Reports" }} />

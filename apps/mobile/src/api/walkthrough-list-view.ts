@@ -182,3 +182,31 @@ export function summarySections(markdown: string | null): SummarySection[] {
     .map((section) => ({ heading: section.heading, body: section.body.trim() }))
     .filter((section) => section.body || section.heading);
 }
+
+/**
+ * What Delete says before it deletes. Plain about what survives, as the web's
+ * confirm is: "cannot be undone" on its own reads as though the photos and the
+ * write-up go with the recording.
+ */
+export const WALKTHROUGH_DELETE_WARNING =
+  "Delete this walkthrough recording? Its summary and your photos are not affected. This cannot be undone.";
+
+/**
+ * The walkthrough edit form's patch, or why it cannot be saved.
+ *
+ * A title is required (the list and the share page both lead with it); notes
+ * may be emptied, which stores null rather than an empty string so the
+ * "Earlier report" block disappears instead of showing a blank card.
+ */
+export function walkthroughEditPatch(
+  title: string,
+  notes: string,
+):
+  | { ok: true; patch: { title: string; summary_markdown: string | null } }
+  | { ok: false; error: string } {
+  const cleanTitle = title.trim();
+  if (!cleanTitle) return { ok: false, error: "Give the walkthrough a title." };
+  if (cleanTitle.length > 200) return { ok: false, error: "Keep the title under 200 characters." };
+  const cleanNotes = notes.trim();
+  return { ok: true, patch: { title: cleanTitle, summary_markdown: cleanNotes ? notes : null } };
+}

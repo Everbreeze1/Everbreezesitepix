@@ -55,6 +55,22 @@ export async function ensureProjectShareToken(projectId: string): Promise<string
  */
 export type ProjectShareState = { shareToken: string | null; revokedAt: string | null };
 
+/**
+ * A project's link and whether it is live, publishing it on the first ask.
+ *
+ * The web QR dialog's read: `ensureProjectShare` answers with the token and
+ * `revokedAt`, and publishes only while nobody has ever decided either way, so
+ * opening the QR screen again never switches back on a link its owner turned
+ * off (that guarantee lives in the database, not here).
+ */
+export async function ensureProjectShareState(projectId: string): Promise<ProjectShareState> {
+  const result = await api.rpc<Partial<ProjectShareState>>("ensureProjectShare", { projectId });
+  return {
+    shareToken: result?.shareToken ?? null,
+    revokedAt: result?.revokedAt ?? null,
+  };
+}
+
 export async function getProjectShareState(projectId: string): Promise<ProjectShareState> {
   const result = await api.rpc<Partial<ProjectShareState>>("getProjectShare", { projectId });
   return {

@@ -21,6 +21,8 @@ import {
   signWalkthroughVideo,
   type WalkthroughShot,
   createReportFromWalkthrough,
+  deleteWalkthrough,
+  updateWalkthroughDetails,
 } from "@/api/walkthroughs";
 import {
   generateSummaryForWalkthrough,
@@ -35,7 +37,10 @@ import {
   aiSummaryStatus,
   aiSummaryTone,
   clockDuration,
+  WALKTHROUGH_DELETE_WARNING,
+  walkthroughEditPatch,
 } from "@/api/walkthrough-list-view";
+import { goBack } from "@/lib/navigation";
 import { openShareSheet } from "@/api/sharing";
 import { SegmentTabs } from "@/components/walkthrough/SegmentTabs";
 import { SummaryReport } from "@/components/walkthrough/SummaryReport";
@@ -43,10 +48,12 @@ import { radius, spacing, useLayout, useTheme } from "@/theme";
 import {
   FileText,
   Link2,
+  Pencil,
   RefreshCw,
   ScrollText,
   Share2,
   Sparkles,
+  Trash2,
   TriangleAlert,
   VideoOff,
 } from "@/ui/icons";
@@ -55,10 +62,13 @@ import {
   Button,
   Card,
   ErrorState,
+  Field,
   Icon,
+  IconButton,
   ListRow,
   PhotoThumb,
   SectionHeader,
+  Sheet,
   SkeletonList,
   Text,
 } from "@/ui";
@@ -96,6 +106,9 @@ export default function WalkthroughDetailScreen() {
   const [segment, setSegment] = useState<Tab>(tab === "transcript" ? "transcript" : "summary");
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  /* The edit sheet's draft: null while closed. */
+  const [draft, setDraft] = useState<{ title: string; notes: string } | null>(null);
+  const [draftError, setDraftError] = useState<string | null>(null);
 
   const detailQuery = useQuery({
     queryKey: ["walkthrough", id],
@@ -353,6 +366,61 @@ export default function WalkthroughDetailScreen() {
     }
   }
 
+  /**
+   * Save the title and notes, the web detail page's Save: the row's own
+   * `title` and `summary_markdown`. The AI Summary has its own editor.
+   */
+  async function saveEdit() {
+    if (!id || !draft) return;
+    const result = walkthroughEditPatch(draft.title, draft.notes);
+    if (!result.ok) {
+      setDraftError(result.error);
+      return;
+    }
+    setBusy("edit");
+    try {
+      await updateWalkthroughDetails(id, result.patch);
+      await detailQuery.refetch();
+      if (detail?.project_id) {
+        void queryClient.invalidateQueries({
+          queryKey: ["project-walkthroughs", detail.project_id],
+        });
+      }
+      setDraft(null);
+      setDraftError(null);
+    } catch (e) {
+      setDraftError(e instanceof Error ? e.message : "Could not save the changes");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function confirmDelete() {
+    if (!id) return;
+    Alert.alert("Delete this walkthrough?", WALKTHROUGH_DELETE_WARNING, [
+      { text: "Keep it", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          setBusy("delete");
+          try {
+            await deleteWalkthrough(id);
+            const projectId = detail?.project_id;
+            if (projectId) {
+              void queryClient.invalidateQueries({ queryKey: ["project-walkthroughs", projectId] });
+            }
+            queryClient.removeQueries({ queryKey: ["walkthrough", id] });
+            goBack(projectId ? `/project/${projectId}/walkthroughs` : "/");
+          } catch (e) {
+            setNotice(e instanceof Error ? e.message : "Could not delete the walkthrough");
+            setBusy(null);
+          }
+        },
+      },
+    ]);
+  }
+
   const videoBox = {
     width: "100%" as const,
     aspectRatio: 16 / 9,
@@ -434,7 +502,24 @@ export default function WalkthroughDetailScreen() {
                 )}
 
                 <View style={{ gap: spacing.xs }}>
-                  <Text variant="title">{detail.title}</Text>
+                  <View style={{ flexDirection: "row", alignItems: "flex-start", gap: spacing.sm }}>
+                    <Text variant="title" style={{ flex: 1 }}>
+                      {detail.title}
+                    </Text>
+                    <IconButton
+                      icon={Pencil}
+                      accessibilityLabel="Edit title and notes"
+                      surface={false}
+                      disabled={Boolean(busy)}
+                      onPress={() => {
+                        setDraftError(null);
+                        setDraft({
+                          title: detail.title ?? "",
+                          notes: detail.summary_markdown ?? "",
+                        });
+                      }}
+                    />
+                  </View>
                   <Text variant="caption" tone="muted">
                     {[
                       relativeTime(detail.created_at),
@@ -684,12 +769,60 @@ export default function WalkthroughDetailScreen() {
                       {reportRefusal(Boolean(detail.transcript))}
                     </Text>
                   ) : null}
+                  <Button
+                    label="Delete walkthrough"
+                    icon={Trash2}
+                    variant="destructive"
+                    fullWidth
+                    loading={busy === "delete"}
+                    disabled={Boolean(busy)}
+                    onPress={confirmDelete}
+                  />
                 </View>
               </View>
             </View>
           </ScrollView>
         )}
       </View>
+
+      <Sheet
+        visible={draft !== null}
+        onClose={() => (busy === "edit" ? undefined : setDraft(null))}
+        title="Edit walkthrough"
+        maxHeightRatio={0.92}
+        footer={
+          <Button
+            label={busy === "edit" ? "Saving" : "Save"}
+            fullWidth
+            loading={busy === "edit"}
+            disabled={busy === "edit"}
+            onPress={() => void saveEdit()}
+          />
+        }
+      >
+        <View style={{ gap: spacing.md }}>
+          <Field
+            label="Title"
+            value={draft?.title ?? ""}
+            onChangeText={(title) => {
+              setDraft((current) => (current ? { ...current, title } : current));
+              if (draftError) setDraftError(null);
+            }}
+            error={draftError ?? undefined}
+          />
+          <Field
+            label="Notes"
+            value={draft?.notes ?? ""}
+            onChangeText={(notes) =>
+              setDraft((current) => (current ? { ...current, notes } : current))
+            }
+            multiline
+            rows={10}
+            placeholder="What was found, what was agreed, what happens next"
+            hint="Kept with the recording. The AI Summary has its own editor."
+          />
+        </View>
+      </Sheet>
     </>
   );
 }

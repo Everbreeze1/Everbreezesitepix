@@ -104,7 +104,7 @@ export function ShotEditor({
   status?: { text: string; error?: boolean } | null;
   onChange: (patch: ShotPatch) => void;
   onPhaseChange?: (phase: PhotoPhase) => void;
-  /** Opens the note editor: "voice" straight into dictation, "type" for the keyboard. */
+  /** Opens the note editor: "voice" straight into recording, "type" for the keyboard. */
   onNote: (start: "voice" | "type") => void;
   onShare?: () => void;
   onRetake: () => void;

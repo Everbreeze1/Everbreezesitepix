@@ -53,6 +53,21 @@
           "icon": "./assets/notification-icon.png",
           "color": "#d97c0a"
         }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Everlumen uses your photo library so you can add existing job-site photos to a project.",
+          "savePhotosPermission": "Everlumen saves job-site photos you choose to your photo library.",
+          "isAccessMediaLocationEnabled": false
+        }
+      ],
+      "expo-sharing",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Everlumen uses the microphone to record voice notes during walkthroughs."
+        }
       ]
     ],
     "experiments": {
@@ -87,8 +102,35 @@
         "android.permission.RECORD_AUDIO",
         "android.permission.POST_NOTIFICATIONS"
       ],
-      "blockedPermissions": [
-        "android.permission.ACCESS_BACKGROUND_LOCATION"
+      "blockedPermissions": ["android.permission.ACCESS_BACKGROUND_LOCATION"],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "everlumen.co",
+              "pathPrefix": "/invite/"
+            },
+            {
+              "scheme": "https",
+              "host": "everlumen.co",
+              "pathPrefix": "/subcontractor-invite/"
+            },
+            {
+              "scheme": "https",
+              "host": "www.everlumen.co",
+              "pathPrefix": "/invite/"
+            },
+            {
+              "scheme": "https",
+              "host": "www.everlumen.co",
+              "pathPrefix": "/subcontractor-invite/"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
       ]
     },
     "web": {

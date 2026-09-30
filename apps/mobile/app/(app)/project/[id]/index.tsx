@@ -29,6 +29,8 @@ import {
   NotebookPen,
   PenLine,
   Send,
+  QrCode,
+  FileArchive,
   Share2,
   SlidersHorizontal,
   Sparkles,
@@ -106,7 +108,11 @@ import { normaliseStatus } from "@/api/task-status";
 import { listSiteLogs } from "@/api/site-logs";
 import { listDocumentTree } from "@/api/pages";
 import { PhotoBulkBar, type PhotoBulkAction } from "@/components/PhotoBulkBar";
+import { usePhotoTransfer } from "@/components/PhotoTransfer";
+import { projectZipLayout } from "@/api/photo-zip-view";
 import { generateSummaryFromPhotos } from "@/api/summaries";
+import { getProjectContributorLog } from "@/api/project-contributors";
+import { attributionText } from "@/api/project-contributors-view";
 import { photoSelectionError } from "@/api/summary-view";
 import { randomUUID } from "expo-crypto";
 import { ProjectEditorSheet } from "@/components/ProjectEditorSheet";
@@ -271,6 +277,7 @@ export default function ProjectDetailScreen() {
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
+  const transfer = usePhotoTransfer();
   /*
    * The web header's Create menu (AI Summary, the two reports, templates, a
    * blank page) and the kebab's organise sheets. Each is mounted only while in
@@ -340,6 +347,15 @@ export default function ProjectDetailScreen() {
   }, [photos, filter, tagFilter, tagLogic, sort]);
 
   const tagCounts = useMemo(() => photoTagCounts(photos), [photos]);
+
+  // The "Logged by" line over the grid: the web project page's contributors call.
+  const contributorsQuery = useQuery({
+    queryKey: ["project-contributor-log", id],
+    queryFn: () => getProjectContributorLog(id!),
+    enabled: Boolean(id),
+    staleTime: 60_000,
+  });
+  const contributorLog = attributionText(contributorsQuery.data);
 
   const videosQuery = useQuery({
     queryKey: ["project-videos", id],
@@ -1042,6 +1058,21 @@ export default function ProjectDetailScreen() {
                     </View>
 
                     {/*
+                      Who has been adding photos here, as the web prints it
+                      above its grid. A log of the work, not the crew.
+                    */}
+                    {showPhotos && contributorLog ? (
+                      <UIText
+                        variant="caption"
+                        tone="muted"
+                        accessibilityHint="Who has been adding photos here, not who is assigned"
+                        style={{ marginTop: -spacing.sm, marginBottom: spacing.md }}
+                      >
+                        {contributorLog}
+                      </UIText>
+                    ) : null}
+
+                    {/*
                       Was a hand-rolled row of Pressables with its own chip
                       style. The same control exists on the gallery and the
                       task list, so it lives in the kit now and all three agree
@@ -1299,6 +1330,12 @@ export default function ProjectDetailScreen() {
             currentProjectId={id}
             onCancel={endSelection}
             onAction={(action) => void applyBulk(action)}
+            handOver={{
+              photos: photos.filter((photo) => selected.has(photo.id)),
+              projectIds: [String(id)],
+              projectName: project?.name ?? undefined,
+              onFinished: endSelection,
+            }}
           />
         ) : selecting ? null : (
           <ActionRail
@@ -1377,6 +1414,8 @@ export default function ProjectDetailScreen() {
         />
       ) : null}
 
+      {transfer.ui}
+
       <ActionSheet
         visible={actionsOpen}
         onClose={() => setActionsOpen(false)}
@@ -1409,6 +1448,36 @@ export default function ProjectDetailScreen() {
             itself, which is what a customer standing next to the tech needs.
           */
           { label: "Share public link", icon: Share2, onPress: () => void shareProject() },
+          /*
+            The web's QR code dialog, as its own screen: the code for this same
+            link, drawn big enough to scan off the phone.
+          */
+          {
+            label: "QR code",
+            icon: QrCode,
+            onPress: () =>
+              router.push({ pathname: "/project/[id]/qr", params: { id: String(id) } }),
+          },
+          /*
+            The web's "Export photos as ZIP": every photo on the job, not just
+            the pages the grid has loaded, in one folder named after the job.
+            The share sheet is where it goes next: Files, Downloads, Drive.
+          */
+          {
+            label: "Download photos as zip",
+            icon: FileArchive,
+            disabled: transfer.busy || (photosQuery.isSuccess && photos.length === 0),
+            // After this sheet has gone: iOS will not stack the progress sheet on it.
+            onPress: () =>
+              setTimeout(
+                () =>
+                  void transfer.zip({
+                    projectId: String(id),
+                    layout: projectZipLayout(project?.name),
+                  }),
+                350,
+              ),
+          },
           /*
             Only when there is something to switch off. Offering "Stop sharing"
             on a job that was never shared invites somebody to press it and

@@ -4,12 +4,18 @@ import { router, Stack } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  createPipeline,
+  deletePipeline,
   listProjectBoards,
   listStagedProjects,
   setProjectStage,
+  updatePipeline,
   type ProjectBoard,
   type StagedProject,
 } from "@/api/pipelines";
+import { draftsToInput, type StageDraft } from "@/api/pipeline-edit-view";
+import { listTagNames } from "@/api/photos";
+import { listProjects } from "@/api/projects";
 import {
   boardColumnWidth,
   boardSummary,
@@ -23,15 +29,18 @@ import {
   type PipelineStage,
 } from "@/api/pipeline-view";
 import { listProjectCardExtras } from "@/api/project-cards";
+import { MenuButton } from "@/components/AppMenu";
 import { BoardCard, BoardColumn } from "@/components/PipelineBoard";
+import { PipelineEditorSheet } from "@/components/PipelineEditorSheet";
 import { useProjectCrews } from "@/components/ProjectCrewAvatars";
 import { spacing, useTheme } from "@/theme";
-import { CircleCheck, FolderInput, FolderKanban, X } from "@/ui/icons";
+import { CircleCheck, FolderInput, FolderKanban, Plus, SlidersHorizontal, X } from "@/ui/icons";
 import {
   ActionSheet,
   Chip,
   EmptyState,
   ErrorState,
+  IconButton,
   SearchField,
   SkeletonList,
   Text,
@@ -59,6 +68,11 @@ import {
  * a column a tag, tags are many-per-project, and a job could stand in three
  * columns at once. `projectsInStage` matches one id, and jobs with no stage sit
  * in their own "Not in a pipeline" column at the end, never in the first stage.
+ *
+ * The header carries the web's two board controls: "+" creates a pipeline (the
+ * web's tab-strip plus) and the sliders open Pipeline Settings, where the board
+ * is renamed, its stages added, renamed, recoloured, reordered or removed, and
+ * the whole pipeline deleted. Both go through the same RPCs the web calls.
  */
 export default function PipelinesScreen() {
   const theme = useTheme();
@@ -71,6 +85,9 @@ export default function PipelinesScreen() {
   const [failure, setFailure] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [boardHeight, setBoardHeight] = useState(0);
+  /* Which form is open: "new" pipeline, "edit" the one in view, or neither. */
+  const [editor, setEditor] = useState<"new" | "edit" | null>(null);
+  const [editorError, setEditorError] = useState<string | null>(null);
 
   const boardsQuery = useQuery({ queryKey: ["project-boards"], queryFn: listProjectBoards });
   const projectsQuery = useQuery({
@@ -120,6 +137,110 @@ export default function PipelinesScreen() {
     staleTime: 10 * 60 * 1000,
   });
   const crews = useProjectCrews(cardIds);
+
+  /*
+   * The name checks the web makes: a second pipeline under the same name is
+   * refused, and one named after a tag or a single job is questioned. Only
+   * read while the form is open.
+   */
+  const tagsQuery = useQuery({
+    queryKey: ["gallery-tags"],
+    queryFn: listTagNames,
+    enabled: editor !== null,
+    staleTime: 10 * 60 * 1000,
+  });
+  const allProjectsQuery = useQuery({
+    queryKey: ["projects"],
+    queryFn: listProjects,
+    enabled: editor !== null,
+  });
+  const editing = editor === "edit" ? board : null;
+  const otherBoardNames = useMemo(
+    () => boards.filter((b) => b.id !== editing?.id).map((b) => b.name),
+    [boards, editing],
+  );
+  const projectNames = useMemo(
+    () => (allProjectsQuery.data ?? []).map((project) => project.name),
+    [allProjectsQuery.data],
+  );
+
+  const saveBoard = useMutation({
+    mutationFn: async (args: { name: string; stages: StageDraft[] }) => {
+      const stages = draftsToInput(args.stages);
+      return editing
+        ? updatePipeline(editing.id, args.name, stages)
+        : createPipeline(args.name, stages);
+    },
+    onSuccess: (saved) => {
+      setEditor(null);
+      setEditorError(null);
+      if (saved?.id) setBoardId(saved.id);
+    },
+    onError: (error: unknown) =>
+      setEditorError(error instanceof Error ? error.message : "Could not save the pipeline."),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ["project-boards"] });
+      // Removing a stage takes its jobs off the board.
+      void queryClient.invalidateQueries({ queryKey: ["staged-projects"] });
+    },
+  });
+
+  const removeBoard = useMutation({
+    mutationFn: (id: string) => deletePipeline(id),
+    onSuccess: () => {
+      setEditor(null);
+      setEditorError(null);
+      setBoardId(null);
+    },
+    onError: (error: unknown) =>
+      setEditorError(error instanceof Error ? error.message : "Could not delete the pipeline."),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ["project-boards"] });
+      void queryClient.invalidateQueries({ queryKey: ["staged-projects"] });
+    },
+  });
+
+  const openEditor = (mode: "new" | "edit") => {
+    setEditorError(null);
+    setEditor(mode);
+  };
+
+  const headerActions = () => (
+    <View style={{ flexDirection: "row", alignItems: "center" }}>
+      <IconButton
+        icon={Plus}
+        accessibilityLabel="New pipeline"
+        surface={false}
+        tone="primary"
+        onPress={() => openEditor("new")}
+      />
+      {board ? (
+        <IconButton
+          icon={SlidersHorizontal}
+          accessibilityLabel="Pipeline settings"
+          surface={false}
+          onPress={() => openEditor("edit")}
+        />
+      ) : null}
+      <MenuButton />
+    </View>
+  );
+
+  const editorSheet = (
+    <PipelineEditorSheet
+      visible={editor !== null}
+      board={editing}
+      otherBoardNames={otherBoardNames}
+      tagNames={tagsQuery.data ?? []}
+      projectNames={projectNames}
+      counts={counts}
+      saving={saveBoard.isPending || removeBoard.isPending}
+      error={editorError}
+      onClose={() => setEditor(null)}
+      onSave={(name, stages) => saveBoard.mutate({ name, stages })}
+      onDelete={editing ? () => removeBoard.mutate(editing.id) : undefined}
+    />
+  );
 
   const move = useMutation({
     mutationFn: (args: { projectId: string; stageId: string | null }) =>
@@ -191,7 +312,7 @@ export default function PipelinesScreen() {
   if (boardsQuery.isLoading || projectsQuery.isLoading) {
     return (
       <>
-        <Stack.Screen options={{ title: "Pipelines" }} />
+        <Stack.Screen options={{ title: "Pipelines", headerRight: headerActions }} />
         <SkeletonList rows={6} />
       </>
     );
@@ -200,7 +321,7 @@ export default function PipelinesScreen() {
   if (boardsQuery.error) {
     return (
       <>
-        <Stack.Screen options={{ title: "Pipelines" }} />
+        <Stack.Screen options={{ title: "Pipelines", headerRight: headerActions }} />
         <ErrorState
           title="Could not load your pipelines"
           message={boardsQuery.error instanceof Error ? boardsQuery.error.message : undefined}
@@ -213,12 +334,14 @@ export default function PipelinesScreen() {
   if (boards.length === 0) {
     return (
       <>
-        <Stack.Screen options={{ title: "Pipelines" }} />
+        <Stack.Screen options={{ title: "Pipelines", headerRight: headerActions }} />
         <EmptyState
           icon={FolderKanban}
           title="No pipelines yet"
-          body="A pipeline tracks a job through the stages your business actually has: quoted, scheduled, on site, invoiced. Create one on the web and it appears here."
+          body="A pipeline tracks a job through the stages your business actually has: quoted, scheduled, on site, invoiced."
+          action={{ label: "Create a pipeline", icon: Plus, onPress: () => openEditor("new") }}
         />
+        {editorSheet}
       </>
     );
   }
@@ -269,7 +392,7 @@ export default function PipelinesScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: board?.name ?? "Pipelines" }} />
+      <Stack.Screen options={{ title: board?.name ?? "Pipelines", headerRight: headerActions }} />
 
       <View
         style={{
@@ -330,7 +453,12 @@ export default function PipelinesScreen() {
             <EmptyState
               icon={FolderKanban}
               title="This pipeline has no stages yet"
-              body="Add stages on the web and they appear here."
+              body="Add the stages a job moves through, and they become the board's columns."
+              action={{
+                label: "Add stages",
+                icon: SlidersHorizontal,
+                onPress: () => openEditor("edit"),
+              }}
             />
           ) : boardHeight > 0 ? (
             <ScrollView
@@ -404,6 +532,8 @@ export default function PipelinesScreen() {
         title={moving ? moving.name : undefined}
         actions={moving ? moveActions(moving) : []}
       />
+
+      {editorSheet}
     </>
   );
 }

@@ -1,8 +1,14 @@
 import { useMemo, useState } from "react";
-import { RefreshControl, ScrollView, View } from "react-native";
+import { Alert, RefreshControl, ScrollView, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { listProjectChecklists } from "@/api/checklists";
+import {
+  createBlankChecklist,
+  deleteChecklist,
+  listProjectChecklists,
+  type ChecklistSummary,
+} from "@/api/checklists";
+import { checklistDeleteMessage } from "@/api/record-edit-rules";
 import {
   applyChecklistTemplate,
   listChecklistTemplates,
@@ -15,8 +21,9 @@ import { ProjectSubPageHeader } from "@/components/ProjectSubPageHeader";
 import { QueueBanner } from "@/components/QueueBanner";
 import { TemplatePickerSheet } from "@/components/TemplatePickerSheet";
 import { useAuth } from "@/lib/auth";
+import { useRecordAuthoring } from "@/lib/use-access";
 import { spacing, useTheme } from "@/theme";
-import { ClipboardCheck, LayoutTemplate, Plus, RefreshCw } from "@/ui/icons";
+import { ClipboardCheck, LayoutTemplate, ListPlus, Plus, RefreshCw, Trash2 } from "@/ui/icons";
 import {
   ActionSheet,
   Avatar,
@@ -45,6 +52,47 @@ export default function ProjectChecklistsScreen() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [applying, setApplying] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
+  const [rowMenu, setRowMenu] = useState<ChecklistSummary | null>(null);
+  const { canAuthor } = useRecordAuthoring();
+
+  /**
+   * A blank checklist, as the web's "Blank checklist" makes one: a placeholder
+   * name, then straight into Edit mode to rename it and type the items.
+   */
+  async function startBlank() {
+    if (!id || !user?.id) return;
+    try {
+      const checklistId = await createBlankChecklist(id, user.id);
+      await queryClient.invalidateQueries({ queryKey: ["project-checklists", id] });
+      router.push(`/checklist/${checklistId}?edit=1`);
+    } catch (e) {
+      Alert.alert(
+        "Could not create the checklist",
+        e instanceof Error ? e.message : "Try again when you have signal.",
+      );
+    }
+  }
+
+  function confirmDelete(row: ChecklistSummary) {
+    Alert.alert("Delete this checklist?", checklistDeleteMessage(row.name, row.total), [
+      { text: "Keep", style: "cancel" },
+      {
+        text: "Delete checklist",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await deleteChecklist(row.id);
+            await queryClient.invalidateQueries({ queryKey: ["project-checklists", id] });
+          } catch (e) {
+            Alert.alert(
+              "Could not delete the checklist",
+              e instanceof Error ? e.message : "Try again when you have signal.",
+            );
+          }
+        },
+      },
+    ]);
+  }
 
   /**
    * Start a template on this project.
@@ -227,6 +275,8 @@ export default function ProjectChecklistsScreen() {
                         tone: complete ? "success" : "primary",
                       }}
                       onPress={() => router.push(`/checklist/${item.id}`)}
+                      onMenu={canAuthor ? () => setRowMenu(item) : undefined}
+                      menuLabel={`Actions for ${item.name}`}
                       accessibilityLabel={`${item.name}, ${item.done} of ${item.total} done${
                         assigneeName ? `, assigned to ${assigneeName}` : ""
                       }`}
@@ -269,6 +319,9 @@ export default function ProjectChecklistsScreen() {
         onClose={() => setMenuOpen(false)}
         title="Checklists"
         actions={[
+          ...(canAuthor
+            ? [{ label: "Blank checklist", icon: ListPlus, onPress: () => void startBlank() }]
+            : []),
           {
             label: "Manage templates",
             icon: LayoutTemplate,
@@ -276,6 +329,34 @@ export default function ProjectChecklistsScreen() {
           },
           { label: "Refresh", icon: RefreshCw, onPress: () => void refetch() },
         ]}
+      />
+      <ActionSheet
+        visible={rowMenu !== null}
+        onClose={() => setRowMenu(null)}
+        title={rowMenu?.name}
+        actions={
+          rowMenu
+            ? [
+                {
+                  label: "Open",
+                  icon: ClipboardCheck,
+                  onPress: () => router.push(`/checklist/${rowMenu.id}`),
+                },
+                {
+                  label: "Edit items",
+                  icon: ListPlus,
+                  disabled: Boolean(rowMenu.completed_at),
+                  onPress: () => router.push(`/checklist/${rowMenu.id}?edit=1`),
+                },
+                {
+                  label: "Delete checklist",
+                  icon: Trash2,
+                  destructive: true,
+                  onPress: () => confirmDelete(rowMenu),
+                },
+              ]
+            : []
+        }
       />
       <TemplatePickerSheet
         visible={picking}

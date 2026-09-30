@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
-import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { Alert, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import * as WebBrowser from "expo-web-browser";
 import { router, useLocalSearchParams } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { WORKFLOW_KIND_LABELS, type WorkflowItemKind } from "@everlumen/shared";
@@ -12,7 +13,20 @@ import {
   signoffPatch,
 } from "@/api/workflow-state";
 import {
+  completionRights,
+  overrideConfirm,
+  recordPrintLinks,
+  workflowCompletedMessage,
+  workflowDeleteMessage,
+  workflowReadiness,
+} from "@/api/record-edit-rules";
+import { getProjectContributors } from "@/api/task-comments";
+import { memberLabel } from "@/api/task-mentions";
+import {
+  completeWorkflow,
+  deleteWorkflow,
   getWorkflow,
+  reopenWorkflow,
   type WorkflowDetail,
   type WorkflowItem,
   type WorkflowPhase,
@@ -20,7 +34,9 @@ import {
 import { isShareLive, openShareSheet, publicUrl, setRecordShareEnabled } from "@/api/sharing";
 import { ProjectSubPageHeader } from "@/components/ProjectSubPageHeader";
 import { QueueBanner } from "@/components/QueueBanner";
+import { webAppUrl } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useRecordAuthoring } from "@/lib/use-access";
 import {
   workflowItemRowId,
   workflowPhaseRowId,
@@ -30,8 +46,18 @@ import {
 import { enqueue } from "@/offline/outbox";
 import { refreshQueue, requestSync } from "@/offline/sync";
 import { spacing, useLayout, useTheme } from "@/theme";
-import { Camera, CircleCheck, PenLine, Share2 } from "@/ui/icons";
 import {
+  Camera,
+  CircleCheck,
+  PenLine,
+  Printer,
+  RotateCcw,
+  Share2,
+  SquareCheckBig,
+  Trash2,
+} from "@/ui/icons";
+import {
+  ActionSheet,
   Badge,
   Button,
   Card,
@@ -39,6 +65,7 @@ import {
   Field,
   Icon,
   IconButton,
+  KebabButton,
   ProgressBar,
   SkeletonList,
   StepProgress,
@@ -55,6 +82,9 @@ export default function WorkflowRunnerScreen() {
   const queryClient = useQueryClient();
 
   const [shareError, setShareError] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const { canAuthor, isManager } = useRecordAuthoring();
 
   const queryKey = useMemo(() => ["workflow", id], [id]);
 
@@ -89,6 +119,187 @@ export default function WorkflowRunnerScreen() {
     } catch (e) {
       setShareError(e instanceof Error ? e.message : "Could not share this workflow");
     }
+  }, [data, refetch]);
+
+  /**
+   * Reopen a completed workflow. Anyone on the job may, as on the web: closing
+   * is the assignee's call, sending it back for more work is not guarded.
+   */
+  const reopen = useCallback(async () => {
+    if (!data) return;
+    setBusy(true);
+    try {
+      await reopenWorkflow(data.id);
+      await refetch();
+      void queryClient.invalidateQueries({ queryKey: ["project-workflows", data.project_id] });
+    } catch (e) {
+      Alert.alert(
+        "Could not reopen the workflow",
+        e instanceof Error ? e.message : "Try again when you have signal.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }, [data, queryClient, refetch]);
+
+  const membersQuery = useQuery({
+    queryKey: ["project-contributors", data?.project_id],
+    queryFn: () => getProjectContributors(data!.project_id),
+    enabled: Boolean(data?.project_id),
+    staleTime: 10 * 60 * 1000,
+  });
+  const nameOf = useCallback(
+    (userId: string | null) => {
+      const member = userId ? membersQuery.data?.find((m) => m.user_id === userId) : null;
+      return member ? memberLabel(member) : "";
+    },
+    [membersQuery.data],
+  );
+
+  /*
+   * Two separate questions, as on the web: is the run ready (every required
+   * step and sign-off done), and is it this person's to close.
+   */
+  const readiness = workflowReadiness(
+    (data?.phases ?? []).map((phase) => phaseState(phase, phase.items)),
+  );
+  const rights = completionRights(
+    { assignedTo: data?.assigned_to ?? null, assignedBy: data?.assigned_by ?? null },
+    { userId: user?.id ?? null, isManager },
+    nameOf(data?.assigned_to ?? null),
+  );
+
+  const complete = useCallback(async () => {
+    if (!data) return;
+    setBusy(true);
+    try {
+      await completeWorkflow(data.id, new Date().toISOString());
+      await refetch();
+      void queryClient.invalidateQueries({ queryKey: ["project-workflows", data.project_id] });
+      Alert.alert(
+        "Workflow complete",
+        workflowCompletedMessage(
+          data.name,
+          data.assigned_by,
+          user?.id ?? null,
+          nameOf(data.assigned_by) || "They",
+        ),
+      );
+    } catch (e) {
+      Alert.alert(
+        "Could not complete the workflow",
+        e instanceof Error ? e.message : "Try again when you have signal.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }, [data, nameOf, queryClient, refetch, user?.id]);
+
+  const confirmComplete = useCallback(() => {
+    if (!data) return;
+    if (!rights.canComplete) {
+      Alert.alert("Cannot complete", rights.reason ?? "You can't mark this workflow complete.");
+      return;
+    }
+    if (!rights.isOverride) {
+      void complete();
+      return;
+    }
+    const copy = overrideConfirm({
+      what: data.name,
+      who: nameOf(data.assigned_to) || "the assignee",
+    });
+    Alert.alert(copy.title, copy.description, [
+      { text: "Cancel", style: "cancel" },
+      { text: copy.confirmText, onPress: () => void complete() },
+    ]);
+  }, [complete, data, nameOf, rights]);
+
+  const confirmDelete = useCallback(() => {
+    if (!data) return;
+    const message = workflowDeleteMessage(data.name, {
+      phases: data.phases.length,
+      steps: data.phases.reduce((sum, phase) => sum + phase.items.length, 0),
+      signoffs: data.phases.filter((phase) => phase.signed_off_at).length,
+    });
+    Alert.alert("Delete this workflow?", message, [
+      { text: "Keep", style: "cancel" },
+      {
+        text: "Delete workflow",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await deleteWorkflow(data.id);
+            queryClient.removeQueries({ queryKey });
+            await queryClient.invalidateQueries({
+              queryKey: ["project-workflows", data.project_id],
+            });
+            if (router.canGoBack()) router.back();
+            else router.replace(`/project/${data.project_id}/workflows`);
+          } catch (e) {
+            Alert.alert(
+              "Could not delete the workflow",
+              e instanceof Error ? e.message : "Try again when you have signal.",
+            );
+          }
+        },
+      },
+    ]);
+  }, [data, queryClient, queryKey]);
+
+  /**
+   * Print, the way the web does it: the record sheet, printed by the browser.
+   *
+   * There is no PDF endpoint for a workflow, so this opens the print sheet in
+   * the in-app browser, whose share menu prints or saves a PDF. The public
+   * page needs no sign-in, so it is used when the link is already live. When it
+   * is off, turning it on is a choice about making the record public, so the
+   * person is asked rather than having it done for them; the alternative is the
+   * signed-in web page.
+   */
+  const print = useCallback(async () => {
+    if (!data) return;
+    const links = recordPrintLinks({
+      kind: "workflows",
+      webOrigin: webAppUrl,
+      projectId: data.project_id,
+      recordId: data.id,
+      shareToken: data.share_token,
+      revokedAt: data.revoked_at,
+    });
+    if (links.publicUrl) {
+      void WebBrowser.openBrowserAsync(links.publicUrl);
+      return;
+    }
+    if (!links.webUrl) {
+      Alert.alert("Printing is not set up", "This build has no web address to print from.");
+      return;
+    }
+    const webUrl = links.webUrl;
+    Alert.alert(
+      "Print this workflow",
+      "Printing opens the workflow's print sheet in the browser. Its share link is off: turn it on to print without signing in, or open it on the web and sign in there.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Open on web", onPress: () => void WebBrowser.openBrowserAsync(webUrl) },
+        {
+          text: "Turn on link",
+          onPress: async () => {
+            try {
+              await setRecordShareEnabled("project_workflows", data.id, true);
+              await refetch();
+              const url = publicUrl("workflows", data.share_token);
+              if (url) void WebBrowser.openBrowserAsync(url);
+            } catch (e) {
+              Alert.alert(
+                "Could not turn on the link",
+                e instanceof Error ? e.message : "Try again when you have signal.",
+              );
+            }
+          },
+        },
+      ],
+    );
   }, [data, refetch]);
 
   const patchLocalItem = useCallback(
@@ -251,18 +462,24 @@ export default function WorkflowRunnerScreen() {
           }
           actions={
             data ? (
-              <IconButton
-                icon={Share2}
-                accessibilityLabel={
-                  isShareLive(data.share_token, data.revoked_at)
-                    ? "Share this workflow"
-                    : "Turn on sharing for this workflow"
-                }
-                // Tinted while live, muted while off: the header states whether
-                // this record is public without anyone opening a sheet.
-                tone={isShareLive(data.share_token, data.revoked_at) ? "primary" : "muted"}
-                onPress={() => void shareWorkflow()}
-              />
+              <View style={{ flexDirection: "row", gap: spacing.sm }}>
+                <IconButton
+                  icon={Share2}
+                  accessibilityLabel={
+                    isShareLive(data.share_token, data.revoked_at)
+                      ? "Share this workflow"
+                      : "Turn on sharing for this workflow"
+                  }
+                  // Tinted while live, muted while off: the header states whether
+                  // this record is public without anyone opening a sheet.
+                  tone={isShareLive(data.share_token, data.revoked_at) ? "primary" : "muted"}
+                  onPress={() => void shareWorkflow()}
+                />
+                <KebabButton
+                  accessibilityLabel="Workflow actions"
+                  onPress={() => setMenuOpen(true)}
+                />
+              </View>
             ) : null
           }
         />
@@ -302,6 +519,30 @@ export default function WorkflowRunnerScreen() {
               />
             }
           >
+            {data.completed_at ? (
+              <Card
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: spacing.md,
+                  borderColor: theme.colors.success,
+                }}
+              >
+                <Icon icon={CircleCheck} size="md" tone="success" />
+                <Text variant="body" style={{ flex: 1 }}>
+                  This workflow is marked complete. Reopen it to make changes.
+                </Text>
+                <Button
+                  label="Reopen"
+                  icon={RotateCcw}
+                  variant="outline"
+                  size="sm"
+                  loading={busy}
+                  onPress={() => void reopen()}
+                />
+              </Card>
+            ) : null}
+
             {phases.length > 0 ? (
               <Card>
                 {/*
@@ -316,21 +557,78 @@ export default function WorkflowRunnerScreen() {
               </Card>
             ) : null}
 
-            {phases.map((phase, index) => (
-              <PhaseCard
-                key={phase.id}
-                phase={phase}
-                projectId={data.project_id}
-                isCurrent={index === cursor}
-                onToggleCheck={toggleCheck}
-                onSaveNote={saveNote}
-                onSignOff={signOff}
-                onSavePhaseNote={savePhaseNote}
-              />
-            ))}
+            {!data.completed_at ? (
+              <Card style={{ gap: spacing.sm }}>
+                {readiness.reason ? (
+                  <Text variant="caption" tone="safety">
+                    {readiness.reason}
+                  </Text>
+                ) : !rights.canComplete || rights.isOverride ? (
+                  <Text variant="caption" tone="muted">
+                    {rights.reason}
+                  </Text>
+                ) : null}
+                <Button
+                  label={rights.isOverride ? "Complete for them" : "Mark complete"}
+                  icon={SquareCheckBig}
+                  fullWidth
+                  loading={busy}
+                  disabled={!readiness.canComplete || !rights.canComplete}
+                  onPress={confirmComplete}
+                />
+              </Card>
+            ) : null}
+
+            <View
+              // A completed run is locked until it is reopened, as on the web.
+              pointerEvents={data.completed_at ? "none" : "auto"}
+              style={{ gap: spacing.md, opacity: data.completed_at ? 0.75 : 1 }}
+            >
+              {phases.map((phase, index) => (
+                <PhaseCard
+                  key={phase.id}
+                  phase={phase}
+                  projectId={data.project_id}
+                  isCurrent={index === cursor}
+                  onToggleCheck={toggleCheck}
+                  onSaveNote={saveNote}
+                  onSignOff={signOff}
+                  onSavePhaseNote={savePhaseNote}
+                />
+              ))}
+            </View>
           </ScrollView>
         )}
       </View>
+
+      <ActionSheet
+        visible={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        title={data?.name}
+        actions={[
+          { label: "Print or save as PDF", icon: Printer, onPress: () => void print() },
+          ...(data?.completed_at
+            ? [{ label: "Reopen workflow", icon: RotateCcw, onPress: () => void reopen() }]
+            : [
+                {
+                  label: rights.isOverride ? "Complete for them" : "Mark complete",
+                  icon: SquareCheckBig,
+                  disabled: !readiness.canComplete || !rights.canComplete,
+                  onPress: confirmComplete,
+                },
+              ]),
+          ...(canAuthor
+            ? [
+                {
+                  label: "Delete workflow",
+                  icon: Trash2,
+                  destructive: true,
+                  onPress: confirmDelete,
+                },
+              ]
+            : []),
+        ]}
+      />
     </>
   );
 }

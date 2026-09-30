@@ -9,7 +9,6 @@ import {
   mapSnippet,
   movedIds,
   parseList,
-  plainToHtml,
   portfolioPageUrl,
   portfolioSiteUrl,
   reviewLinksToSave,
@@ -97,7 +96,15 @@ describe("the response order is preserved", () => {
     expect(src).not.toMatch(/export function orderedPortfolio/);
 
     // And the screen must not be sorting either.
-    const screen = readFileSync(join(process.cwd(), "apps/mobile/app/(app)/portfolio.tsx"), "utf8");
+    const files = [
+      "apps/mobile/app/(app)/portfolio.tsx",
+      "apps/mobile/app/(app)/showcase/[id].tsx",
+      "apps/mobile/src/components/portfolio/ShowcaseBuilder.tsx",
+      "apps/mobile/src/components/portfolio/ShowcasePhotoPicker.tsx",
+      "apps/mobile/src/components/portfolio/SiteEditor.tsx",
+      "apps/mobile/src/api/portfolio-showcase.ts",
+    ];
+    const screen = files.map((f) => readFileSync(join(process.cwd(), f), "utf8")).join("\n");
     expect(screen).not.toContain("orderedPortfolio");
   });
 });
@@ -246,7 +253,8 @@ describe("vocabulary", () => {
     // or a share kind, both of which are identifiers in quotes.
     const humanText = withoutComments.match(/"[^"]*"|`[^`]*`|>[^<>{}]+</g) ?? [];
     const offenders = humanText.filter(
-      (text) => /showcase/i.test(text) && !/^"(showcases)"$/.test(text.trim()),
+      // The share kind and the builder's route are identifiers, not words anybody reads.
+      (text) => /showcase/i.test(text) && !/^"(showcases|\/showcase\/\[id\])"$/.test(text.trim()),
     );
 
     expect(offenders).toEqual([]);
@@ -312,16 +320,32 @@ describe("the site, as the web's Portfolio page has it", () => {
     expect(patch).toEqual({ phone: "0113", showReviews: true });
     expect(patch).not.toHaveProperty("aboutHtml");
 
-    const edited = sitePatch(before, { ...before, about: "New words.\n\nSecond <b>para</b>." });
-    expect(edited.aboutHtml).toBe("<p>New words.</p><p>Second &lt;b&gt;para&lt;/b&gt;.</p>");
+    // About is the web's own HTML now, edited with the formatted editor, so the
+    // bold made on the web is in the draft and goes back exactly as edited.
+    expect(before.about).toBe(site.about_html);
+    const html = "<p>New <strong>words</strong>.</p>";
+    expect(sitePatch(before, { ...before, about: html }).aboutHtml).toBe(html);
+    // An emptied editor saves "", which clears the field rather than storing it.
+    expect(sitePatch(before, { ...before, about: "" }).aboutHtml).toBeNull();
   });
 
-  it("reads About back as paragraphs", () => {
+  it("sends the logo and the hero photo the phone now picks", () => {
+    const before = toSiteDraft(site);
+    expect(before.logoUrl).toBe("");
+    expect(before.heroPhotoId).toBe("");
+    expect(
+      sitePatch(before, { ...before, logoUrl: "https://cdn/x.png", heroPhotoId: "ph-1" }),
+    ).toEqual({ logoUrl: "https://cdn/x.png", heroPhotoId: "ph-1" });
+    const chosen = toSiteDraft({ ...site, logo_url: "https://cdn/x.png", hero_photo_id: "ph-1" });
+    // Removing either sends null: "use the newest project" and "no logo".
+    expect(sitePatch(chosen, { ...chosen, logoUrl: "", heroPhotoId: "" })).toEqual({
+      logoUrl: null,
+      heroPhotoId: null,
+    });
+  });
+
+  it("reads About back as paragraphs, for its one-line summary", () => {
     expect(htmlToPlain(site.about_html)).toBe("We fix roofs.\n\nSince 1990.");
-    // Round trip: the same paragraphs come back.
-    expect(plainToHtml(htmlToPlain(site.about_html))).toBe(
-      "<p>We fix roofs.</p><p>Since 1990.</p>",
-    );
   });
 
   it("parses comma lists without duplicates", () => {
@@ -454,7 +478,9 @@ describe("laid out the way the web's Portfolio page is", () => {
     expect(siteSectionProgress(blank, site)).toEqual({ done: 0, total: 7 });
     const filled = { ...blank, businessName: "Acme", services: "Roofing", phone: "0113" };
     expect(siteSectionProgress(filled, site).done).toBe(3);
-    expect(siteSectionDone("cover", blank, { ...site, hero_photo_id: "ph" })).toBe(true);
+    // The cover follows the draft's photo, so clearing it unticks it before Save.
+    expect(siteSectionDone("cover", { ...blank, heroPhotoId: "ph" }, site)).toBe(true);
+    expect(siteSectionDone("cover", blank, { ...site, hero_photo_id: "ph" })).toBe(false);
     expect(siteSectionDone("reviews", blank, { ...site, google_place_id: "g" })).toBe(true);
   });
 

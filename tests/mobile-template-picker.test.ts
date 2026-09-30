@@ -111,15 +111,16 @@ describe("only the name is required", () => {
 });
 
 describe("the editability warning is measured, not guessed", () => {
-  it("says a rich body will be read-only", () => {
+  it("says which parts of a rich body will be read-only", () => {
     const rich = "<h1>Certificate</h1><table><tr><td>Cell</td></tr></table>";
     const verdict = templateEditability(rich);
     expect(verdict.editable).toBe(false);
     if (!verdict.editable) {
       expect(verdict.because).toContain("read-only");
+      expect(verdict.because).toContain("table");
       // The consolation has to be in the same breath, because it is the reason
       // the feature is worth having at all.
-      expect(verdict.because).toContain("add to the end");
+      expect(verdict.because).toContain("can be edited");
       expect(verdict.because).toContain("PDF");
     }
   });
@@ -135,8 +136,8 @@ describe("the editability warning is measured, not guessed", () => {
      * refuses - which is the failure this warning exists to prevent.
      */
     const view = read("apps/mobile/src/api/template-picker-view.ts");
-    expect(view).toContain('import { parsePage } from "./doc-blocks"');
-    expect(view).toContain("parsePage(html");
+    expect(view).toContain('import { parseDoc, rawLabel } from "./rich-doc"');
+    expect(view).toContain("parseDoc(html");
   });
 });
 

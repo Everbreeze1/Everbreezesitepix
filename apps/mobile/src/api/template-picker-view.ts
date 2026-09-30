@@ -1,4 +1,4 @@
-import { parsePage } from "./doc-blocks";
+import { parseDoc, rawLabel } from "./rich-doc";
 import type { DocumentTemplate, TemplateField } from "./pages";
 
 /**
@@ -53,17 +53,20 @@ export type Editability = { editable: true } | { editable: false; because: strin
 /**
  * Whether the document this template produces can be edited on the phone.
  *
- * Runs the editor's own `parsePage` over the previewed body, so the answer is
- * the answer, not a guess about what "rich" means. Anything the parser refuses
- * is read-only, and the refusal text is what the page itself will say.
+ * Runs the editor's own `parseDoc` over the previewed body, so the answer is
+ * the answer, not a guess about what "rich" means. The text is always
+ * editable; what the parser keeps as locked blocks (tables, photos,
+ * checklists) is shown read-only and kept exactly as it is.
  */
 export function templateEditability(html: string): Editability {
-  const parsed = parsePage(html ?? "");
-  if (!parsed.refusal) return { editable: true };
+  const locked = parseDoc(html ?? "").filter((b) => b.kind === "raw");
+  if (locked.length === 0) return { editable: true };
+  const kinds = [...new Set(locked.map((b) => (b.kind === "raw" ? rawLabel(b.html) : "")))]
+    .map((k) => k.toLowerCase())
+    .slice(0, 3);
   return {
     editable: false,
-    because:
-      "The body will be read-only on the phone: it uses formatting the phone editor cannot rebuild. You can still add to the end of it, share it, and export it as a PDF.",
+    because: `Some parts (${kinds.join(", ")}) will be read-only on the phone and kept exactly as they are. The text around them can be edited here, and the whole document shared and exported as a PDF.`,
   };
 }
 

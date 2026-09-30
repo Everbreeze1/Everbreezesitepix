@@ -27,6 +27,11 @@ import {
   type SectionPhoto,
 } from "./report-builder-view";
 import type { ReportRow } from "./report-view";
+import {
+  ATTACHED_SECTION_TITLE,
+  sectionPhotosFor,
+  type AttachablePhoto,
+} from "./photo-selection-view";
 
 /**
  * The report builder's reads and writes, the same rows the web's
@@ -369,6 +374,11 @@ export async function createBuiltReport(args: {
   photosPerPage: PhotosPerPage;
   cover: CoverOptions;
   start: BuiltReportStart;
+  /**
+   * Photos to file in the new report, as the web's New report dialog does
+   * from a selection: one "Photos" section after the starter's sections.
+   */
+  attachPhotos?: readonly AttachablePhoto[];
 }): Promise<{ report: BuiltReport; warning: string | null }> {
   const { data: auth } = await supabase.auth.getUser();
   const userId = auth.user?.id;
@@ -393,7 +403,7 @@ export async function createBuiltReport(args: {
   if (error) throw new Error(error.message);
   const report = toBuilt(data as Record<string, unknown>);
 
-  const sections =
+  const sections: { title: string; body: string; photos: SectionPhoto[] }[] = (
     args.start.kind === "starter"
       ? args.start.starter.sections.map((heading) => ({ title: heading, body: "" }))
       : args.start.kind === "saved"
@@ -401,7 +411,15 @@ export async function createBuiltReport(args: {
             title: heading,
             body: (args.start as { template: SavedReportTemplate }).template.bodies[i] ?? "",
           }))
-        : [];
+        : []
+  ).map((s) => ({ ...s, photos: [] as SectionPhoto[] }));
+  if (args.attachPhotos?.length) {
+    sections.push({
+      title: ATTACHED_SECTION_TITLE,
+      body: "",
+      photos: sectionPhotosFor(args.attachPhotos),
+    });
+  }
 
   let warning: string | null = null;
   if (sections.length) {
@@ -411,11 +429,13 @@ export async function createBuiltReport(args: {
         position: i,
         title: s.title,
         body: s.body,
-        photos: [],
+        photos: s.photos,
       })) as never,
     );
     if (sectionError) {
-      warning = `The report was created, but its sections did not save: ${sectionError.message}`;
+      warning = args.attachPhotos?.length
+        ? `The report was created, but its sections and photos did not save: ${sectionError.message}`
+        : `The report was created, but its sections did not save: ${sectionError.message}`;
     }
   }
   return { report, warning };

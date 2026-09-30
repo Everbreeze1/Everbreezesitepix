@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { getAdminAccess } from "@/api/admin";
 import { getMyTeam } from "@/api/team";
+import { canAuthorRecords, isManagerRole } from "@/api/record-edit-rules";
 import { isAccountOwner } from "./access";
 import { useAuth } from "./auth";
 
@@ -36,5 +37,34 @@ export function useAccountOwner(enabled = true) {
     enabled: enabled && Boolean(user?.id),
     staleTime: 30_000,
   });
-  return { isOwner: isAccountOwner(query.data), isLoading: query.isLoading };
+  const isOwner = isAccountOwner(query.data);
+  return {
+    isOwner,
+    /** On a team, as anything but its owner: an invited member. */
+    isMember: Boolean(query.data?.myRole) && !isOwner,
+    isLoading: query.isLoading,
+  };
+}
+
+/**
+ * What the signed-in person may do to a task, checklist or workflow beyond
+ * filling it in: author its structure (Pro or Team plan, owner/admin/manager),
+ * and whether they count as a manager for reopening someone else's record.
+ *
+ * Shares the `my-team` cache with `useAccountOwner` and the team screen, so
+ * asking costs nothing once any of them has loaded.
+ */
+export function useRecordAuthoring(enabled = true) {
+  const { user } = useAuth();
+  const query = useQuery({
+    queryKey: ["my-team"],
+    queryFn: getMyTeam,
+    enabled: enabled && Boolean(user?.id),
+    staleTime: 30_000,
+  });
+  return {
+    canAuthor: canAuthorRecords(query.data),
+    isManager: isManagerRole(query.data?.myRole),
+    isLoading: query.isLoading,
+  };
 }

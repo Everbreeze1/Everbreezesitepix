@@ -45,11 +45,14 @@ describe("the export needs no native module", () => {
     /*
      * The point of the whole approach. A native module means a new development
      * build, which invalidates whatever the testing session is holding.
+     *
+     * `expo-sharing` has since arrived for photo zips and files, and the export
+     * still does not use it: the PDF is filed, not handed to a share sheet.
      */
     const pkg = JSON.parse(read("apps/mobile/package.json"));
     const deps = { ...pkg.dependencies, ...pkg.devDependencies };
-    expect(deps["expo-sharing"]).toBeUndefined();
     expect(deps["expo-print"]).toBeUndefined();
+    expect(filing()).not.toMatch(/from "expo-sharing"/);
   });
 
   it("uses the file-system and browser modules already shipped", () => {
@@ -189,19 +192,19 @@ describe("documents export the same way", () => {
     expect(s).toContain("idempotencyKey: randomUUID(), timeoutMs: AI_TIMEOUT_MS");
   });
 
-  it("is offered on read-only pages, which is the point", () => {
+  it("is offered for the whole document, locked parts and all", () => {
     /*
-     * A page built from a rich template cannot be restructured on the phone.
-     * Hiding the export behind the editable branch would mean the documents
-     * most likely to need handing over are the ones that cannot be.
+     * Parts of a page built from a rich template are locked on the phone.
+     * Export sits outside the editor, so the documents most likely to need
+     * handing over are never the ones that cannot be.
      */
     const screen = read("apps/mobile/app/(app)/page/[pageId].tsx");
     const exportAt = screen.indexOf('<SectionHeader title="Export" />');
-    const readOnlyAt = screen.indexOf('<SectionHeader title="This page is read-only here" />');
+    const editorAt = screen.indexOf("<FormattedTextEditor");
     expect(exportAt).toBeGreaterThan(-1);
-    expect(readOnlyAt).toBeGreaterThan(-1);
-    // Outside the editable/read-only ternary entirely, like the share block.
-    expect(exportAt).toBeGreaterThan(readOnlyAt);
+    expect(editorAt).toBeGreaterThan(-1);
+    // After the editor, like the share block, not inside it.
+    expect(exportAt).toBeGreaterThan(editorAt);
   });
 
   it("refreshes the documents tree it just wrote into", () => {

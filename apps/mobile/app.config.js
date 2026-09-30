@@ -45,5 +45,11 @@ module.exports = () => ({
      * only channel between build-time config and JavaScript.
      */
     googleMapsConfigured: Boolean(googleMapsKey),
+    /*
+     * Stamped at build time and shown on the Account screen, so a tester can
+     * tell at a glance which build is installed on the phone.
+     */
+    buildCommit: (process.env.EAS_BUILD_GIT_COMMIT_HASH ?? "").slice(0, 7),
+    builtAt: new Date().toISOString().slice(0, 16).replace("T", " "),
   },
 });

@@ -10,7 +10,8 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { Redirect, router } from "expo-router";
+import { Redirect, router, useLocalSearchParams } from "expo-router";
+import { safeAfterLogin } from "@/api/invite-view";
 import { SocialSignIn } from "@/components/SocialSignIn";
 import { BrandMark } from "@/components/BrandMark";
 import { useAuth } from "@/lib/auth";
@@ -20,6 +21,13 @@ import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
 export default function LoginScreen() {
   const { user, loading, signIn, signInWithProvider, sendPasswordReset } = useAuth();
   const theme = useTheme();
+  /*
+   * An invitation screen sends people here with `redirect` set, so signing in
+   * lands them back on the invitation rather than on Home. Only an invitation
+   * path is honoured; see `safeAfterLogin`.
+   */
+  const params = useLocalSearchParams<{ redirect?: string }>();
+  const next = safeAfterLogin(params.redirect);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -27,7 +35,7 @@ export default function LoginScreen() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  if (!loading && user) return <Redirect href="/(app)/(tabs)" />;
+  if (!loading && user) return <Redirect href={(next ?? "/(app)/(tabs)") as never} />;
 
   async function onSubmit() {
     setBusy("email");
@@ -39,7 +47,7 @@ export default function LoginScreen() {
       setError(result.error);
       return;
     }
-    router.replace("/(app)/(tabs)");
+    router.replace((next ?? "/(app)/(tabs)") as never);
   }
 
   async function onProvider(provider: SocialProvider) {

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { FolderPlus, Plus, Search } from "@/ui/icons";
+import { CalendarClock, FolderPlus, Plus, Search } from "@/ui/icons";
 import { FlatList, Pressable, RefreshControl, StyleSheet, View } from "react-native";
 import { router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
@@ -8,6 +8,18 @@ import { formatAddress, listProjects } from "@/api/projects";
 import { listProjectBoards } from "@/api/pipelines";
 import type { PipelineStage } from "@/api/pipeline-view";
 import { listProjectCardExtras } from "@/api/project-cards";
+import { listProjectFilterFacts } from "@/api/project-filters";
+import {
+  EMPTY_PROJECT_FILTERS,
+  activeProjectFilterCount,
+  matchesProjectFilters,
+  needsProjectFacts,
+  projectFilterChips,
+  withoutProjectFilterChip,
+  type ProjectFilters,
+} from "@/api/project-filters-view";
+import { listCrewCandidates } from "@/api/project-assignees";
+import { crewName } from "@/api/project-assignees-view";
 import { cardColumns } from "@/api/project-cards-view";
 import { ActionRail } from "@/components/ActionRail";
 import { QueueBanner } from "@/components/QueueBanner";
@@ -15,10 +27,14 @@ import { useLabelCatalog } from "@/components/ProjectLabels";
 import { FilterGlyph } from "@/components/ProjectGlyphs";
 import { useProjectCrews } from "@/components/ProjectCrewAvatars";
 import { ProjectListCard } from "@/components/ProjectListCard";
+import {
+  ActiveFilterChips,
+  ProjectFilterSheet,
+  type ArchiveMode,
+} from "@/components/ProjectFilterSheet";
 import { ProjectFilterPills, type ProjectFilterOption } from "@/components/ProjectStatusPill";
 import { HIT_TARGET, spacing, useLayout, useTheme } from "@/theme";
 import {
-  ActionSheet,
   EmptyState,
   ErrorState,
   IconButton,
@@ -51,6 +67,14 @@ export default function ProjectsScreen() {
    */
   const [searchOpen, setSearchOpen] = useState(false);
   const [filterSheet, setFilterSheet] = useState(false);
+  /*
+   * The web's Filters popover refinements (Views, Stage, Tags, Labels, People,
+   * Date), composed with the status row above rather than replacing it.
+   */
+  const [filters, setFilters] = useState<ProjectFilters>(EMPTY_PROJECT_FILTERS);
+  const filterCount = activeProjectFilterCount(filters) + (filters.includeArchived ? 1 : 0);
+  const archiveMode: ArchiveMode =
+    status === "archived" ? "only" : filters.includeArchived ? "include" : "hide";
 
   const { data, isLoading, isRefetching, error, refetch } = useQuery({
     queryKey: ["projects"],
@@ -95,7 +119,46 @@ export default function ProjectsScreen() {
     return out;
   }, [boardsQuery.data]);
 
-  const { colorOf } = useLabelCatalog();
+  const { colorOf, rows: labelRows } = useLabelCatalog();
+
+  /*
+   * Dates, creators, stages, tags and photo contributors: read only once the
+   * sheet is open or a refinement needs them, so the everyday list pays nothing.
+   */
+  const factsQuery = useQuery({
+    queryKey: ["project-filter-facts"],
+    queryFn: listProjectFilterFacts,
+    enabled: filterSheet || needsProjectFacts(filters),
+    staleTime: 60_000,
+  });
+  const facts = factsQuery.data;
+  const peopleQuery = useQuery({
+    queryKey: ["crew-candidates"],
+    queryFn: listCrewCandidates,
+    enabled: filterSheet || filters.people.length > 0,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  /* Everybody who uploaded to or created a job, named from the team roster. */
+  const people = useMemo(() => {
+    const roster = new Map(
+      (peopleQuery.data ?? []).map((person) => [person.userId, crewName(person)]),
+    );
+    const ids = new Set<string>();
+    for (const fact of Object.values(facts?.byProject ?? {})) {
+      for (const id of fact.contributorIds) ids.add(id);
+      if (fact.created_by) ids.add(fact.created_by);
+    }
+    return Array.from(ids)
+      .map((id) => ({ id, name: roster.get(id) ?? "Teammate" }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [facts, peopleQuery.data]);
+
+  const chips = projectFilterChips(filters, {
+    stage: (id) => stages[id]?.name ?? "Stage",
+    tag: (id) => facts?.tags.find((tag) => tag.id === id)?.name ?? "Tag",
+    person: (id) => people.find((person) => person.id === id)?.name ?? "Teammate",
+  });
 
   /* One column on a phone, a grid of cards on a tablet. */
   const { width, safeSide } = useLayout();
@@ -122,6 +185,7 @@ export default function ProjectsScreen() {
         continue;
       }
       out.all += 1;
+      if (project.starred) out.starred = (out.starred ?? 0) + 1;
       out[project.status] = (out[project.status] ?? 0) + 1;
     }
     return out;
@@ -133,8 +197,11 @@ export default function ProjectsScreen() {
       if (status === "archived") {
         if (!project.archived) return false;
       } else {
-        if (project.archived) return false;
+        if (project.archived && !filters.includeArchived) return false;
         if (status !== "all" && project.status !== status) return false;
+      }
+      if (!matchesProjectFilters(project, facts?.byProject[project.id] ?? null, filters)) {
+        return false;
       }
       if (!needle) return true;
       const address = formatAddress(project) ?? "";
@@ -151,9 +218,9 @@ export default function ProjectsScreen() {
      * without scrolling past the ones they are not.
      */
     return [...matched].sort((a, b) => Number(Boolean(b.starred)) - Number(Boolean(a.starred)));
-  }, [all, search, status]);
+  }, [all, search, status, filters, facts]);
 
-  const filters: ProjectFilterOption<StatusFilter>[] = [
+  const statusOptions: ProjectFilterOption<StatusFilter>[] = [
     { id: "all", label: "All", count: counts.all },
     { id: "active", label: PROJECT_STATUS_LABELS.active, count: counts.active ?? 0 },
     { id: "on_hold", label: PROJECT_STATUS_LABELS.on_hold, count: counts.on_hold ?? 0 },
@@ -178,6 +245,12 @@ export default function ProjectsScreen() {
           actions={
             <View style={{ flexDirection: "row", alignItems: "center" }}>
               <IconButton
+                icon={CalendarClock}
+                accessibilityLabel="Schedule"
+                surface={false}
+                onPress={() => router.push("/schedule")}
+              />
+              <IconButton
                 icon={Search}
                 accessibilityLabel={showSearch ? "Hide search" : "Search projects"}
                 surface={false}
@@ -193,12 +266,18 @@ export default function ProjectsScreen() {
               />
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Filter projects"
+                accessibilityLabel={
+                  filterCount > 0 ? `Filter projects, ${filterCount} on` : "Filter projects"
+                }
                 onPress={() => setFilterSheet(true)}
                 style={({ pressed }) => [styles.glyphButton, { opacity: pressed ? 0.7 : 1 }]}
               >
                 <FilterGlyph
-                  color={status === "all" ? theme.colors.foreground : theme.colors.primary}
+                  color={
+                    status === "all" && filterCount === 0
+                      ? theme.colors.foreground
+                      : theme.colors.primary
+                  }
                 />
               </Pressable>
             </View>
@@ -213,10 +292,15 @@ export default function ProjectsScreen() {
             />
           ) : null}
           <ProjectFilterPills
-            options={filters}
+            options={statusOptions}
             value={status}
             onChange={setStatus}
             label="Filter by status"
+          />
+          <ActiveFilterChips
+            chips={chips}
+            onRemove={(key) => setFilters((current) => withoutProjectFilterChip(current, key))}
+            onClearAll={() => setFilters(EMPTY_PROJECT_FILTERS)}
           />
         </PageHeader>
       </View>
@@ -255,15 +339,16 @@ export default function ProjectsScreen() {
             />
           }
           ListEmptyComponent={
-            search.trim() || status !== "all" ? (
+            search.trim() || status !== "all" || filterCount > 0 ? (
               <EmptyState
                 title="Nothing matches"
-                body="Try a different search, or clear the status filter."
+                body="Try a different search, or clear your filters to see everything again."
                 action={{
                   label: "Clear filters",
                   onPress: () => {
                     setSearch("");
                     setStatus("all");
+                    setFilters(EMPTY_PROJECT_FILTERS);
                   },
                 }}
               />
@@ -318,28 +403,23 @@ export default function ProjectsScreen() {
         />
       )}
 
-      <ActionSheet
+      <ProjectFilterSheet
         visible={filterSheet}
+        value={filters}
+        archiveMode={archiveMode}
+        facts={facts}
+        factsLoading={factsQuery.isLoading}
+        boards={boardsQuery.data ?? []}
+        labels={labelRows}
+        people={people}
+        starredCount={counts.starred ?? 0}
+        archivedCount={counts.archived ?? 0}
         onClose={() => setFilterSheet(false)}
-        title="Show projects"
-        actions={[
-          ...filters.map((option) => ({
-            label: `${option.id === status ? "✓ " : ""}${option.label} (${option.count ?? 0})`,
-            onPress: () => setStatus(option.id),
-          })),
-          ...(search || status !== "all"
-            ? [
-                {
-                  label: "Clear search and filter",
-                  onPress: () => {
-                    setSearch("");
-                    setSearchOpen(false);
-                    setStatus("all");
-                  },
-                },
-              ]
-            : []),
-        ]}
+        onApply={(next, mode) => {
+          setFilters(next);
+          if (mode === "only") setStatus("archived");
+          else if (status === "archived") setStatus("all");
+        }}
       />
     </View>
   );

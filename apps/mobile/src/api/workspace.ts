@@ -1,4 +1,5 @@
 import { api } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
 import type { BusinessProfile } from "@everlumen/shared";
 
 /**
@@ -40,3 +41,24 @@ export async function saveCompanyProfile(patch: CompanyProfilePatch): Promise<vo
 export type TeamProfileRow = Partial<BusinessProfile> & {
   name?: string | null;
 };
+
+/**
+ * "Not now" on the Home setup card, for this person. Stored on the profile by
+ * the server, so a dismissal on the phone holds on the laptop too.
+ */
+export async function dismissSetupPrompt(): Promise<void> {
+  await api.rpc("dismissSetupPrompt");
+}
+
+/** Whether this person has dismissed the setup card: their own profile row, read under RLS. */
+export async function getSetupPromptDismissed(userId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("setup_prompt_dismissed_at")
+    .eq("id", userId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return Boolean(
+    (data as { setup_prompt_dismissed_at?: string | null } | null)?.setup_prompt_dismissed_at,
+  );
+}
