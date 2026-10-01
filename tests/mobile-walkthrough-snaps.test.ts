@@ -60,10 +60,22 @@ describe("the recorder", () => {
     expect(src).toContain("extractSnapFrames");
   });
 
-  it("keeps a failed save to try again instead of losing the walk", () => {
+  it("queues the walk at Stop instead of saving it inline", () => {
     const src = read(SCREEN);
-    expect(src).toContain("Try saving the walkthrough again");
-    expect(src).toMatch(/sessionId:\s*null/);
+    const save = src.slice(src.indexOf("  async function saveWalkthrough("));
+    // Into the outbox before anything that needs the network or takes time.
+    expect(save.indexOf("persistRecording(videoUri, id)")).toBeGreaterThan(-1);
+    expect(save.indexOf('kind: "walkthrough_video"')).toBeLessThan(
+      save.indexOf("extractSnapFrames("),
+    );
+    // Snaps are linked to the same walk, by its row when it has no id yet.
+    expect(save).toContain("videoRowId: id");
+    expect(save).toContain("finishHeld(id)");
+    // The old inline chain and its retry button are gone.
+    expect(src).not.toContain("Try saving the walkthrough again");
+    expect(src).not.toContain("uploadWalkthroughVideo(");
+    expect(src).not.toContain("transcribeWalkthrough(");
+    expect(src).not.toContain("router.replace(");
   });
 
   it("puts a tablet's controls in a column on the right", () => {

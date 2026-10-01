@@ -526,7 +526,8 @@ export async function saveWalkthroughNarration(
   /*
    * The transcript's timing lives in the same column (`transcriptSegments`,
    * written by transcription) so photos that land late can still be captioned
-   * by time. Narration replaces the rest, never that.
+   * by time, and so does the last transcription's outcome (`transcription`).
+   * Narration replaces the rest, never those.
    */
   const { data: existing } = await getSupabaseAdmin()
     .from("walkthroughs" as any)
@@ -534,9 +535,12 @@ export async function saveWalkthroughNarration(
     .eq("id", walkthroughId)
     .maybeSingle();
   const segments = (existing as any)?.narration_json?.transcriptSegments;
-  const payload = Array.isArray(segments)
-    ? { ...narration, transcriptSegments: segments }
-    : narration;
+  const transcription = (existing as any)?.narration_json?.transcription;
+  const payload = {
+    ...narration,
+    ...(Array.isArray(segments) ? { transcriptSegments: segments } : {}),
+    ...(transcription && typeof transcription === "object" ? { transcription } : {}),
+  };
   const { error } = await getSupabaseAdmin()
     .from("walkthroughs" as any)
     .update({ narration_json: payload as any })

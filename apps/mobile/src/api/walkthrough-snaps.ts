@@ -8,7 +8,15 @@ import { persistCapture } from "@/offline/media";
 import { enqueue, newOutboxId } from "@/offline/outbox";
 import type { WalkthroughPhotoPayload } from "@/offline/handlers";
 
-export { formatSnapOffset, snapNeedsFrame, type WalkthroughSnap } from "./walkthrough-snap-rules";
+export {
+  calibrateSnapOffsets,
+  countMissingFrames,
+  encoderDelaySeconds,
+  formatSnapOffset,
+  missingFramesNotice,
+  snapNeedsFrame,
+  type WalkthroughSnap,
+} from "./walkthrough-snap-rules";
 
 /**
  * Photos snapped during a walkthrough recording.
@@ -33,10 +41,15 @@ export { formatSnapOffset, snapNeedsFrame, type WalkthroughSnap } from "./walkth
  *
  * Either way each snap is copied into the outbox's own storage and sent by the
  * offline queue like every other photo. That happens at Stop, alongside the
- * recording, rather than at the snap: the queue sweeps any file in its folder
- * that has no row yet, and the row needs the walkthrough's id, which exists
- * only once the recording is saved.
+ * recording, rather than at the snap: the frames come from the finished video,
+ * and each snap's offset is first corrected for the encoder's late start
+ * (`encoderDelaySeconds`). A walk recorded with no signal has no walkthrough
+ * yet, so its snaps carry the queued video's row id and are linked to the
+ * walkthrough when that row makes it.
  */
+
+/** How long to wait for a recording's length before going without it. */
+const DURATION_TIMEOUT_MS = 4000;
 
 /** A still that has not arrived by now is not coming; mark the frame instead. */
 const STILL_TIMEOUT_MS = 5000;
@@ -105,6 +118,32 @@ export async function captureSnapStill(
 }
 
 /**
+ * The length of a finished recording, in seconds, read from the file itself.
+ * Null when it cannot be read in time; the caller then goes by the clock.
+ */
+export async function readVideoDuration(videoUri: string): Promise<number | null> {
+  const player = createVideoPlayer(videoUri);
+  try {
+    if (player.duration > 0) return player.duration;
+    return await new Promise<number | null>((resolve) => {
+      const timer = setTimeout(() => {
+        sub.remove();
+        resolve(player.duration > 0 ? player.duration : null);
+      }, DURATION_TIMEOUT_MS);
+      const sub = player.addListener("sourceLoad", ({ duration }) => {
+        clearTimeout(timer);
+        sub.remove();
+        resolve(duration > 0 ? duration : null);
+      });
+    });
+  } catch {
+    return null;
+  } finally {
+    player.release();
+  }
+}
+
+/**
  * Fill in every snap that is waiting for its frame, from the finished
  * recording. A frame that cannot be read leaves that snap without a file; the
  * rest still save.
@@ -157,7 +196,10 @@ export async function extractSnapFrames(
 export async function queueWalkthroughSnaps(options: {
   userId: string;
   projectId: string;
-  walkthroughId: string;
+  /** Null when the walkthrough is still to be made by the queued video. */
+  walkthroughId: string | null;
+  /** The queued `walkthrough_video` row that makes it. */
+  videoRowId?: string | null;
   snaps: WalkthroughSnap[];
   deviceCoords?: Coords | null;
   projectCoords?: Coords | null;
@@ -175,7 +217,8 @@ export async function queueWalkthroughSnaps(options: {
     const payload: WalkthroughPhotoPayload = {
       userId: options.userId,
       projectId: options.projectId,
-      walkthroughId: options.walkthroughId,
+      walkthroughId: options.walkthroughId ?? "",
+      videoRowId: options.videoRowId ?? null,
       offsetSeconds: snap.offsetSeconds,
       position,
       width: snap.width,

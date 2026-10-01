@@ -3,9 +3,20 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   canOpenReport,
-  reportRefusal,
+  newPhotosMessage,
+  newPhotosSinceSummary,
+  queuedWalkthroughPhotos,
+  reportNote,
   reportResultMessage,
+  transcriptionIsProblem,
+  transcriptionNotice,
+  transcriptionState,
+  uploadHoldMessage,
 } from "../apps/mobile/src/api/walkthrough-report-view";
+import {
+  runTranscription,
+  transcriptionNotice as webTranscriptionNotice,
+} from "../apps/web/src/features/walkthroughs/transcription";
 
 /*
  * Turning a walkthrough into the report a client receives.
@@ -55,12 +66,152 @@ describe("canOpenReport", () => {
   });
 });
 
-describe("reportRefusal", () => {
-  it("refuses without a transcript, which is what the report is written from", () => {
-    // Said before the tap. The existing Generate report button refuses on the
-    // same ground, and this one additionally spends a Pro quota slot.
-    expect(reportRefusal(false)).toContain("transcript");
-    expect(reportRefusal(true)).toBeNull();
+describe("reportNote", () => {
+  it("says what a report without a transcript is made of, without refusing it", () => {
+    /*
+     * The buttons used to be dead without a transcript. The server builds the
+     * report from the photos when nobody spoke, and the web lets that happen,
+     * so the phone now says so instead of blocking it.
+     */
+    expect(reportNote(false)).toContain("photos");
+    expect(reportNote(true)).toBeNull();
+  });
+
+  it("no longer gates the buttons on the transcript", () => {
+    const screen = readFileSync(
+      join(process.cwd(), "apps/mobile/app/(app)/walkthrough/[id].tsx"),
+      "utf8",
+    );
+    expect(screen).not.toContain("reportRefusal");
+    expect(screen).not.toContain("|| !detail.transcript");
+    expect(screen).not.toContain("transcribed from the web app");
+  });
+});
+
+describe("transcription outcome wording", () => {
+  it("prefers the server's sentence", () => {
+    expect(
+      transcriptionNotice({ state: "partial", failedPieces: 2, message: "Server words." }),
+    ).toBe("Server words.");
+  });
+
+  it("names lost minutes when an older server sends only counts", () => {
+    expect(transcriptionNotice({ state: "partial", failedPieces: 2 })).toBe(
+      "2 minutes could not be transcribed. The rest was saved.",
+    );
+    expect(transcriptionNotice({ state: "failed", failedPieces: 1 })).toContain(
+      "1 minute could not be transcribed",
+    );
+  });
+
+  it("reads a bare `{ transcript }` from an older server", () => {
+    expect(transcriptionState({ transcript: "" })).toBe("empty");
+    expect(transcriptionState({ transcript: "Coil cleaned." })).toBe("done");
+    expect(transcriptionNotice({ transcript: "" })).toMatch(/No speech/);
+  });
+
+  it("marks only the bad endings as problems", () => {
+    expect(transcriptionIsProblem({ state: "done" })).toBe(false);
+    expect(transcriptionIsProblem({ state: "empty" })).toBe(true);
+    expect(transcriptionIsProblem({ state: "partial" })).toBe(true);
+    expect(transcriptionIsProblem({ state: "failed" })).toBe(true);
+  });
+
+  it("says the same thing on the web", () => {
+    for (const outcome of [
+      { state: "partial" as const, failedPieces: 3 },
+      { state: "empty" as const },
+      { transcript: "" },
+      { state: "done" as const },
+    ]) {
+      expect(webTranscriptionNotice(outcome)).toBe(transcriptionNotice(outcome));
+    }
+  });
+});
+
+describe("runTranscription", () => {
+  it("returns at once when the server answered inline", async () => {
+    const status = async () => ({});
+    const result = await runTranscription({
+      start: async () => ({ transcript: "Done.", state: "done" }),
+      status,
+    });
+    expect(result.state).toBe("done");
+  });
+
+  it("polls a background run until it ends, riding out a dropped poll", async () => {
+    let calls = 0;
+    const result = await runTranscription({
+      start: async () => ({ inProgress: true, state: "running" }),
+      status: async () => {
+        calls += 1;
+        if (calls === 1) throw new Error("offline");
+        if (calls === 2) return { state: "running" };
+        return { state: "partial", failedPieces: 1, message: "1 minute could not be transcribed." };
+      },
+      wait: async () => {},
+    });
+    expect(calls).toBe(3);
+    expect(result.state).toBe("partial");
+  });
+
+  it("stops when the page goes away", async () => {
+    const result = await runTranscription({
+      start: async () => ({ inProgress: true }),
+      status: async () => ({ state: "running" }),
+      cancelled: () => true,
+      wait: async () => {},
+    });
+    expect(result.inProgress).toBe(true);
+  });
+});
+
+describe("photos still in the upload queue", () => {
+  const row = (walkthroughId: string, state: string, kind = "walkthrough_photo") => ({
+    kind,
+    state,
+    payload: JSON.stringify({ walkthroughId }),
+  });
+
+  it("counts this walk's snaps, apart from the ones that failed", () => {
+    const rows = [
+      row("w1", "pending"),
+      row("w1", "sending"),
+      row("w1", "failed"),
+      row("w1", "done"),
+      row("w2", "pending"),
+      row("w1", "pending", "photo_upload"),
+      { kind: "walkthrough_photo", state: "pending", payload: "not json" },
+    ];
+    expect(queuedWalkthroughPhotos(rows, "w1")).toEqual({ uploading: 2, failed: 1 });
+  });
+
+  it("holds the report while they upload, and says so", () => {
+    expect(uploadHoldMessage({ uploading: 3, failed: 0 })).toContain("3 photos still uploading");
+    expect(uploadHoldMessage({ uploading: 1, failed: 0 })).toContain("1 photo still uploading");
+    expect(uploadHoldMessage({ uploading: 0, failed: 2 })).toContain("2 photos could not upload");
+    expect(uploadHoldMessage({ uploading: 0, failed: 0 })).toBeNull();
+  });
+
+  it("always offers a way past the hold", () => {
+    const screen = readFileSync(
+      join(process.cwd(), "apps/mobile/app/(app)/walkthrough/[id].tsx"),
+      "utf8",
+    );
+    expect(screen).toContain('"Generate anyway"');
+  });
+});
+
+describe("photos the summary leaves out", () => {
+  it("counts walk photos missing from the summary", () => {
+    expect(newPhotosSinceSummary(["a", "b", "c"], ["a"])).toBe(2);
+    expect(newPhotosSinceSummary(["a"], ["a", "b"])).toBe(0);
+  });
+
+  it("offers Regenerate when there are some", () => {
+    expect(newPhotosMessage(0)).toBeNull();
+    expect(newPhotosMessage(1)).toBe("1 new photo since this report. Regenerate to include it.");
+    expect(newPhotosMessage(4)).toContain("4 new photos");
   });
 });
 

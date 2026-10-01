@@ -19,9 +19,9 @@ describe("a site video after Stop", () => {
   const screen = () => read(RECORDER);
   const siteBranch = () => {
     const s = screen();
-    const at = s.indexOf("    if (siteVideo) {");
+    const at = s.indexOf("  function persist(");
     // Ends where the walkthrough's own save takes over.
-    return s.slice(at, s.indexOf("    await saveWalkthrough(", at));
+    return s.slice(at, s.indexOf("  async function saveWalkthrough(", at));
   };
 
   it("is moved into app storage and queued as a video_upload", () => {
@@ -40,15 +40,19 @@ describe("a site video after Stop", () => {
     // Jon (2026-09-29): "The circling thing is still happening when i save a video."
     const s = screen();
     expect(s).not.toContain("Saving video</Text>");
-    expect(s).toContain('stage === "saving" && !siteVideo && { opacity: 0.5 }');
+    // Record is only held while the stopped file lands, then the camera is back.
+    expect(s).toContain('const recordDisabled = stage === "saving"');
     const stop = s.slice(
       s.indexOf("  function stop() {"),
       s.indexOf("  function leaveForCamera()"),
     );
-    expect(stop).toContain('siteVideo && Platform.OS === "android"');
+    expect(stop).toContain('siteVideo && Platform.OS === "android" && !discarding.current');
     expect(stop).toContain("setTimeout(leaveForCamera, SITE_VIDEO_LEAVE_MS)");
     // Leaving is once only, however many paths ask for it.
-    expect(s).toMatch(/function leaveForCamera\(\) \{\s*if \(left\.current\) return;/);
+    // And never once the recorder has unmounted.
+    expect(s).toMatch(
+      /function leaveForCamera\(\) \{\s*if \(left\.current \|\| !mounted\.current\) return;/,
+    );
   });
 
   it("says a failed save on the camera, since the recorder has already gone", () => {
@@ -65,15 +69,18 @@ describe("a site video after Stop", () => {
     expect(screen()).not.toContain("Alert.alert");
   });
 
-  it("never draws the full-screen saving page for a site video", () => {
-    expect(screen()).toContain('if (stage === "saving" && !siteVideo) {');
+  it("never draws a full-screen saving page, for a site video or a walkthrough", () => {
+    // The walkthrough's own "Keep the app open until this finishes" page went
+    // with its inline save: both kinds now go to the outbox at Stop.
+    const s = screen();
+    expect(s).not.toContain('if (stage === "saving" && !siteVideo) {');
+    expect(s).not.toContain("Keep the app open until this finishes");
   });
 
   it("keeps the per-plan length limit on the recording", () => {
     const s = screen();
-    expect(s).toContain(
-      "const maxSeconds = siteVideo ? videoMaxSeconds(team?.plan) : MAX_DURATION_SECONDS;",
-    );
+    expect(s).toContain("videoMaxSeconds(team?.plan)");
+    expect(s).toContain("walkthroughMaxSeconds(team?.plan, team?.isInternal)");
     expect(s).toContain("maxDuration: maxSeconds");
   });
 });

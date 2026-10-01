@@ -143,9 +143,12 @@ import {
   saveWalkthroughPhotoService,
   setWalkthroughShareService,
   setWalkthroughStatusService,
+  transcribeWalkthroughInputSchema,
   transcribeWalkthroughService,
+  getWalkthroughTranscriptionService,
   updateWalkthroughVideoPathService,
   walkthroughNarrationInputSchema,
+  walkthroughTranscriptionInputSchema,
 } from "../walkthroughs/service";
 import {
   getUnreadNotificationCountService,
@@ -962,6 +965,12 @@ export const rpcRegistry: Record<string, RpcEntry> = {
         .object({
           projectId: z.string().uuid(),
           title: z.string().min(1).max(160),
+          /*
+           * The real recording start for a walk recorded offline. Any string is
+           * let through: `sessionStartedAt` falls back to now for one it cannot
+           * trust, rather than a bad phone clock refusing the whole walk.
+           */
+          startedAt: z.string().max(64).optional(),
         })
         .parse(d),
     createWalkthroughSessionService as (ctx: ServiceContext, data: never) => Promise<unknown>,
@@ -1056,23 +1065,17 @@ export const rpcRegistry: Record<string, RpcEntry> = {
      * `audioBase64` or `storagePath`, not both required. Web sends the bytes it
      * already holds; mobile records to a file and uploads it, so it sends the
      * path and the server reads the object rather than having the phone upload
-     * the whole recording a second time as JSON.
+     * the whole recording a second time as JSON. `background` answers at once
+     * and leaves the outcome on the row for `getWalkthroughTranscription`.
      */
-    (d) =>
-      z
-        .object({
-          walkthroughId: z.string().uuid(),
-          audioBase64: z.string().min(1).optional(),
-          storagePath: z.string().min(1).max(500).optional(),
-          bucket: z.string().min(1).max(100).optional(),
-          mimeType: z.string().min(1).max(100),
-        })
-        .refine((value) => Boolean(value.audioBase64) || Boolean(value.storagePath), {
-          message: "Provide either audioBase64 or storagePath",
-        })
-        .parse(d),
+    (d) => transcribeWalkthroughInputSchema.parse(d),
     transcribeWalkthroughService as (ctx: ServiceContext, data: never) => Promise<unknown>,
     { idempotent: true },
+  ),
+  /* Where the last transcription got to: what the retry buttons poll. Reads only. */
+  getWalkthroughTranscription: authed(
+    (d) => walkthroughTranscriptionInputSchema.parse(d),
+    getWalkthroughTranscriptionService as (ctx: ServiceContext, data: never) => Promise<unknown>,
   ),
   /* A photo note spoken into the note editor, as text. Writes nothing. */
   transcribeVoiceNote: authed(

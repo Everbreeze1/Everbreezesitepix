@@ -40,14 +40,47 @@ export function walkthroughVideoPath(
   return `${userId}/${projectId}/walkthroughs/${walkthroughId}.${extension}`;
 }
 
+/**
+ * How long one walkthrough may record, per plan, as the web recorder allows
+ * (`WALKTHROUGH_MAX_SECONDS` in ProjectDetailPage): 10 minutes on Starter, 15
+ * on Pro, 20 on Team. A staff workspace counts as Team, as it does on web.
+ */
+export const WALKTHROUGH_MAX_SECONDS: Record<string, number> = {
+  starter: 600,
+  pro: 900,
+  team: 1200,
+};
+
+export function walkthroughMaxSeconds(plan: string | null | undefined, isInternal = false): number {
+  const tier = isInternal ? "team" : (plan ?? "starter");
+  return WALKTHROUGH_MAX_SECONDS[tier] ?? WALKTHROUGH_MAX_SECONDS.starter;
+}
+
+/**
+ * How long the phone waits for a transcript. A whole walk is transcribed in
+ * one call, and a fifteen-minute walk takes the server well past the usual AI
+ * timeout: hanging up early reports a failure for work that is still going.
+ */
+export const WALKTHROUGH_TRANSCRIBE_TIMEOUT_MS = 5 * 60_000;
+
+/**
+ * Make the walkthrough row.
+ *
+ * `startedAt` is when Record was pressed. The recorder makes the row at Record
+ * when it has signal, as web does, so the row's own start time is right; a
+ * walk recorded with none is made later by the offline queue, and passes the
+ * real start along. `idempotencyKey` is the queue row's, so a retry after a
+ * lost response makes one walkthrough rather than two.
+ */
 export async function createWalkthroughSession(
   projectId: string,
   title: string,
+  options: { startedAt?: string; idempotencyKey?: string } = {},
 ): Promise<{ id: string }> {
   const result = await api.rpc<{ id: string }>(
     "createWalkthroughSession",
-    { projectId, title },
-    { idempotencyKey: randomUUID() },
+    { projectId, title, ...(options.startedAt ? { startedAt: options.startedAt } : {}) },
+    { idempotencyKey: options.idempotencyKey ?? randomUUID() },
   );
   return result;
 }
@@ -229,14 +262,26 @@ export async function finishWalkthroughSession(
  * can fail without costing the user anything they cannot get back: the video
  * and the photos are already saved, and the transcript can be produced later
  * from the web app. Failing the whole save over it would be the wrong trade.
+ *
+ * `empty` is a transcription that ran and heard nothing: no speech in the
+ * recording, or a server that says it came back empty. Retrying it would pay
+ * for the same silence again, so the queue writes it down and moves on.
  */
 export async function transcribeWalkthrough(
   walkthroughId: string,
   storagePath: string,
   mimeType: string,
-): Promise<{ ok: boolean; message: string | null }> {
+  options: { idempotencyKey?: string; timeoutMs?: number } = {},
+): Promise<{ ok: boolean; message: string | null; empty: boolean }> {
   try {
-    await api.rpc(
+    const result = await api.rpc<{
+      transcript?: string | null;
+      empty?: boolean;
+      /** "done" | "partial" | "empty" | "failed" | "running" */
+      state?: string;
+      inProgress?: boolean;
+      message?: string;
+    }>(
       "transcribeWalkthrough",
       {
         walkthroughId,
@@ -255,25 +300,49 @@ export async function transcribeWalkthrough(
        * The key then rescues the retry - but the person has already been told
        * their recording failed to transcribe.
        */
-      { idempotencyKey: randomUUID(), timeoutMs: AI_TIMEOUT_MS },
+      {
+        idempotencyKey: options.idempotencyKey ?? randomUUID(),
+        timeoutMs: options.timeoutMs ?? WALKTHROUGH_TRANSCRIBE_TIMEOUT_MS,
+      },
     );
-    return { ok: true, message: null };
+    if (result?.state === "failed") {
+      return {
+        ok: false,
+        message: result.message ?? "Could not transcribe the recording",
+        empty: false,
+      };
+    }
+    // Another run of the same transcription is still going: try again later
+    // rather than read its unfinished result as an empty one.
+    if (result?.inProgress || result?.state === "running") {
+      return { ok: false, message: "The transcription is still running", empty: false };
+    }
+    const empty =
+      result?.empty === true ||
+      result?.state === "empty" ||
+      (typeof result?.transcript === "string" && !result.transcript.trim());
+    // "partial" is a transcript with gaps: kept, with the server's sentence.
+    return { ok: true, message: result?.message ?? null, empty };
   } catch (e) {
     return {
       ok: false,
       message: e instanceof Error ? e.message : "Could not transcribe the recording",
+      empty: false,
     };
   }
 }
 
-export async function generateWalkthroughReport(walkthroughId: string): Promise<void> {
+export async function generateWalkthroughReport(
+  walkthroughId: string,
+  options: { idempotencyKey?: string } = {},
+): Promise<void> {
   await api.rpc(
     "generateWalkthroughReport",
     { walkthroughId },
     // Report generation is AI work and charged for. Without a key, a retry
     // after a dropped response pays for the same report twice; without the
     // timeout, the dropped response is one the client caused by hanging up.
-    { idempotencyKey: randomUUID(), timeoutMs: AI_TIMEOUT_MS },
+    { idempotencyKey: options.idempotencyKey ?? randomUUID(), timeoutMs: AI_TIMEOUT_MS },
   );
 }
 

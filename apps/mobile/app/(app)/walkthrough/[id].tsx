@@ -13,7 +13,21 @@ import { useVideoPlayer, VideoView } from "expo-video";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { cleanWalkthroughMarkdown, relativeTime } from "@everlumen/shared";
 import { signPhotoUrls } from "@/api/photos";
-import { canOpenReport, reportRefusal, reportResultMessage } from "@/api/walkthrough-report-view";
+import {
+  canOpenReport,
+  newPhotosMessage,
+  newPhotosSinceSummary,
+  queuedWalkthroughPhotos,
+  reportNote,
+  reportResultMessage,
+  transcriptionIsProblem,
+  transcriptionNotice,
+  uploadHoldMessage,
+  type QueuedWalkthroughPhotos,
+} from "@/api/walkthrough-report-view";
+import { retryWalkthroughTranscription } from "@/api/walkthrough-retry";
+import { listRows } from "@/offline/outbox";
+import { useQueue } from "@/offline/use-queue";
 import {
   generateWalkthroughReport,
   getWalkthroughDetail,
@@ -46,8 +60,10 @@ import { SegmentTabs } from "@/components/walkthrough/SegmentTabs";
 import { SummaryReport } from "@/components/walkthrough/SummaryReport";
 import { radius, spacing, useLayout, useTheme } from "@/theme";
 import {
+  CloudUpload,
   FileText,
   Link2,
+  Mic,
   Pencil,
   RefreshCw,
   ScrollText,
@@ -74,6 +90,9 @@ import {
 } from "@/ui";
 
 type Tab = "summary" | "transcript";
+
+/** Outbox rows read when counting this walk's queued snaps. Far above any real queue. */
+const OUTBOX_SCAN_LIMIT = 1000;
 
 function timecode(seconds: number): string {
   const whole = Math.max(0, Math.round(seconds));
@@ -109,6 +128,45 @@ export default function WalkthroughDetailScreen() {
   /* The edit sheet's draft: null while closed. */
   const [draft, setDraft] = useState<{ title: string; notes: string } | null>(null);
   const [draftError, setDraftError] = useState<string | null>(null);
+  /* Seconds the transcription retry has been waiting, while it runs. */
+  const [transcribeElapsed, setTranscribeElapsed] = useState(0);
+  const [transcribeResult, setTranscribeResult] = useState<{
+    text: string;
+    problem: boolean;
+  } | null>(null);
+  const mounted = useRef(true);
+  useEffect(
+    () => () => {
+      mounted.current = false;
+    },
+    [],
+  );
+
+  /*
+   * This walk's snaps still in the phone's upload queue.
+   *
+   * Counted from the outbox itself, re-read whenever the queue changes, so the
+   * number falls as each one lands. A report written while they are in flight
+   * is written without them.
+   */
+  const queue = useQueue();
+  const [queued, setQueued] = useState<QueuedWalkthroughPhotos>({ uploading: 0, failed: 0 });
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    listRows(OUTBOX_SCAN_LIMIT)
+      .then((rows) => {
+        if (!cancelled) setQueued(queuedWalkthroughPhotos(rows, id));
+      })
+      .catch(() => {
+        // The queue is a hint here. Unreadable, it holds nothing back.
+        if (!cancelled) setQueued({ uploading: 0, failed: 0 });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id, queue.pending, queue.sending, queue.failed, queue.outstanding]);
+  const holdMessage = uploadHoldMessage(queued);
 
   const detailQuery = useQuery({
     queryKey: ["walkthrough", id],
@@ -117,6 +175,14 @@ export default function WalkthroughDetailScreen() {
   });
 
   const detail = detailQuery.data;
+
+  // A snap that just landed is a new row in the timeline: show it.
+  const lastUploading = useRef(queued.uploading);
+  useEffect(() => {
+    if (queued.uploading < lastUploading.current) void detailQuery.refetch();
+    lastUploading.current = queued.uploading;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queued.uploading]);
 
   const videoQuery = useQuery({
     queryKey: ["walkthrough-video", detail?.video_path],
@@ -154,6 +220,15 @@ export default function WalkthroughDetailScreen() {
   });
 
   const status = detail ? aiSummaryStatus(detail, summaryQuery.data?.summary ?? current) : "none";
+
+  /* Photos on the walk that the summary on screen leaves out, usually late snaps. */
+  const missingFromSummary =
+    detail && summaryQuery.data
+      ? newPhotosSinceSummary(
+          detail.shots.map((shot) => shot.photo_id),
+          summaryQuery.data.summary.photoNotes.map((note) => note.photoId),
+        )
+      : 0;
 
   // Poll while the write-up is on its way, and stop as soon as it lands.
   useEffect(() => {
@@ -266,8 +341,64 @@ export default function WalkthroughDetailScreen() {
   function confirmRegenerate() {
     Alert.alert("Write a new summary?", REGENERATE_WARNING, [
       { text: "Keep this one", style: "cancel" },
-      { text: "Write new", onPress: () => void makeSummary(true) },
+      { text: "Write new", onPress: () => void whenUploaded(() => makeSummary(true)) },
     ]);
+  }
+
+  /**
+   * Run a report action, or hold it while this walk's photos are still in the
+   * upload queue. "Generate anyway" is always there: a photo stuck on a dead
+   * connection must not keep the report hostage.
+   */
+  function whenUploaded(action: () => Promise<void>) {
+    if (!holdMessage) {
+      void action();
+      return;
+    }
+    Alert.alert("Photos still on this phone", holdMessage, [
+      { text: "Wait", style: "cancel" },
+      { text: "Generate anyway", onPress: () => void action() },
+    ]);
+  }
+
+  /**
+   * Transcribe the recording again, from the copy in storage.
+   *
+   * The server works in the background and this polls its outcome, so a long
+   * walk is not cut off by the phone's request timeout. Every ending is said
+   * out loud: transcribed, nothing heard, or how many minutes were lost.
+   */
+  async function onTranscribe() {
+    if (!id || !detail?.video_path) return;
+    setBusy("transcribe");
+    setNotice(null);
+    setTranscribeResult(null);
+    setTranscribeElapsed(0);
+    try {
+      const outcome = await retryWalkthroughTranscription({
+        walkthroughId: id,
+        storagePath: detail.video_path,
+        mimeType: detail.video_mime_type ?? "video/mp4",
+        onProgress: (seconds) => {
+          if (mounted.current) setTranscribeElapsed(seconds);
+        },
+        cancelled: () => !mounted.current,
+      });
+      if (!mounted.current) return;
+      setTranscribeResult({
+        text: transcriptionNotice(outcome),
+        problem: transcriptionIsProblem(outcome),
+      });
+      await detailQuery.refetch();
+    } catch (e) {
+      if (!mounted.current) return;
+      setTranscribeResult({
+        text: e instanceof Error ? e.message : "Could not transcribe the recording",
+        problem: true,
+      });
+    } finally {
+      if (mounted.current) setBusy(null);
+    }
   }
 
   /**
@@ -591,6 +722,14 @@ export default function WalkthroughDetailScreen() {
                             />
                           </View>
                         </View>
+                        {newPhotosMessage(missingFromSummary) ? (
+                          <View style={{ flexDirection: "row", gap: spacing.sm }}>
+                            <Icon icon={TriangleAlert} size="md" tone="safety" />
+                            <Text variant="caption" tone="muted" style={{ flex: 1 }}>
+                              {newPhotosMessage(missingFromSummary)}
+                            </Text>
+                          </View>
+                        ) : null}
                         <SummaryReport
                           summary={summaryQuery.data.summary}
                           photos={summaryQuery.data.photos}
@@ -639,13 +778,14 @@ export default function WalkthroughDetailScreen() {
                             There is no transcript yet, so the summary will lean on the photos.
                           </Text>
                         ) : null}
+                        {holdMessage ? <UploadHold message={holdMessage} /> : null}
                         <Button
                           label={status === "failed" ? "Try again" : "Generate summary"}
                           icon={Sparkles}
                           fullWidth
                           loading={busy === "summary"}
                           disabled={Boolean(busy)}
-                          onPress={() => void makeSummary(false)}
+                          onPress={() => whenUploaded(() => makeSummary(false))}
                         />
                       </Card>
                     )}
@@ -712,7 +852,7 @@ export default function WalkthroughDetailScreen() {
                       </View>
                     ) : null}
 
-                    <Card>
+                    <Card style={{ gap: spacing.sm }}>
                       {detail.transcript ? (
                         <Text variant="body" selectable>
                           {detail.transcript}
@@ -720,11 +860,39 @@ export default function WalkthroughDetailScreen() {
                       ) : (
                         <>
                           <Badge label="Not transcribed" tone="warning" />
-                          <Text variant="body" tone="muted" style={{ marginTop: spacing.sm }}>
-                            Recordings made on the phone are transcribed from the web app.
+                          <Text variant="body" tone="muted">
+                            {detail.video_path
+                              ? "Transcribe the recording to caption each photo from what was said."
+                              : "There is no recording on this walkthrough to transcribe."}
                           </Text>
                         </>
                       )}
+                      {transcribeResult ? (
+                        <View style={{ flexDirection: "row", gap: spacing.sm }}>
+                          {transcribeResult.problem ? (
+                            <Icon icon={TriangleAlert} size="md" tone="safety" />
+                          ) : null}
+                          <Text variant="caption" tone="muted" style={{ flex: 1 }}>
+                            {transcribeResult.text}
+                          </Text>
+                        </View>
+                      ) : null}
+                      {busy === "transcribe" ? (
+                        <Text variant="caption" tone="muted">
+                          {`Transcribing on the server · ${timecode(transcribeElapsed)}. A long walk can take a few minutes; you can leave this screen.`}
+                        </Text>
+                      ) : null}
+                      {detail.video_path ? (
+                        <Button
+                          label={detail.transcript ? "Transcribe again" : "Transcribe recording"}
+                          icon={Mic}
+                          variant={detail.transcript ? "outline" : "primary"}
+                          fullWidth
+                          loading={busy === "transcribe"}
+                          disabled={Boolean(busy)}
+                          onPress={() => void onTranscribe()}
+                        />
+                      ) : null}
                     </Card>
                   </View>
                 )}
@@ -751,8 +919,8 @@ export default function WalkthroughDetailScreen() {
                     variant="outline"
                     fullWidth
                     loading={busy === "clientReport"}
-                    disabled={Boolean(busy) || Boolean(reportRefusal(Boolean(detail.transcript)))}
-                    onPress={() => void onCreateClientReport()}
+                    disabled={Boolean(busy)}
+                    onPress={() => whenUploaded(onCreateClientReport)}
                   />
                   <Button
                     label="Reprocess recording"
@@ -760,15 +928,19 @@ export default function WalkthroughDetailScreen() {
                     variant="ghost"
                     fullWidth
                     loading={busy === "report"}
-                    disabled={Boolean(busy) || !detail.transcript}
-                    onPress={() => void onReprocess()}
+                    disabled={Boolean(busy)}
+                    onPress={() => whenUploaded(onReprocess)}
                   />
-                  {reportRefusal(Boolean(detail.transcript)) ? (
-                    // Says why the buttons are dead rather than failing after the tap.
+                  {/*
+                    Not a refusal any more: the server builds from the photos
+                    when nobody spoke, as the web does. This says so up front.
+                  */}
+                  {reportNote(Boolean(detail.transcript)) ? (
                     <Text variant="caption" tone="muted">
-                      {reportRefusal(Boolean(detail.transcript))}
+                      {reportNote(Boolean(detail.transcript))}
                     </Text>
                   ) : null}
+                  {holdMessage ? <UploadHold message={holdMessage} /> : null}
                   <Button
                     label="Delete walkthrough"
                     icon={Trash2}
@@ -824,5 +996,17 @@ export default function WalkthroughDetailScreen() {
         </View>
       </Sheet>
     </>
+  );
+}
+
+/** The queued-photos line, with the upload icon, beside the actions it holds back. */
+function UploadHold({ message }: { message: string }) {
+  return (
+    <View style={{ flexDirection: "row", gap: spacing.sm }}>
+      <Icon icon={CloudUpload} size="md" tone="muted" />
+      <Text variant="caption" tone="muted" style={{ flex: 1 }}>
+        {message}
+      </Text>
+    </View>
   );
 }

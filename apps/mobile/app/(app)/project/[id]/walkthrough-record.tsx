@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  AppState,
+  Linking,
   Platform,
   Pressable,
   StyleSheet,
@@ -9,7 +11,8 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { router, Stack, useLocalSearchParams } from "expo-router";
+import { Stack, useLocalSearchParams, useNavigation } from "expo-router";
+import NetInfo from "@react-native-community/netinfo";
 import { goBack } from "@/lib/navigation";
 import {
   CameraView,
@@ -23,42 +26,47 @@ import { getProject, projectCoords } from "@/api/projects";
 import { videoMaxSeconds } from "@/api/project-videos";
 import { getMyTeam } from "@/api/team";
 import {
+  calibrateSnapOffsets,
   captureSnapStill,
+  countMissingFrames,
+  encoderDelaySeconds,
   extractSnapFrames,
+  missingFramesNotice,
   newWalkthroughSnap,
   queueWalkthroughSnaps,
+  readVideoDuration,
   type WalkthroughSnap,
 } from "@/api/walkthrough-snaps";
 import { SnapStrip } from "@/components/walkthrough/SnapStrip";
 import {
   createWalkthroughSession,
-  finishWalkthroughSession,
-  transcribeWalkthrough,
-  updateWalkthroughVideoPath,
-  uploadWalkthroughVideo,
-  walkthroughVideoPath,
+  deleteWalkthrough,
+  walkthroughMaxSeconds,
 } from "@/api/walkthroughs";
 import { useAuth } from "@/lib/auth";
 import { leaveCaptureNotice } from "@/lib/capture-notice";
-import type { VideoUploadPayload } from "@/offline/handlers";
-import { persistRecording } from "@/offline/media";
-import { enqueue, newOutboxId } from "@/offline/outbox";
+import { useKeepAwakeWhile } from "@/lib/keep-awake";
+import type { VideoUploadPayload, WalkthroughVideoPayload } from "@/offline/handlers";
+import { discardRecording, persistRecording } from "@/offline/media";
+import { enqueue, finishHeld, newOutboxId, updateQueuedPayload } from "@/offline/outbox";
 import { requestSync } from "@/offline/sync";
 import { HIT_TARGET, radius, spacing, typography, useTheme } from "@/theme";
 import { Icon } from "@/ui";
-import { X } from "@/ui/icons";
-
-/**
- * Cap on one recording.
- *
- * Ten minutes of video is already a large upload from a job site, and the
- * product intends per-tier limits (product-roadmap section 2.2) that are not
- * enforced anywhere yet. This is a floor to stop a phone filling its storage
- * with a recording nobody stopped, not the tier rule.
- */
-const MAX_DURATION_SECONDS = 10 * 60;
+import { Settings, X } from "@/ui/icons";
 
 type Stage = "idle" | "recording" | "saving";
+
+/**
+ * How a recording is encoded.
+ *
+ * 720p at about 2.5 Mbit/s is roughly 19 MB a minute. Left to itself Android
+ * records 1080p at 15 to 20 Mbit/s, and a single upload of that passed
+ * Storage's 50 MB limit about 25 seconds into a walk. Not lower than 720p:
+ * Android's snaps are frames taken from this video, so its resolution is the
+ * photos' resolution.
+ */
+const VIDEO_QUALITY = "720p" as const;
+const VIDEO_BITRATE = 2_500_000;
 
 /**
  * How long a stopped site video on Android waits for its file to close
@@ -69,8 +77,38 @@ type Stage = "idle" | "recording" | "saving";
  */
 const SITE_VIDEO_LEAVE_MS = 600;
 
+/** Past this with no `onCameraReady`, Record may try anyway, as on the camera. */
+const CAMERA_READY_FALLBACK_MS = 2500;
+
+/**
+ * The longest a queued walkthrough is held back while its snaps are taken
+ * from the video and queued. Released as soon as that is done; this ceiling
+ * only matters if the app is killed part way, and then the video still goes.
+ */
+const WALKTHROUGH_HOLD_MS = 5 * 60_000;
+
+/** How long a notice over the camera stays up. */
+const NOTICE_MS = 4000;
+
 /** Width of the tablet's right-hand control column, record button included. */
 const RAIL_WIDTH = 120;
+
+const BACKGROUND_STOP_NOTICE =
+  "Recording stopped because the screen turned off or the app left the screen";
+
+/** One recording, as it was when Stop was pressed. */
+type Take = {
+  title: string;
+  startedAt: string;
+  /** The walkthrough made at Record, or null when there was no signal for it. */
+  session: Promise<string | null>;
+};
+
+/**
+ * A Close or Back waiting for the recording to finish: the navigation action
+ * it was (Back, a swipe), or null for the Close button.
+ */
+type PendingExit = { action: unknown };
 
 export default function WalkthroughRecordScreen() {
   /*
@@ -82,6 +120,7 @@ export default function WalkthroughRecordScreen() {
   const siteVideo = kind === "video";
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
   const { user } = useAuth();
   /*
    * A tablet, either way up, keeps the walkthrough's controls in a column on
@@ -95,35 +134,61 @@ export default function WalkthroughRecordScreen() {
   const [micPermission, requestMic] = useMicrophonePermissions();
   const cameraRef = useRef<CameraView>(null);
 
+  /*
+   * Record waits for the camera to say it is ready, as the photo camera's
+   * shutter does: a recording started before then fails on some Androids. A
+   * camera that fails to start is remade with a new `key`.
+   */
+  const [cameraKey, setCameraKey] = useState(0);
+  const [cameraReady, setCameraReady] = useState(false);
+  const cameraFailed = useRef(false);
+
   const [facing] = useState<CameraType>("back");
   const [stage, setStage] = useState<Stage>("idle");
   const [elapsed, setElapsed] = useState(0);
   const [shots, setShots] = useState<WalkthroughSnap[]>([]);
-  const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  /** The microphone was refused for good: only Settings can turn it back on. */
+  const [micBlocked, setMicBlocked] = useState(false);
+  /** Close or Back pressed while recording: Save or Discard is being asked. */
+  const [askLeave, setAskLeave] = useState(false);
   const [deviceCoords, setDeviceCoords] = useState<Coordinates | null>(null);
 
   const startedAt = useRef<number | null>(null);
+  const stoppedAt = useRef<number | null>(null);
+  /** The stage as of now, for listeners that outlive the render they were made in. */
+  const stageRef = useRef<Stage>("idle");
+  stageRef.current = stage;
+  /** Gone from the screen: nothing after this may set state or navigate. */
+  const mounted = useRef(true);
   /** A site video's recorder has already gone back to the camera. */
   const left = useRef(false);
+  /** The recording being stopped is to be thrown away, not saved. */
+  const discarding = useRef(false);
+  /** Where to go once the recording that is stopping has been saved or dropped. */
+  const pendingExit = useRef<PendingExit | null>(null);
+  /** Lets the exit through the `beforeRemove` guard once it is decided. */
+  const leaving = useRef(false);
+  /** The app went to the background mid-recording; said when it comes back. */
+  const interrupted = useRef(false);
+  const take = useRef<Take | null>(null);
   /*
    * The snaps as they are taken. `start` awaits the whole recording, so the
    * `shots` it closed over is the empty list from before the first snap, and
    * saving from that dropped every photo taken during the walk.
    */
   const shotsRef = useRef<WalkthroughSnap[]>([]);
-  /*
-   * A walkthrough whose save failed part way, kept so "Try again" resumes it
-   * rather than the recording being lost: the file, its length, and how far
-   * the save got (the session it made, whether its photos are queued).
-   */
-  const unsaved = useRef<{
-    videoUri: string;
-    durationSeconds: number;
-    sessionId: string | null;
-    photosQueued: boolean;
-  } | null>(null);
-  const [canRetry, setCanRetry] = useState(false);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  /* The screen stays on from Record until Stop. */
+  useKeepAwakeWhile(stage === "recording");
 
   /* The web recorder's per-plan ceiling on one take. */
   const { data: team } = useQuery({
@@ -131,7 +196,9 @@ export default function WalkthroughRecordScreen() {
     queryFn: getMyTeam,
     staleTime: 10 * 60_000,
   });
-  const maxSeconds = siteVideo ? videoMaxSeconds(team?.plan) : MAX_DURATION_SECONDS;
+  const maxSeconds = siteVideo
+    ? videoMaxSeconds(team?.plan)
+    : walkthroughMaxSeconds(team?.plan, team?.isInternal);
 
   const { data: project } = useQuery({
     queryKey: ["project", projectId],
@@ -159,6 +226,34 @@ export default function WalkthroughRecordScreen() {
     };
   }, []);
 
+  /*
+   * `onCameraReady` has not arrived on every device every time. Past this
+   * Record is allowed to try; a failure remakes the camera.
+   */
+  useEffect(() => {
+    if (cameraReady) return;
+    const timer = setTimeout(() => setCameraReady(true), CAMERA_READY_FALLBACK_MS);
+    return () => clearTimeout(timer);
+  }, [cameraReady, cameraKey]);
+
+  const restartCamera = useCallback(() => {
+    cameraFailed.current = false;
+    setCameraReady(false);
+    setCameraKey((key) => key + 1);
+  }, []);
+
+  /** A short line over the camera, or on the camera behind if this has closed. */
+  const showNotice = useCallback((text: string) => {
+    if (mounted.current) setNotice(text);
+    else leaveCaptureNotice(text);
+  }, []);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(null), NOTICE_MS);
+    return () => clearTimeout(timer);
+  }, [notice]);
+
   // Drives the on-screen timer. The authoritative duration is measured from
   // wall-clock at stop, not counted up here, so a dropped tick cannot shorten
   // the recording that gets reported.
@@ -169,6 +264,84 @@ export default function WalkthroughRecordScreen() {
     }, 500);
     return () => clearInterval(timer);
   }, [stage]);
+
+  /*
+   * The screen going off, or the app being left, ends the recording on
+   * Android whatever is done here. So it is stopped and saved cleanly at that
+   * moment, and the person is told why when they come back, rather than
+   * finding a walk that ended halfway round with no explanation.
+   */
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (next) => {
+      if (next === "background" && stageRef.current === "recording") {
+        interrupted.current = true;
+        stop();
+      }
+      if (next === "active" && interrupted.current) {
+        interrupted.current = false;
+        if (mounted.current) setError(BACKGROUND_STOP_NOTICE);
+      }
+    });
+    return () => sub.remove();
+    // `stop` reads only refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /*
+   * Close, Android's Back, or a swipe while recording asks first: Save keeps
+   * the walk, Discard throws it away. While a stopped recording's file is
+   * still landing, leaving waits for it, since unmounting the camera then can
+   * drop the recording on iOS.
+   */
+  useEffect(() => {
+    return navigation.addListener("beforeRemove", (event) => {
+      if (leaving.current) return;
+      if (stageRef.current === "recording") {
+        event.preventDefault();
+        pendingExit.current = { action: event.data.action };
+        setAskLeave(true);
+        return;
+      }
+      if (stageRef.current === "saving" && !siteVideo) {
+        event.preventDefault();
+        pendingExit.current = { action: event.data.action };
+      }
+    });
+  }, [navigation, siteVideo]);
+
+  /** Carry out a Close or Back that was waiting on the recording, once. */
+  function finishExit() {
+    const exit = pendingExit.current;
+    pendingExit.current = null;
+    if (!exit || !mounted.current) return;
+    leaving.current = true;
+    if (exit.action) navigation.dispatch(exit.action as never);
+    else goBack(`/project/${projectId}`);
+  }
+
+  function requestClose() {
+    if (stageRef.current === "recording") {
+      pendingExit.current = { action: null };
+      setAskLeave(true);
+      return;
+    }
+    goBack(`/project/${projectId}`);
+  }
+
+  function answerLeave(choice: "save" | "discard" | "stay") {
+    setAskLeave(false);
+    if (choice === "stay") {
+      pendingExit.current = null;
+      return;
+    }
+    // The take hit its time limit while this was being asked: it is saved.
+    if (stageRef.current !== "recording") {
+      finishExit();
+      return;
+    }
+    discarding.current = choice === "discard";
+    stop();
+  }
 
   /*
    * A snap lands in the strip the instant it is pressed, then gets its
@@ -194,24 +367,63 @@ export default function WalkthroughRecordScreen() {
     }
   }, [stage]);
 
+  /**
+   * Make the walkthrough row at Record, as web does (`ensureWalkthroughRow`),
+   * so it starts when the walk did. With no signal it is left to the queue,
+   * which makes it later with this start time.
+   */
+  async function startSession(title: string, startedAtIso: string): Promise<string | null> {
+    if (!projectId) return null;
+    const net = await NetInfo.fetch().catch(() => null);
+    if (net && (!net.isConnected || net.isInternetReachable === false)) return null;
+    try {
+      const created = await createWalkthroughSession(projectId, title, { startedAt: startedAtIso });
+      return created.id;
+    } catch {
+      return null;
+    }
+  }
+
   async function start() {
     if (!projectId || !user || stage !== "idle") return;
     setError(null);
 
+    if (cameraFailed.current) {
+      restartCamera();
+      return;
+    }
+    if (!cameraReady) return;
+
     if (!micPermission?.granted) {
+      if (micPermission && !micPermission.canAskAgain) {
+        setMicBlocked(true);
+        setError("Microphone access is off. Turn it on in Settings to record narration.");
+        return;
+      }
       const granted = await requestMic();
       if (!granted.granted) {
+        setMicBlocked(!granted.canAskAgain);
         setError("Microphone access is needed to record narration");
         return;
       }
     }
+    setMicBlocked(false);
 
-    startedAt.current = Date.now();
+    const now = Date.now();
+    startedAt.current = now;
+    stoppedAt.current = null;
+    discarding.current = false;
     setElapsed(0);
     shotsRef.current = [];
     setShots([]);
-    unsaved.current = null;
-    setCanRetry(false);
+    if (!siteVideo) {
+      const startedAtIso = new Date(now).toISOString();
+      const title = `${project?.name ?? "Walkthrough"} - ${new Date(now).toLocaleDateString(
+        undefined,
+        { month: "short", day: "numeric", year: "numeric" },
+      )}`;
+      take.current = { title, startedAt: startedAtIso, session: startSession(title, startedAtIso) };
+    }
     setStage("recording");
 
     try {
@@ -223,27 +435,64 @@ export default function WalkthroughRecordScreen() {
       const recording = await cameraRef.current?.recordAsync({
         maxDuration: maxSeconds,
       });
-      const durationSeconds = startedAt.current ? (Date.now() - startedAt.current) / 1000 : elapsed;
+      const endedAt = stoppedAt.current ?? Date.now();
+      const durationSeconds = startedAt.current ? (endedAt - startedAt.current) / 1000 : elapsed;
+      const thisTake = take.current;
+      const snaps = shotsRef.current;
 
-      if (!recording?.uri) {
-        if (left.current) leaveCaptureNotice("The video did not save. Try recording it again.");
-        setStage("idle");
-        setError("The recording did not save");
+      if (discarding.current) {
+        discarding.current = false;
+        discardRecording(recording?.uri);
+        // A walkthrough made at Record for a walk that is not being kept.
+        if (thisTake) {
+          void thisTake.session
+            .then((id) => (id ? deleteWalkthrough(id) : undefined))
+            .catch(() => {});
+        }
+        if (mounted.current) setStage("idle");
+        finishExit();
         return;
       }
 
-      await persist(recording.uri, durationSeconds);
+      if (!recording?.uri) {
+        if (left.current) leaveCaptureNotice("The video did not save. Try recording it again.");
+        if (mounted.current) {
+          setStage("idle");
+          setError("The recording did not save");
+        }
+        finishExit();
+        return;
+      }
+
+      if (siteVideo) {
+        persist(recording.uri, durationSeconds);
+        return;
+      }
+
+      /*
+       * The camera is ready again at once: the walk is saved in the background
+       * from here, and Record can start the next one straight away without
+       * touching it.
+       */
+      if (mounted.current) setStage("idle");
+      if (thisTake) void saveWalkthrough(recording.uri, durationSeconds, thisTake, snaps);
+      finishExit();
     } catch (e) {
       // Already back on the camera: say it there, where it can be seen.
       if (left.current) leaveCaptureNotice("The video did not save. Try recording it again.");
-      setStage("idle");
-      setError(e instanceof Error ? e.message : "Recording failed");
+      if (mounted.current) {
+        setStage("idle");
+        setError(e instanceof Error ? e.message : "Recording failed");
+      }
+      finishExit();
     }
   }
 
   function stop() {
-    if (stage !== "recording") return;
-    setStage("saving");
+    if (stageRef.current !== "recording") return;
+    stoppedAt.current = Date.now();
+    stageRef.current = "saving";
+    if (mounted.current) setStage("saving");
     cameraRef.current?.stopRecording();
     /*
      * A site video goes back to the camera as soon as it is stopped, with no
@@ -252,170 +501,152 @@ export default function WalkthroughRecordScreen() {
      * as soon as the file closes if that is sooner; the clip is queued in the
      * background when it lands.
      */
-    if (siteVideo && Platform.OS === "android") {
+    if (siteVideo && Platform.OS === "android" && !discarding.current) {
       setTimeout(leaveForCamera, SITE_VIDEO_LEAVE_MS);
     }
   }
 
   /** Back to the camera (or the project), once, however many paths ask. */
   function leaveForCamera() {
-    if (left.current) return;
+    if (left.current || !mounted.current) return;
     left.current = true;
+    leaving.current = true;
     goBack(`/project/${projectId}`);
   }
 
   /**
-   * Everything that happens after the stop button.
+   * A stopped site video: to the offline outbox, and back to the camera.
    *
-   * A site video goes to the offline outbox and returns at once. A walkthrough
-   * is a session on the server, so its session and video steps stay
-   * sequential here: the id has to exist before its photos can reference it,
-   * and the video path before the session is finished. Its photos, once the
-   * id exists, go to the outbox (see `saveWalkthrough`).
+   * Queued, not uploaded. The clip is moved into app storage and handed to the
+   * outbox, which is a rename and one row: instant, and it needs no signal.
+   * The drain sends it in the background with the queue banner showing it,
+   * the way photos go, and the camera is back at once.
+   *
+   * This used to upload inline behind a full-screen "Uploading video 42%"
+   * that held the phone for as long as the upload took (Jon, 2026-09-29: "the
+   * whole screen was doing a count down on saving the video").
    */
-  async function persist(videoUri: string, durationSeconds: number) {
+  function persist(videoUri: string, durationSeconds: number) {
     if (!projectId || !user) return;
-    setStage("saving");
-
-    if (siteVideo) {
-      /*
-       * Queued, not uploaded. The clip is moved into app storage and handed to
-       * the outbox, which is a rename and one row: instant, and it needs no
-       * signal. The drain sends it in the background with the queue banner
-       * showing it, the way photos go, and the camera is back at once.
-       *
-       * This used to upload inline behind a full-screen "Uploading video 42%"
-       * that held the phone for as long as the upload took (Jon, 2026-09-29:
-       * "the whole screen was doing a count down on saving the video").
-       */
-      const userId = user.id;
-      leaveForCamera();
-      /*
-       * The move and the queue write run after the navigation has started,
-       * so neither can hold the screen. A failure is said on the camera, in
-       * its small notice pill.
-       */
-      setTimeout(() => {
-        void (async () => {
-          try {
-            const id = newOutboxId();
-            const localUri = persistRecording(videoUri, id);
-            const payload: VideoUploadPayload = {
-              userId,
-              projectId,
-              durationSeconds,
-              recordedAt: new Date().toISOString(),
-            };
-            await enqueue({ id, kind: "video_upload", projectId, localUri, payload });
-            requestSync();
-            leaveCaptureNotice("Video saved. Uploading in the background.");
-          } catch (e) {
-            leaveCaptureNotice(
-              e instanceof Error ? `Video not saved: ${e.message}` : "Could not save the video",
-            );
-          }
-        })();
-      }, 0);
-      return;
-    }
-
-    await saveWalkthrough(videoUri, durationSeconds);
+    const userId = user.id;
+    leaveForCamera();
+    /*
+     * The move and the queue write run after the navigation has started,
+     * so neither can hold the screen. A failure is said on the camera, in
+     * its small notice pill.
+     */
+    setTimeout(() => {
+      void (async () => {
+        try {
+          const id = newOutboxId();
+          const localUri = persistRecording(videoUri, id);
+          const payload: VideoUploadPayload = {
+            userId,
+            projectId,
+            durationSeconds,
+            recordedAt: new Date().toISOString(),
+          };
+          await enqueue({ id, kind: "video_upload", projectId, localUri, payload });
+          requestSync();
+          leaveCaptureNotice("Video saved. Uploading in the background.");
+        } catch (e) {
+          leaveCaptureNotice(
+            e instanceof Error ? `Video not saved: ${e.message}` : "Could not save the video",
+          );
+        }
+      })();
+    }, 0);
   }
 
   /**
-   * Save a finished walkthrough: its snaps, the recording, the transcript.
+   * A stopped walkthrough: into the offline outbox at once, then its snaps.
    *
-   * Resumable. Each step that succeeds is remembered in `unsaved`, so when a
-   * later one fails (no signal at the upload, say) "Try again" carries on
-   * from there with the same session instead of losing the walk or making a
-   * second one.
+   * The clip is moved into the outbox the moment it lands and queued as one
+   * `walkthrough_video` row, which then makes the walkthrough if Record could
+   * not, uploads the video, finishes the session, transcribes it and writes
+   * the report, in web's order, whenever there is signal (see
+   * `offline/walkthrough-video.ts`). It used to do all of that here, inline,
+   * with a React ref as the only record of how far it got: closing the app
+   * part way lost the walk.
+   *
+   * The row is held while the snaps are taken from the video and queued, so
+   * the report it writes has them; it is let go as soon as they are. Every
+   * value here belongs to this take, so a new recording started meanwhile
+   * cannot touch it.
    */
-  async function saveWalkthrough(videoUri: string, durationSeconds: number) {
+  async function saveWalkthrough(
+    videoUri: string,
+    wallSeconds: number,
+    thisTake: Take,
+    snaps: WalkthroughSnap[],
+  ) {
     if (!projectId || !user) return;
-    const progress = unsaved.current ?? {
-      videoUri,
-      durationSeconds,
-      sessionId: null,
-      photosQueued: false,
-    };
-    unsaved.current = progress;
-    setCanRetry(false);
-    setStage("saving");
-    setStatus("Saving");
-    setError(null);
+    const userId = user.id;
+    const id = newOutboxId();
+    let localUri: string;
+    try {
+      localUri = persistRecording(videoUri, id);
+      const payload: WalkthroughVideoPayload = {
+        userId,
+        projectId,
+        title: thisTake.title,
+        startedAt: thisTake.startedAt,
+        durationSeconds: wallSeconds,
+        mimeType: "video/mp4",
+        sessionId: null,
+      };
+      await enqueue({
+        id,
+        kind: "walkthrough_video",
+        projectId,
+        localUri,
+        payload,
+        holdUntil: Date.now() + WALKTHROUGH_HOLD_MS,
+      });
+    } catch (e) {
+      showNotice(
+        e instanceof Error
+          ? `Walkthrough not saved: ${e.message}`
+          : "Could not save the walkthrough",
+      );
+      return;
+    }
+    showNotice("Saving walkthrough in the background");
 
     try {
       /*
-       * Snaps still waiting for their picture take it from the recording now,
-       * on the phone, before anything needs the network.
+       * Each snap was timed from the Record press, and the video began a
+       * moment later, so every offset is moved back by that delay before its
+       * frame is taken and before it is captioned from the transcript.
        */
-      if (!progress.photosQueued && shotsRef.current.some((s) => !s.uri)) {
-        setStatus("Taking photos from the video");
-        shotsRef.current = await extractSnapFrames(videoUri, shotsRef.current, durationSeconds);
-        setShots(shotsRef.current);
+      const videoSeconds = await readVideoDuration(localUri);
+      const delay = encoderDelaySeconds(wallSeconds, videoSeconds);
+      let ready = calibrateSnapOffsets(snaps, delay);
+      if (ready.some((s) => !s.uri)) {
+        ready = await extractSnapFrames(localUri, ready, videoSeconds ?? wallSeconds);
       }
+      const missing = missingFramesNotice(countMissingFrames(ready));
 
-      if (!progress.sessionId) {
-        setStatus("Creating session");
-        const title = `Walkthrough ${new Date().toLocaleString()}`;
-        const session = await createWalkthroughSession(projectId, title);
-        progress.sessionId = session.id;
-      }
-      const sessionId = progress.sessionId;
-
-      /*
-       * Queued, not uploaded here: each snap goes to the offline outbox
-       * linked to this walkthrough at its offset, and the queue sends it in
-       * the background like any photo. It used to be uploaded inline, one
-       * after another, where one failure lost every snap of the walk.
-       */
-      if (!progress.photosQueued) {
-        setStatus("Saving photos");
-        await queueWalkthroughSnaps({
-          userId: user.id,
-          projectId,
-          walkthroughId: sessionId,
-          snaps: shotsRef.current,
-          deviceCoords,
-          projectCoords: projectCoords(project ?? null),
-        });
-        progress.photosQueued = true;
-        requestSync();
-      }
-
-      const path = walkthroughVideoPath(user.id, projectId, sessionId, "mp4");
-      setStatus("Uploading video 0%");
-      await uploadWalkthroughVideo({
-        localUri: videoUri,
-        storagePath: path,
-        mimeType: "video/mp4",
-        onProgress: (percent) => setStatus(`Uploading video ${percent}%`),
+      const sessionId = await thisTake.session;
+      await queueWalkthroughSnaps({
+        userId,
+        projectId,
+        walkthroughId: sessionId,
+        videoRowId: id,
+        snaps: ready,
+        deviceCoords,
+        projectCoords: projectCoords(project ?? null),
       });
-
-      setStatus("Finishing up");
-      await updateWalkthroughVideoPath(sessionId, path, "video/mp4");
-      await finishWalkthroughSession(sessionId, durationSeconds);
-      unsaved.current = null;
-
-      /*
-       * Last, and allowed to fail. The recording and its photos are saved by
-       * this point, so a refused transcription costs nothing that cannot be
-       * recovered from the web app. The server reads only the recording's
-       * sound track and captions each snap from what was said around it; a
-       * snap still in the queue is captioned when it lands.
-       */
-      setStatus("Transcribing");
-      const transcription = await transcribeWalkthrough(sessionId, path, "video/mp4");
-
-      router.replace(`/project/${projectId}/walkthroughs`);
-      if (!transcription.ok && transcription.message) {
-        setError(transcription.message);
-      }
-    } catch (e) {
-      setStage("idle");
-      setStatus(null);
-      setCanRetry(true);
-      setError(e instanceof Error ? e.message : "Could not save the walkthrough");
+      await updateQueuedPayload(id, {
+        sessionId,
+        durationSeconds: videoSeconds ?? wallSeconds,
+      });
+      if (missing) showNotice(missing);
+    } catch {
+      // The video still goes; only snaps not yet queued are lost with this.
+    } finally {
+      await finishHeld(id).catch(() => false);
+      requestSync();
     }
   }
 
@@ -440,65 +671,44 @@ export default function WalkthroughRecordScreen() {
         <Pressable
           accessibilityRole="button"
           style={[styles.primary, { backgroundColor: theme.colors.primary }]}
-          onPress={() => void requestCamera()}
+          onPress={() => {
+            if (cameraPermission.canAskAgain) void requestCamera();
+            else void Linking.openSettings();
+          }}
         >
           <Text style={[typography.bodyStrong, { color: theme.colors.primaryForeground }]}>
-            Grant access
+            {cameraPermission.canAskAgain ? "Grant access" : "Open Settings"}
           </Text>
         </Pressable>
       </View>
     );
   }
 
-  /*
-   * A site video never gets this screen: it is queued in a moment and the
-   * recorder closes, so the live view stays up, with nothing drawn over it,
-   * for that moment rather than a page telling someone to wait.
-   */
-  /*
-   * Only once the recording's file has landed (`status` is set by
-   * `saveWalkthrough`), so the camera stays mounted while it finishes
-   * writing: unmounting it first can drop the recording on iOS.
-   */
-  if (stage === "saving" && !siteVideo) {
-    if (status !== null) {
-      return (
-        <View
-          style={[styles.centered, { backgroundColor: theme.colors.background, gap: spacing.md }]}
-        >
-          <Stack.Screen options={{ title: siteVideo ? "Saving video" : "Saving walkthrough" }} />
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-          <Text style={[typography.body, { color: theme.colors.foreground }]}>
-            {status ?? "Saving"}
-          </Text>
-          <Text
-            style={[
-              typography.caption,
-              { color: theme.colors.mutedForeground, textAlign: "center", paddingHorizontal: 32 },
-            ]}
-          >
-            Keep the app open until this finishes. The recording is on this phone until it uploads.
-          </Text>
-          {shots.length > 0 ? (
-            <View style={styles.savingStrip}>
-              <SnapStrip snaps={shots} />
-            </View>
-          ) : null}
-          {error ? (
-            <Text style={[typography.caption, { color: theme.colors.destructive }]}>{error}</Text>
-          ) : null}
-        </View>
-      );
-    }
-  }
-
   const minutes = Math.floor(elapsed / 60);
   const seconds = Math.floor(elapsed % 60);
+  const recordDisabled = stage === "saving" || (!cameraReady && !cameraFailed.current);
 
   return (
     <View style={styles.root}>
       <Stack.Screen options={{ headerShown: false }} />
-      <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing={facing} mode="video" />
+      <CameraView
+        key={cameraKey}
+        ref={cameraRef}
+        style={StyleSheet.absoluteFill}
+        facing={facing}
+        mode="video"
+        videoQuality={VIDEO_QUALITY}
+        videoBitrate={VIDEO_BITRATE}
+        onCameraReady={() => {
+          cameraFailed.current = false;
+          setCameraReady(true);
+        }}
+        onMountError={() => {
+          cameraFailed.current = true;
+          setCameraReady(false);
+          setError("The camera did not start. Tap Record to try again.");
+        }}
+      />
 
       <View
         style={[
@@ -514,7 +724,7 @@ export default function WalkthroughRecordScreen() {
           accessibilityRole="button"
           accessibilityLabel="Close"
           style={styles.roundButton}
-          onPress={() => goBack(`/project/${projectId}`)}
+          onPress={requestClose}
           hitSlop={8}
         >
           <Icon icon={X} size="md" color="#fff" />
@@ -526,10 +736,11 @@ export default function WalkthroughRecordScreen() {
             </Text>
           </View>
         ) : null}
-        {siteVideo && stage === "idle" ? (
+        {stage === "idle" ? (
           <View style={styles.chip}>
             <Text style={styles.chipText}>
-              Site video, up to {Math.round(maxSeconds / 60)} minutes
+              {siteVideo ? "Site video" : "Walkthrough"}, up to {Math.round(maxSeconds / 60)}{" "}
+              minutes
             </Text>
           </View>
         ) : null}
@@ -540,31 +751,71 @@ export default function WalkthroughRecordScreen() {
         ) : null}
       </View>
 
+      {notice ? (
+        <View
+          style={[styles.notice, { top: insets.top + spacing.sm + HIT_TARGET + spacing.md }]}
+          pointerEvents="none"
+        >
+          <Text style={styles.chipText}>{notice}</Text>
+        </View>
+      ) : null}
+
       {error ? (
-        <Text style={[styles.error, !siteVideo && shots.length > 0 && !rail && { bottom: 220 }]}>
-          {error}
-        </Text>
+        <View
+          style={[
+            styles.errorBox,
+            { left: insets.left + spacing.lg, right: insets.right + spacing.lg },
+            !siteVideo && shots.length > 0 && !rail && { bottom: 220 },
+          ]}
+        >
+          <Text style={styles.error}>{error}</Text>
+          {micBlocked ? (
+            <Pressable
+              accessibilityRole="button"
+              style={[styles.chip, styles.settingsChip]}
+              onPress={() => void Linking.openSettings()}
+            >
+              <Icon icon={Settings} size="sm" color="#fff" />
+              <Text style={styles.chipText}>Open Settings</Text>
+            </Pressable>
+          ) : null}
+        </View>
       ) : null}
 
       {/*
-        A walkthrough that failed to save is still on the phone; this carries
-        the save on from where it stopped rather than losing the walk.
+        Close or Back while recording: keep the walk or throw it away. Drawn
+        over the camera rather than as an alert, so the recording carries on
+        underneath until one is chosen.
       */}
-      {!siteVideo && canRetry && stage === "idle" ? (
-        <Pressable
-          accessibilityRole="button"
-          style={[
-            styles.chip,
-            styles.retry,
-            { top: insets.top + spacing.sm + HIT_TARGET + spacing.md },
-          ]}
-          onPress={() => {
-            const pending = unsaved.current;
-            if (pending) void saveWalkthrough(pending.videoUri, pending.durationSeconds);
-          }}
-        >
-          <Text style={styles.chipText}>Try saving the walkthrough again</Text>
-        </Pressable>
+      {askLeave ? (
+        <View style={styles.askScrim}>
+          <View style={styles.askCard}>
+            <Text style={[styles.chipText, styles.askTitle]}>Stop recording?</Text>
+            <View style={styles.askActions}>
+              <Pressable
+                accessibilityRole="button"
+                style={[styles.chip, styles.askButton]}
+                onPress={() => answerLeave("stay")}
+              >
+                <Text style={styles.chipText}>Keep recording</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                style={[styles.chip, styles.askButton, styles.discardButton]}
+                onPress={() => answerLeave("discard")}
+              >
+                <Text style={styles.chipText}>Discard</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                style={[styles.chip, styles.askButton, styles.saveButton]}
+                onPress={() => answerLeave("save")}
+              >
+                <Text style={styles.chipText}>Save</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
       ) : null}
 
       {/*
@@ -630,7 +881,7 @@ export default function WalkthroughRecordScreen() {
             accessibilityRole="button"
             /*
               On the same dark pill the other controls sit on.
-    
+
               This was white text straight onto the camera preview while Close,
               the timer and the photo count all had `chip` behind them. Against a
               bright subject - a sunlit wall, a white ceiling, a snow-covered
@@ -661,8 +912,8 @@ export default function WalkthroughRecordScreen() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Start recording"
-            style={[styles.recordButton, stage === "saving" && !siteVideo && { opacity: 0.5 }]}
-            disabled={stage === "saving"}
+            style={[styles.recordButton, recordDisabled && { opacity: 0.5 }]}
+            disabled={recordDisabled}
             onPress={() => void start()}
           >
             <View style={styles.recordInner} />
@@ -705,20 +956,52 @@ const styles = StyleSheet.create({
   },
   recordingChip: { backgroundColor: "rgba(223,34,37,0.85)" },
   chipText: { color: "#fff", fontSize: 14, fontWeight: "600" },
-  error: {
+  errorBox: {
     position: "absolute",
     bottom: 200,
-    alignSelf: "center",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  error: {
     color: "#fff",
     backgroundColor: "rgba(180,35,24,0.9)",
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     borderRadius: radius.md,
     overflow: "hidden",
+    textAlign: "center",
   },
+  settingsChip: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  notice: {
+    position: "absolute",
+    alignSelf: "center",
+    maxWidth: "90%",
+    backgroundColor: "rgba(0,0,0,0.75)",
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+  },
+  askScrim: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: spacing.lg,
+  },
+  askCard: {
+    backgroundColor: "rgba(0,0,0,0.85)",
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    gap: spacing.md,
+    maxWidth: 440,
+    width: "100%",
+  },
+  askTitle: { fontSize: 17, textAlign: "center" },
+  askActions: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: spacing.sm },
+  askButton: { minHeight: HIT_TARGET, alignItems: "center" },
+  discardButton: { backgroundColor: "rgba(180,35,24,0.9)" },
+  saveButton: { backgroundColor: "rgba(255,255,255,0.2)" },
   strip: { position: "absolute", height: 64 },
-  savingStrip: { height: 64, alignSelf: "stretch", marginTop: spacing.md },
-  retry: { position: "absolute", alignSelf: "center" },
   rightRail: {
     position: "absolute",
     flexDirection: "column",

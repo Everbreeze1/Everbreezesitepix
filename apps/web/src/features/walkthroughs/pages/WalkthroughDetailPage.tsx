@@ -16,6 +16,8 @@ import {
   MoreVertical,
   PlayCircle,
   Download,
+  Mic,
+  TriangleAlert,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -39,10 +41,17 @@ import { UpgradeDialog } from "@/components/UpgradeDialog";
 import {
   generateWalkthroughNarration,
   generateWalkthroughReport,
+  getWalkthroughTranscription,
   regenerateWalkthroughSummary,
   setWalkthroughShare,
+  transcribeWalkthrough,
   updateWalkthroughVideoPath,
 } from "@/features/walkthroughs/api";
+import {
+  runTranscription,
+  transcriptionIsProblem,
+  transcriptionNotice,
+} from "@/features/walkthroughs/transcription";
 import { toast } from "sonner";
 import { estimateWalkthroughNote, type WalkthroughPhotoStep } from "@/components/WalkthroughReport";
 import {
@@ -118,6 +127,20 @@ export function WalkthroughDetailPage() {
    */
   const [ownSummaries, setOwnSummaries] = useState<ProjectSummaryListItem[]>([]);
   const [makingSummary, setMakingSummary] = useState(false);
+  /* The "Transcribe recording" retry: whether it runs, for how long, and how it ended. */
+  const [transcribing, setTranscribing] = useState(false);
+  const [transcribeElapsed, setTranscribeElapsed] = useState(0);
+  const [transcribeResult, setTranscribeResult] = useState<{
+    text: string;
+    problem: boolean;
+  } | null>(null);
+  const mounted = useRef(true);
+  useEffect(
+    () => () => {
+      mounted.current = false;
+    },
+    [],
+  );
 
   const regenerate = generateWalkthroughReport;
   const setShare = setWalkthroughShare;
@@ -366,6 +389,54 @@ export function WalkthroughDetailPage() {
       toast.error(e?.message ?? "Could not generate the summary");
     } finally {
       setMakingSummary(false);
+    }
+  };
+
+  /**
+   * Transcribe the stored recording again.
+   *
+   * The server works in the background and records the outcome on the row;
+   * this polls it, so a long walk is not cut short by the request timeout.
+   * Every ending is said: transcribed, nothing heard, or minutes lost.
+   */
+  const onTranscribe = async () => {
+    if (!walk?.video_path) return;
+    const videoPath = walk.video_path;
+    setTranscribing(true);
+    setTranscribeElapsed(0);
+    setTranscribeResult(null);
+    try {
+      const outcome = await runTranscription({
+        start: () =>
+          transcribeWalkthrough({
+            data: {
+              walkthroughId: walk.id,
+              storagePath: videoPath,
+              bucket: "site-videos",
+              mimeType: walk.video_mime_type ?? "video/webm",
+              background: true,
+            },
+          }),
+        status: () => getWalkthroughTranscription({ data: { walkthroughId: walk.id } }),
+        onProgress: (seconds) => {
+          if (mounted.current) setTranscribeElapsed(seconds);
+        },
+        cancelled: () => !mounted.current,
+      });
+      if (!mounted.current) return;
+      const text = transcriptionNotice(outcome);
+      const problem = transcriptionIsProblem(outcome);
+      setTranscribeResult({ text, problem });
+      if (problem) toast.warning(text);
+      else toast.success(text);
+      void load();
+    } catch (e: any) {
+      if (!mounted.current) return;
+      const text = e?.message ?? "Could not transcribe the recording";
+      setTranscribeResult({ text, problem: true });
+      toast.error(text);
+    } finally {
+      if (mounted.current) setTranscribing(false);
     }
   };
 
@@ -744,6 +815,60 @@ export function WalkthroughDetailPage() {
           </ul>
         )}
       </Card>
+
+      {/*
+        The transcript behind everything above, and the way to make it again.
+        A recording whose transcription failed at Stop (or heard nothing, or
+        lost a few minutes) used to have no way back from either app.
+      */}
+      {walk.source !== "summary" && walk.video_path ? (
+        <Card className="mt-4 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+                Transcript
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {walk.transcript?.trim()
+                  ? `Transcribed, ${walk.transcript.trim().split(/\s+/).length} words.`
+                  : "Not transcribed yet. Reports are built from the photos until it is."}
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant={walk.transcript?.trim() ? "outline" : "default"}
+              disabled={transcribing}
+              onClick={() => void onTranscribe()}
+              className="h-8 rounded-lg text-xs font-bold"
+            >
+              {transcribing ? (
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Mic className="mr-1.5 h-3.5 w-3.5" />
+              )}
+              {walk.transcript?.trim() ? "Transcribe again" : "Transcribe recording"}
+            </Button>
+          </div>
+          {transcribing ? (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Transcribing on the server · {fmt(transcribeElapsed)}. A long walk can take a few
+              minutes; you can leave this page.
+            </p>
+          ) : null}
+          {transcribeResult ? (
+            <p
+              className={`mt-2 flex items-start gap-1.5 text-xs ${
+                transcribeResult.problem ? "text-destructive" : "text-muted-foreground"
+              }`}
+            >
+              {transcribeResult.problem ? (
+                <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              ) : null}
+              <span>{transcribeResult.text}</span>
+            </p>
+          ) : null}
+        </Card>
+      ) : null}
 
       {/*
         The flagship: the recording playing with its AI narration on the same

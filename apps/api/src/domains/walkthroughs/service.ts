@@ -23,6 +23,17 @@ import {
 import { assertAutoReportAllowed, releaseAutoReport, reserveAutoReport } from "./auto-report-quota";
 import { generateSummaryForWalkthroughService } from "./summaries";
 import {
+  TRANSCRIPTION_BUCKET,
+  readTranscriptionRecord,
+  transcriptionIsRunning,
+  transcriptionOutcome,
+  transcriptionPathError,
+  transcriptionResult,
+  type TranscriptionRecord,
+  type TranscriptionResult,
+  type TranscriptionState,
+} from "./transcription-state";
+import {
   buildWalkthroughNarration,
   parseStoredNarration,
   saveWalkthroughNarration,
@@ -759,6 +770,20 @@ async function resolveReportPhotosPerPage(
   return 2;
 }
 
+/**
+ * When the phone recorded offline, the session is created later from its
+ * upload queue and sends the real recording start. Trust it only within a
+ * sane window (a week back, a few minutes ahead for clock drift); anything
+ * else, or nothing, is "now", which is what a live start means anyway.
+ */
+export function sessionStartedAt(raw: unknown, now = Date.now()): string {
+  const ms = typeof raw === "string" ? new Date(raw).getTime() : NaN;
+  if (Number.isFinite(ms) && ms <= now + 5 * 60 * 1000 && ms >= now - 7 * 24 * 60 * 60 * 1000) {
+    return new Date(ms).toISOString();
+  }
+  return new Date(now).toISOString();
+}
+
 export async function createWalkthroughSessionService(ctx: AuthedContext, data: any) {
   const { supabase, userId } = ctx;
   console.log("[walkthrough] server create session requested", {
@@ -787,6 +812,7 @@ export async function createWalkthroughSessionService(ctx: AuthedContext, data: 
       created_by: userId,
       title: data.title,
       status: "recording",
+      started_at: sessionStartedAt(data.startedAt),
     } as any)
     .select("id, created_at")
     .single();
@@ -1688,13 +1714,27 @@ const TRANSCRIBE_CONCURRENCY = 3;
 const RANGE_MERGE_GAP_BYTES = 256 * 1024;
 
 /**
+ * Timed segments from one transcription run, and how many pieces it lost.
+ *
+ * `failedPieces` used to go nowhere: a minute that failed inside a long walk
+ * was logged and dropped, and the person was never told their transcript had
+ * a hole in it.
+ */
+type TranscribedRecording = {
+  segments: TimedSegment[];
+  failedPieces: number;
+  totalPieces: number;
+};
+
+/**
  * Transcribe AAC pieces of one recording and put every line on the
  * recording's clock.
  *
  * A piece that fails costs its own minute, not the walk: the others are kept,
- * and only when every piece fails is the first error thrown.
+ * and only when every piece fails is the first error thrown. How many failed is
+ * counted and handed back, so the caller can say so.
  */
-async function transcribePieces(pieces: AdtsPiece[]): Promise<TimedSegment[]> {
+async function transcribePieces(pieces: AdtsPiece[]): Promise<TranscribedRecording> {
   const results: Array<TimedSegment[] | null> = new Array(pieces.length).fill(null);
   let firstError: unknown = null;
   let next = 0;
@@ -1728,7 +1768,11 @@ async function transcribePieces(pieces: AdtsPiece[]): Promise<TimedSegment[]> {
     Array.from({ length: Math.min(TRANSCRIBE_CONCURRENCY, pieces.length) }, worker),
   );
   if (results.every((r) => r === null) && firstError) throw firstError;
-  return results.flatMap((r) => r ?? []);
+  return {
+    segments: results.flatMap((r) => r ?? []),
+    failedPieces: results.filter((r) => r === null).length,
+    totalPieces: pieces.length,
+  };
 }
 
 /**
@@ -1740,7 +1784,7 @@ async function transcribeBytes(
   bytes: Uint8Array,
   mimeType: string,
   durationSeconds: number,
-): Promise<TimedSegment[]> {
+): Promise<TranscribedRecording> {
   const source = bufferSource(bytes);
   const track = await findAacTrack(source).catch(() => null);
   if (track) {
@@ -1758,7 +1802,7 @@ async function transcribeBytes(
     durationSeconds || undefined,
   );
   const end = durationSeconds > 0 ? durationSeconds : (lines[lines.length - 1]?.start ?? 0) + 10;
-  return segmentsFromLines(lines, 0, end);
+  return { segments: segmentsFromLines(lines, 0, end), failedPieces: 0, totalPieces: 1 };
 }
 
 /**
@@ -1781,7 +1825,7 @@ async function transcribeRecording(
   signedUrl: string,
   mimeType: string,
   durationSeconds: number,
-): Promise<TimedSegment[]> {
+): Promise<TranscribedRecording> {
   let pieces: AdtsPiece[] | null = null;
   try {
     const source = await rangeSource(signedUrl);
@@ -1935,157 +1979,458 @@ async function captionLateWalkthroughPhoto(
  * `audioBase64` stays required-or-`storagePath` rather than being replaced, so
  * the web client is untouched by this.
  */
-const transcribeSchema = z
+export const transcribeWalkthroughInputSchema = z
   .object({
     walkthroughId: z.string().uuid(),
     audioBase64: z.string().min(1).optional(),
     storagePath: z.string().min(1).max(500).optional(),
-    /** Bucket holding `storagePath`. Only `site-videos` is expected today. */
+    /** Bucket holding `storagePath`. Only `site-videos` is accepted. */
     bucket: z.string().min(1).max(100).optional(),
     mimeType: z.string().min(1).max(100),
+    /**
+     * Answer at once and carry on working. The client polls
+     * `getWalkthroughTranscription` for the outcome, so a long walk is not
+     * bounded by how long a phone will hold a request open.
+     */
+    background: z.boolean().optional(),
   })
   .refine((value) => Boolean(value.audioBase64) || Boolean(value.storagePath), {
     message: "Provide either audioBase64 or storagePath",
   });
+
+type TranscribeWalkthroughInput = {
+  walkthroughId: string;
+  audioBase64?: string;
+  storagePath?: string;
+  bucket?: string;
+  mimeType: string;
+  background?: boolean;
+};
+
+type TranscribableWalk = {
+  id: string;
+  created_by: string;
+  project_id: string;
+  title: string | null;
+  transcript: string | null;
+  duration_seconds: number | null;
+  video_path: string | null;
+  video_mime_type: string | null;
+};
+
+/**
+ * The transcription record on the row, or null when there is none.
+ * Best effort, like the segment timing: an unreadable column reads as none.
+ */
+async function readTranscriptionRecordFor(
+  walkthroughId: string,
+): Promise<TranscriptionRecord | null> {
+  const { data, error } = await getSupabaseAdmin()
+    .from("walkthroughs" as any)
+    .select("narration_json")
+    .eq("id", walkthroughId)
+    .maybeSingle();
+  if (error) return null;
+  return readTranscriptionRecord((data as any)?.narration_json);
+}
+
+/** Keep the outcome beside the transcript timing, leaving the rest of the column alone. */
+async function saveTranscriptionRecord(walkthroughId: string, record: TranscriptionRecord) {
+  const supabaseAdmin = getSupabaseAdmin();
+  const { data, error } = await supabaseAdmin
+    .from("walkthroughs" as any)
+    .select("narration_json")
+    .eq("id", walkthroughId)
+    .maybeSingle();
+  if (error) return;
+  const current = (data as any)?.narration_json;
+  const base = current && typeof current === "object" && !Array.isArray(current) ? current : {};
+  const { error: saveErr } = await supabaseAdmin
+    .from("walkthroughs" as any)
+    .update({ narration_json: { ...base, transcription: record } } as any)
+    .eq("id", walkthroughId);
+  if (saveErr) {
+    console.warn("[walkthrough] could not keep the transcription outcome", {
+      walkthroughId,
+      message: saveErr.message,
+    });
+  }
+}
+
+/** Sign a stored recording and transcribe it over range requests. */
+async function transcribeStoredRecording(
+  bucket: string,
+  storagePath: string,
+  mimeType: string,
+  durationSeconds: number,
+): Promise<TranscribedRecording> {
+  const { data: signed, error: signErr } = await getSupabaseAdmin()
+    .storage.from(bucket)
+    .createSignedUrl(storagePath, 60 * 10);
+  if (signErr || !signed?.signedUrl) {
+    throw Object.assign(new Error("Could not read that recording from storage."), {
+      status: 404,
+    });
+  }
+  return transcribeRecording(signed.signedUrl, mimeType, durationSeconds);
+}
+
+function transcriptOf(recording: TranscribedRecording): string {
+  return normalizeDashesTrimmed(transcriptFromSegments(recording.segments));
+}
+
+/** A sentence for the record when a run throws. Only a 4xx message is written for people. */
+function transcriptionFailureMessage(e: unknown): string {
+  const status = (e as { status?: unknown })?.status;
+  const message = e instanceof Error ? e.message : "";
+  if (typeof status === "number" && status >= 400 && status < 500 && message) return message;
+  return "The transcription service did not answer. Try again in a moment.";
+}
 
 /**
  * Transcribe the completed walkthrough recording through Gemini audio
  * understanding on the chat endpoint (see transcribeAudio),
  * then persist both the full transcript and estimated narration context
  * beside each captured photo.
+ *
+ * Safe to call again. A run already under way answers `inProgress` instead of
+ * paying for a second one; a finished run is simply redone, and the transcript
+ * it writes replaces the last one only when it heard something. Every outcome,
+ * including "heard nothing" and "lost some minutes", is written to the row and
+ * returned, so neither the phone nor the web has to guess from an empty string.
  */
 export async function transcribeWalkthroughService(
   ctx: AuthedContext,
-  data: {
-    walkthroughId: string;
-    audioBase64?: string;
-    storagePath?: string;
-    bucket?: string;
-    mimeType: string;
-  },
-) {
+  data: TranscribeWalkthroughInput,
+): Promise<TranscriptionResult> {
   const { userId } = ctx;
   const supabaseAdmin = getSupabaseAdmin();
   const { data: walk, error: wErr } = await supabaseAdmin
     .from("walkthroughs" as any)
-    .select("id, created_by, title, transcript, duration_seconds, summary_markdown")
+    .select(
+      "id, created_by, project_id, title, transcript, duration_seconds, video_path, video_mime_type",
+    )
     .eq("id", data.walkthroughId)
     .single();
   if (wErr || !walk) throw Object.assign(new Error("Walkthrough not found"), { status: 404 });
-  if ((walk as any).created_by !== userId) throw new Error("Not authorized");
+  const row = walk as unknown as TranscribableWalk;
+  if (row.created_by !== userId) {
+    throw Object.assign(new Error("Not authorized"), { status: 403 });
+  }
+
+  /*
+   * SECURITY. The object is signed with the service role below, so the bucket
+   * and path are checked first: only this walkthrough's recording, or a file
+   * under the caller's own upload prefix for its project, in `site-videos`.
+   */
+  if (data.storagePath) {
+    const refusal = transcriptionPathError({
+      bucket: data.bucket,
+      storagePath: data.storagePath,
+      userId,
+      projectId: row.project_id,
+      videoPath: row.video_path,
+    });
+    if (refusal) {
+      console.error("[walkthrough] rejected transcription path", {
+        walkthroughId: data.walkthroughId,
+        bucket: data.bucket,
+        storagePath: data.storagePath,
+      });
+      throw Object.assign(new Error(refusal), { status: 403 });
+    }
+  }
+
+  const earlierTranscript = (row.transcript ?? "").trim();
+  const previous = await readTranscriptionRecordFor(data.walkthroughId);
+  if (transcriptionIsRunning(previous)) {
+    return {
+      transcript: earlierTranscript,
+      state: "running",
+      failedPieces: 0,
+      totalPieces: 0,
+      message: "This recording is already being transcribed.",
+      inProgress: true,
+    };
+  }
 
   console.log("[walkthrough] server transcription requested", {
     walkthroughId: data.walkthroughId,
     userId,
     mimeType: data.mimeType,
     source: data.storagePath ? "storage" : "inline",
+    background: Boolean(data.background),
     base64Chars: data.audioBase64?.length ?? 0,
   });
 
-  const durationSeconds = Number((walk as any).duration_seconds ?? 0) || 0;
-
-  /*
-   * Resolve the recording to timed transcript segments whichever way it
-   * arrived. See `transcribeRecording` for why a phone's video is not sent as
-   * it is.
-   */
-  let segments: TimedSegment[];
-  if (data.storagePath) {
-    const bucket = data.bucket ?? "site-videos";
-    const { data: signed, error: signErr } = await supabaseAdmin.storage
-      .from(bucket)
-      .createSignedUrl(data.storagePath, 60 * 10);
-    if (signErr || !signed?.signedUrl) {
-      throw Object.assign(new Error("Could not read that recording from storage."), {
-        status: 404,
-      });
-    }
-    segments = await transcribeRecording(signed.signedUrl, data.mimeType, durationSeconds);
-  } else {
-    const bytes = Buffer.from(data.audioBase64 as string, "base64");
-    if (bytes.byteLength < 2048)
-      throw Object.assign(new Error("That recording had no audio in it."), { status: 400 });
-    segments = await transcribeBytes(bytes, data.mimeType, durationSeconds);
-  }
-
-  const transcript = normalizeDashesTrimmed(transcriptFromSegments(segments));
-  const finalTranscript = transcript || ((walk as any).transcript ?? "").trim();
-  console.log("[walkthrough] server transcription finished", {
-    walkthroughId: data.walkthroughId,
-    segments: segments.length,
-    transcriptChars: transcript.length,
+  const startedAt = new Date().toISOString();
+  await saveTranscriptionRecord(data.walkthroughId, {
+    state: "running",
+    startedAt,
+    finishedAt: null,
+    failedPieces: 0,
+    totalPieces: 0,
+    message: null,
+    videoFallback: false,
   });
 
-  if (finalTranscript) {
-    // Timed segments when this run produced them; otherwise the whole of an
-    // earlier transcript, spread across the recording.
-    const timing = segments.length ? segments : untimedSegments(finalTranscript, durationSeconds);
-    if (segments.length) await saveTranscriptSegments(data.walkthroughId, segments);
-
-    const { data: links, error: linkErr } = await supabaseAdmin
-      .from("walkthrough_photos" as any)
-      .select("photo_id, offset_seconds, position, spoken_note")
-      .eq("walkthrough_id", data.walkthroughId)
-      .order("position", { ascending: true });
-    if (linkErr) throw new Error(linkErr.message);
-
-    const rows = (links as any[]) ?? [];
-    const rowsWithNotes = rows.map((row, i) => {
-      const existing = row.spoken_note?.trim();
-      const note =
-        existing ||
-        captionAround(timing, Number(row.offset_seconds ?? 0)) ||
-        (segments.length
-          ? null
-          : estimateSpokenNote(
-              finalTranscript,
-              row.offset_seconds ?? 0,
-              rows[i + 1]?.offset_seconds ?? null,
-              durationSeconds,
-              i,
-              rows.length,
-            ));
-      return { ...row, spoken_note: note };
+  const job = runWalkthroughTranscription(userId, row, data, startedAt);
+  if (data.background) {
+    // The outcome, failure included, is written to the row by the job itself.
+    job.catch((e) => {
+      console.error("[walkthrough] background transcription failed", {
+        walkthroughId: data.walkthroughId,
+        message: (e as Error)?.message,
+      });
     });
-    await Promise.all(
-      rowsWithNotes.map((row) => {
-        if (!row.spoken_note?.trim()) return Promise.resolve(null);
-        return supabaseAdmin
-          .from("walkthrough_photos" as any)
-          .update({ spoken_note: row.spoken_note })
-          .eq("walkthrough_id", data.walkthroughId)
-          .eq("photo_id", row.photo_id);
-      }),
-    );
-    await captionPhotosFromTranscript(
-      rows.map((row) => ({
-        photoId: row.photo_id,
-        caption: captionAround(timing, Number(row.offset_seconds ?? 0)),
-      })),
-    );
-    const transcriptFallbackMarkdown = buildFallbackWalkthroughMarkdown({
-      title: (walk as any).title,
-      transcript: finalTranscript,
-      durationSeconds,
-      links: rowsWithNotes,
-    });
-    await supabaseAdmin
-      .from("walkthroughs" as any)
-      .update({
-        transcript: finalTranscript,
-        summary_markdown: transcriptFallbackMarkdown,
-        status: "ready",
-      } as any)
-      .eq("id", data.walkthroughId);
-    console.log("[walkthrough] server transcription saved photo narration", {
-      walkthroughId: data.walkthroughId,
-      userId,
-      photos: rowsWithNotes.length,
-      transcriptChars: finalTranscript.length,
-    });
+    return {
+      transcript: earlierTranscript,
+      state: "running",
+      failedPieces: 0,
+      totalPieces: 0,
+      message: null,
+      inProgress: true,
+    };
   }
+  return job;
+}
 
-  return { transcript: finalTranscript };
+/** The transcription itself, after the checks. Records its own outcome either way. */
+async function runWalkthroughTranscription(
+  userId: string,
+  walk: TranscribableWalk,
+  data: TranscribeWalkthroughInput,
+  startedAt: string,
+): Promise<TranscriptionResult> {
+  const supabaseAdmin = getSupabaseAdmin();
+  const durationSeconds = Number(walk.duration_seconds ?? 0) || 0;
+  let failedPieces = 0;
+  let totalPieces = 0;
+  let videoFallback = false;
+
+  try {
+    /*
+     * Resolve the recording to timed transcript segments whichever way it
+     * arrived. See `transcribeRecording` for why a phone's video is not sent as
+     * it is.
+     */
+    let recording: TranscribedRecording;
+    if (data.storagePath) {
+      recording = await transcribeStoredRecording(
+        data.bucket ?? TRANSCRIPTION_BUCKET,
+        data.storagePath,
+        data.mimeType,
+        durationSeconds,
+      );
+    } else {
+      const bytes = Buffer.from(data.audioBase64 as string, "base64");
+      if (bytes.byteLength < 2048)
+        throw Object.assign(new Error("That recording had no audio in it."), { status: 400 });
+      recording = await transcribeBytes(bytes, data.mimeType, durationSeconds);
+    }
+
+    /*
+     * The web recorder's fallback, done here once. Its audio-only sidecar can
+     * come back silent when the full recording is not (a muted track, a
+     * browser that captured the wrong input), and the web used to retry from
+     * the whole video itself, limited to what fits in one request. The stored
+     * video is already here, and is read a minute at a time.
+     */
+    if (!transcriptOf(recording) && !data.storagePath && walk.video_path) {
+      const allowed = !transcriptionPathError({
+        bucket: TRANSCRIPTION_BUCKET,
+        storagePath: walk.video_path,
+        userId,
+        projectId: walk.project_id,
+        videoPath: walk.video_path,
+      });
+      if (allowed) {
+        videoFallback = true;
+        try {
+          const fromVideo = await transcribeStoredRecording(
+            TRANSCRIPTION_BUCKET,
+            walk.video_path,
+            walk.video_mime_type ?? "video/mp4",
+            durationSeconds,
+          );
+          if (transcriptOf(fromVideo)) recording = fromVideo;
+        } catch (e) {
+          console.warn("[walkthrough] video transcription fallback failed", {
+            walkthroughId: data.walkthroughId,
+            message: (e as Error)?.message,
+          });
+        }
+      }
+    }
+
+    const segments = recording.segments;
+    failedPieces = recording.failedPieces;
+    totalPieces = recording.totalPieces;
+    const transcript = transcriptOf(recording);
+    const finalTranscript = transcript || (walk.transcript ?? "").trim();
+    console.log("[walkthrough] server transcription finished", {
+      walkthroughId: data.walkthroughId,
+      segments: segments.length,
+      transcriptChars: transcript.length,
+      failedPieces,
+      totalPieces,
+      videoFallback,
+    });
+
+    /*
+     * Only a run that heard something writes. A silent retry over a walk that
+     * already has a transcript used to rewrite its captions and notes from the
+     * old text; now it records "empty" and leaves the row as it was.
+     */
+    if (transcript) {
+      const timing = segments;
+      await saveTranscriptSegments(data.walkthroughId, segments);
+
+      const { data: links, error: linkErr } = await supabaseAdmin
+        .from("walkthrough_photos" as any)
+        .select("photo_id, offset_seconds, position, spoken_note")
+        .eq("walkthrough_id", data.walkthroughId)
+        .order("position", { ascending: true });
+      if (linkErr) throw new Error(linkErr.message);
+
+      const rows = (links as any[]) ?? [];
+      const rowsWithNotes = rows.map((row) => {
+        const existing = row.spoken_note?.trim();
+        const note = existing || captionAround(timing, Number(row.offset_seconds ?? 0)) || null;
+        return { ...row, spoken_note: note };
+      });
+      await Promise.all(
+        rowsWithNotes.map((row) => {
+          if (!row.spoken_note?.trim()) return Promise.resolve(null);
+          return supabaseAdmin
+            .from("walkthrough_photos" as any)
+            .update({ spoken_note: row.spoken_note })
+            .eq("walkthrough_id", data.walkthroughId)
+            .eq("photo_id", row.photo_id);
+        }),
+      );
+      await captionPhotosFromTranscript(
+        rows.map((row) => ({
+          photoId: row.photo_id,
+          caption: captionAround(timing, Number(row.offset_seconds ?? 0)),
+        })),
+      );
+      const transcriptFallbackMarkdown = buildFallbackWalkthroughMarkdown({
+        title: walk.title,
+        transcript: finalTranscript,
+        durationSeconds,
+        links: rowsWithNotes,
+      });
+      await supabaseAdmin
+        .from("walkthroughs" as any)
+        .update({
+          transcript: finalTranscript,
+          summary_markdown: transcriptFallbackMarkdown,
+          status: "ready",
+        } as any)
+        .eq("id", data.walkthroughId);
+      console.log("[walkthrough] server transcription saved photo narration", {
+        walkthroughId: data.walkthroughId,
+        userId,
+        photos: rowsWithNotes.length,
+        transcriptChars: finalTranscript.length,
+      });
+    }
+
+    const outcome = transcriptionOutcome({
+      transcriptChars: transcript.length,
+      failedPieces,
+      totalPieces,
+    });
+    await saveTranscriptionRecord(data.walkthroughId, {
+      state: outcome.state,
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      failedPieces,
+      totalPieces,
+      message: outcome.message,
+      videoFallback,
+    });
+    return transcriptionResult({
+      transcript: finalTranscript,
+      heardSpeech: Boolean(transcript),
+      state: outcome.state,
+      failedPieces,
+      totalPieces,
+      message: outcome.message,
+      videoFallback,
+    });
+  } catch (e) {
+    await saveTranscriptionRecord(data.walkthroughId, {
+      state: "failed",
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      failedPieces,
+      totalPieces,
+      message: transcriptionFailureMessage(e),
+      videoFallback,
+    });
+    throw e;
+  }
+}
+
+export const walkthroughTranscriptionInputSchema = z.object({
+  walkthroughId: z.string().uuid(),
+});
+
+/** What `getWalkthroughTranscription` answers with. */
+export type WalkthroughTranscriptionStatus = {
+  /** Null when this walkthrough has never been transcribed by a server that records it. */
+  state: TranscriptionState | null;
+  transcript: string;
+  failedPieces: number;
+  totalPieces: number;
+  message: string | null;
+  videoFallback: boolean;
+  startedAt: string | null;
+  finishedAt: string | null;
+};
+
+/**
+ * Where the last transcription of a walkthrough got to, for the retry button
+ * to poll. Read over the caller's own client first, so RLS decides who may ask.
+ */
+export async function getWalkthroughTranscriptionService(
+  ctx: AuthedContext,
+  data: z.infer<typeof walkthroughTranscriptionInputSchema>,
+): Promise<WalkthroughTranscriptionStatus> {
+  const { data: walk, error } = await ctx.supabase
+    .from("walkthroughs" as any)
+    .select("id, transcript")
+    .eq("id", data.walkthroughId)
+    .maybeSingle();
+  if (error || !walk) throw Object.assign(new Error("Walkthrough not found"), { status: 404 });
+  const record = await readTranscriptionRecordFor(data.walkthroughId);
+  const transcript = (((walk as any).transcript as string | null) ?? "").trim();
+  if (!record) {
+    return {
+      state: null,
+      transcript,
+      failedPieces: 0,
+      totalPieces: 0,
+      message: null,
+      videoFallback: false,
+      startedAt: null,
+      finishedAt: null,
+    };
+  }
+  // A "running" record past its time is a run that died with its process.
+  const stalled = record.state === "running" && !transcriptionIsRunning(record);
+  return {
+    state: stalled ? "failed" : record.state,
+    transcript,
+    failedPieces: record.failedPieces,
+    totalPieces: record.totalPieces,
+    message: stalled ? "The last transcription did not finish. Try again." : record.message,
+    videoFallback: record.videoFallback,
+    startedAt: record.startedAt || null,
+    finishedAt: record.finishedAt,
+  };
 }
 
 /**

@@ -7,7 +7,17 @@ import { queuedSiteVideoPath, saveSiteVideo } from "@/api/project-videos";
 import { queryClient } from "@/lib/query";
 import { saveSiteLog } from "@/api/site-logs";
 import { setTaskPhotoStatus } from "@/api/task-photos";
-import { saveWalkthroughPhoto } from "@/api/walkthroughs";
+import {
+  createReportFromWalkthrough,
+  createWalkthroughSession,
+  finishWalkthroughSession,
+  generateWalkthroughReport,
+  saveWalkthroughPhoto,
+  transcribeWalkthrough,
+  updateWalkthroughVideoPath,
+  uploadWalkthroughVideo,
+  walkthroughVideoPath,
+} from "@/api/walkthroughs";
 import type { ProjectPatch } from "@/api/project-patch";
 import {
   applyTaskEdit,
@@ -20,6 +30,13 @@ import { applyPhasePatch, applyWorkflowItemPatch } from "@/api/workflows";
 import { isCompletionRefusal, type TaskStatus } from "@/api/task-status";
 import type { OutboxKind, OutboxRow } from "./outbox";
 import { completeSessionPhoto } from "./capture-session";
+import {
+  queuedWalkthroughId,
+  runWalkthroughVideo,
+  type WalkthroughVideoSteps,
+} from "./walkthrough-video";
+
+export type { WalkthroughVideoPayload } from "./walkthrough-video";
 
 /**
  * What each queued row actually does when its turn comes.
@@ -328,7 +345,13 @@ export function workflowPhaseRowId(phaseId: string, field: "signoff" | "notes"):
 export type WalkthroughPhotoPayload = {
   userId: string;
   projectId: string;
+  /**
+   * The walkthrough, or "" when the walk was recorded with no signal and its
+   * walkthrough is still to be made by the `walkthrough_video` row named in
+   * `videoRowId`. That row fills this in when it makes it.
+   */
   walkthroughId: string;
+  videoRowId?: string | null;
   offsetSeconds: number;
   position: number;
   width?: number | null;
@@ -341,6 +364,19 @@ export type WalkthroughPhotoPayload = {
 };
 
 type Handler = (row: OutboxRow) => Promise<void>;
+
+/** The real API behind a queued walkthrough's steps. */
+const walkthroughSteps: WalkthroughVideoSteps = {
+  createSession: createWalkthroughSession,
+  videoPath: walkthroughVideoPath,
+  uploadVideo: uploadWalkthroughVideo,
+  updateVideoPath: updateWalkthroughVideoPath,
+  finish: (walkthroughId, durationSeconds) =>
+    finishWalkthroughSession(walkthroughId, durationSeconds),
+  transcribe: transcribeWalkthrough,
+  generateReport: generateWalkthroughReport,
+  createReport: (walkthroughId) => createReportFromWalkthrough(walkthroughId),
+};
 
 const handlers: Record<OutboxKind, Handler> = {
   photo_upload: async (row) => {
@@ -420,10 +456,16 @@ const handlers: Record<OutboxKind, Handler> = {
       throw new PermanentError("Queued walkthrough photo has no file on this device");
     }
 
+    const walkthroughId =
+      payload.walkthroughId ||
+      (payload.videoRowId ? await queuedWalkthroughId(payload.videoRowId) : null);
+    // Its walkthrough is queued ahead of it; an ordinary retry finds it made.
+    if (!walkthroughId) throw new Error("Waiting for the walkthrough to be created");
+
     await saveWalkthroughPhoto({
       userId: payload.userId,
       projectId: payload.projectId,
-      walkthroughId: payload.walkthroughId,
+      walkthroughId,
       asset: {
         uri: row.local_uri,
         width: payload.width,
@@ -438,9 +480,20 @@ const handlers: Record<OutboxKind, Handler> = {
       // Same row, same storage path and idempotency key: a retry converges.
       uploadId: row.id,
     });
-    void queryClient.invalidateQueries({ queryKey: ["walkthrough", payload.walkthroughId] });
+    void queryClient.invalidateQueries({ queryKey: ["walkthrough", walkthroughId] });
     void queryClient.invalidateQueries({ queryKey: ["project-walkthroughs", payload.projectId] });
     void queryClient.invalidateQueries({ queryKey: ["project-photos", payload.projectId] });
+  },
+
+  walkthrough_video: async (row) => {
+    /*
+     * Resumable step by step: see `walkthrough-video.ts`. The report steps
+     * wait (`DeferredError`) until this walk's snaps have landed.
+     */
+    const done = await runWalkthroughVideo(row, walkthroughSteps);
+    void queryClient.invalidateQueries({ queryKey: ["walkthrough", done.sessionId] });
+    void queryClient.invalidateQueries({ queryKey: ["project-walkthroughs", done.projectId] });
+    void queryClient.invalidateQueries({ queryKey: ["project-reports", done.projectId] });
   },
 
   checklist_item_patch: async (row) => {

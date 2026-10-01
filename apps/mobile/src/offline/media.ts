@@ -128,19 +128,46 @@ export function queuedBytes(): number {
 }
 
 /**
+ * Delete a recording the camera made that is not being kept: a walkthrough
+ * the person chose to discard. Only ever handed the camera's own scratch file.
+ */
+export function discardRecording(uri: string | null | undefined): void {
+  if (!uri) return;
+  try {
+    const file = new File(uri);
+    if (file.exists) file.delete();
+  } catch {
+    // Cache scratch; the OS reclaims it if this does not.
+  }
+}
+
+/**
+ * How new a file has to be for the sweep to leave it alone.
+ *
+ * A capture is written into the folder a moment before its row is inserted,
+ * and a drain running in that moment would otherwise see a file no row refers
+ * to and delete it: a walkthrough's video, moved in at Stop, then lost to the
+ * sweep of the photo that finished uploading as it landed.
+ */
+export const ORPHAN_GRACE_MS = 60_000;
+
+/**
  * Delete outbox files no live row refers to.
  *
  * These accumulate from crashes between the copy and the row insert, and from
  * deletes that failed. Nothing else will ever look at them, so without a sweep
- * they are a permanent, invisible chunk of the user's storage.
+ * they are a permanent, invisible chunk of the user's storage. A file younger
+ * than `ORPHAN_GRACE_MS` may still be waiting for its row and is kept.
  */
-export function sweepOrphans(liveUris: readonly string[]): number {
+export function sweepOrphans(liveUris: readonly string[], now = Date.now()): number {
   const live = new Set(liveUris);
   let removed = 0;
   try {
     for (const entry of outboxDirectory().list()) {
       if (!(entry instanceof File)) continue;
       if (live.has(entry.uri)) continue;
+      const modified = entry.modificationTime;
+      if (typeof modified === "number" && now - modified < ORPHAN_GRACE_MS) continue;
       try {
         entry.delete();
         removed += 1;
