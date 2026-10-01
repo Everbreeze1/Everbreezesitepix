@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { AppHeader } from "@/components/AppHeader";
+import { GlobalSearchProvider } from "@/components/GlobalSearch";
 import { MobileTabBar } from "@/components/MobileTabBar";
 import { FloatingCameraButton } from "@/components/FloatingCameraButton";
 import { FeedbackPrompt } from "@/components/FeedbackPrompt";
@@ -102,27 +103,29 @@ function AppLayout() {
       {/* Tablets (768-1279px) open on the icon rail so the page gets the
           width; the header button expands it. Desktop opens expanded. */}
       <SidebarProvider defaultOpen={typeof window === "undefined" || window.innerWidth >= 1280}>
-        <OfflineIndicator />
-        <div className="min-h-screen flex w-full bg-background">
-          <AppSidebar />
-          <div className="flex-1 flex flex-col min-w-0 bg-background">
-            {!isActive && <UpgradeBanner activating={justCheckedOut && checkoutAttempts < 6} />}
-            <AppHeader />
-            {/* `flex flex-col` so a page can claim the height left under the
+        <GlobalSearchProvider>
+          <OfflineIndicator />
+          <div className="min-h-screen flex w-full bg-background">
+            <AppSidebar />
+            <div className="flex-1 flex flex-col min-w-0 bg-background">
+              {!isActive && <UpgradeBanner activating={justCheckedOut && checkoutAttempts < 6} />}
+              <AppHeader />
+              {/* `flex flex-col` so a page can claim the height left under the
                 header by asking for `flex-1`, without having to know how tall
                 the header is - or whether the upgrade banner above it is
                 showing, which changes that number per account. A page that
                 does not ask still sizes to its own content, because a flex
                 item's `min-height: auto` refuses to shrink below it. */}
-            <main className="flex min-w-0 flex-1 flex-col pb-20 md:pb-0">
-              <Outlet />
-            </main>
-            <MobileTabBar />
-            <FloatingCameraButton />
-            <FeedbackPrompt />
+              <main className="flex min-w-0 flex-1 flex-col pb-20 md:pb-0">
+                <Outlet />
+              </main>
+              <MobileTabBar />
+              <FloatingCameraButton />
+              <FeedbackPrompt />
+            </div>
           </div>
-        </div>
-        <UpgradeGateDialog />
+          <UpgradeGateDialog />
+        </GlobalSearchProvider>
       </SidebarProvider>
     </SubscriptionGateProvider>
   );

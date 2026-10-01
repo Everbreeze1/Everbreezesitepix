@@ -194,7 +194,12 @@ export function GalleryPage() {
    * query per pause in typing, not one per keystroke.
    */
   const [uploaderFilter, setUploaderFilter] = useState<string[]>([]);
-  const [textSearch, setTextSearch] = useState<string>("");
+  const [textSearch, setTextSearch] = useState<string>(search.q ?? "");
+  // The global search palette sends "Photos matching ..." here with ?q=;
+  // follow it when this page is already open, the way Projects follows its own.
+  useEffect(() => {
+    if (search.q !== undefined) setTextSearch(search.q);
+  }, [search.q]);
   const searchTerm = useDebouncedValue(textSearch.trim(), 300);
   const { teammates } = useAssignableTeammates();
 

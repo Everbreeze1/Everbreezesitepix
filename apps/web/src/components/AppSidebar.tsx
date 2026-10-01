@@ -14,7 +14,6 @@ import {
   Layers,
   Lock,
   ShieldCheck,
-  FileBarChart,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
@@ -56,9 +55,9 @@ const workspaceItems: NavItem[] = [
   { title: "Overview", url: "/dashboard", icon: LayoutDashboard },
   { title: "Projects", url: "/projects", icon: FolderKanban },
   { title: "Photo Library", url: "/gallery", icon: Images },
-  // Every report across every job - before this the /reports page existed but
-  // no menu reached it, so the only way to find a report was project by project.
-  { title: "Reports", url: "/reports", icon: FileBarChart },
+  // No "Reports" row. Reports belong to a job and live on that project's own
+  // Reports tab; a second, workspace-wide list here read as a separate place
+  // reports were kept. /reports now redirects to /projects.
   { title: "Maps", url: "/map", icon: Map },
 ];
 
