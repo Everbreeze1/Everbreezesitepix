@@ -71,10 +71,11 @@ describe("one search per page", () => {
     expect(palette).toMatch(/isSearchShortcut\(e\)/);
   });
 
-  it("the Overview's body search opens that palette instead of being a picture of a box", () => {
+  it("the Overview has no search box at all (Jon, 2026-10-01)", () => {
     const src = stripComments(read(DASHBOARD));
-    expect(src).toMatch(/useGlobalSearch\(\)/);
-    expect(src).toMatch(/onClick=\{openSearch\}/);
+    expect(src).not.toMatch(/useGlobalSearch\(\)/);
+    expect(src).not.toMatch(/openSearch/);
+    expect(src).not.toMatch(/Search projects, photos, reports/);
     expect(searchInputs(read(DASHBOARD))).toBe(0);
   });
 
