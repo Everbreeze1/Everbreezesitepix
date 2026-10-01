@@ -8,6 +8,7 @@ import type {
   setWalkthroughStatusService,
   listProjectWalkthroughsService,
   transcribeWalkthroughService,
+  getWalkthroughTranscriptionService,
   generateWalkthroughReportService,
   setWalkthroughShareService,
   getPublicWalkthroughService,
@@ -93,14 +94,31 @@ export const listProjectWalkthroughs = rpcOp<
   Result<typeof listProjectWalkthroughsService>
 >("listProjectWalkthroughs");
 
+/**
+ * Five minutes, not the 30 second default. A long walk is transcribed a minute
+ * at a time on the server, and hanging up early reported a failure that was
+ * not one while the server carried on and paid for the work anyway.
+ */
+export const TRANSCRIBE_TIMEOUT_MS = 5 * 60 * 1000;
+
 export const transcribeWalkthrough = rpcOp<
   {
     walkthroughId: string;
-    audioBase64: string;
     mimeType: string;
+    /** The recorder's bytes, or `storagePath` for a recording already in storage. */
+    audioBase64?: string;
+    storagePath?: string;
+    bucket?: string;
+    /** Answer at once; poll `getWalkthroughTranscription` for the outcome. */
+    background?: boolean;
   },
   Result<typeof transcribeWalkthroughService>
->("transcribeWalkthrough", { idempotent: true });
+>("transcribeWalkthrough", { idempotent: true, timeoutMs: TRANSCRIBE_TIMEOUT_MS });
+
+export const getWalkthroughTranscription = rpcOp<
+  { walkthroughId: string },
+  Result<typeof getWalkthroughTranscriptionService>
+>("getWalkthroughTranscription");
 
 export const generateWalkthroughReport = rpcOp<
   { walkthroughId: string },

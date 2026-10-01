@@ -107,12 +107,15 @@ export default function QueueScreen() {
                 {/*
                  * The thumbnail is the local copy, not a signed URL. This row
                  * exists precisely because the photo has not reached the server,
-                 * so there is nothing remote to point at. A queued video has no
-                 * still to show, so its tile stays a plain block.
+                 * so there is nothing remote to point at. A queued video (a site
+                 * video or a walkthrough) has no still to show, so its tile
+                 * stays a plain block.
                  */}
                 <Image
                   source={
-                    item.local_uri && item.kind !== "video_upload"
+                    item.local_uri &&
+                    item.kind !== "video_upload" &&
+                    item.kind !== "walkthrough_video"
                       ? { uri: item.local_uri }
                       : undefined
                   }

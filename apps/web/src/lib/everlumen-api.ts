@@ -15,7 +15,11 @@ export const everlumenApi = createApiClient({
   },
 });
 
-type RpcOptions = { idempotent?: boolean };
+type RpcOptions = {
+  idempotent?: boolean;
+  /** Raise the client budget for an op that waits on AI work; see `DEFAULT_TIMEOUT_MS`. */
+  timeoutMs?: number;
+};
 
 /**
  * Adapter matching former createServerFn call shape: `fn({ data })` or `fn()`.
@@ -34,7 +38,12 @@ export function rpcOp<TData = undefined, TResult = unknown>(op: string, options?
     return everlumenApi.rpc<TResult>(
       op,
       data as unknown,
-      options?.idempotent ? { idempotencyKey: crypto.randomUUID() } : undefined,
+      options?.idempotent || options?.timeoutMs
+        ? {
+            ...(options.idempotent ? { idempotencyKey: crypto.randomUUID() } : {}),
+            ...(options.timeoutMs ? { timeoutMs: options.timeoutMs } : {}),
+          }
+        : undefined,
     );
   };
 }

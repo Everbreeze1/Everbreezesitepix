@@ -133,7 +133,8 @@ describe("sweepOrphans", () => {
     const kept = media.persistCapture(CAMERA_CACHE, "row-live");
     const orphan = media.persistCapture(CAMERA_CACHE, "row-dead");
 
-    const removed = media.sweepOrphans([kept]);
+    // Past the grace period: a file this old is not waiting for its row.
+    const removed = media.sweepOrphans([kept], Date.now() + media.ORPHAN_GRACE_MS + 1);
 
     expect(removed).toBe(1);
     expect(fs.__exists(kept)).toBe(true);
@@ -148,6 +149,26 @@ describe("sweepOrphans", () => {
     expect(media.sweepOrphans([a, b])).toBe(0);
     expect(fs.__exists(a)).toBe(true);
     expect(fs.__exists(b)).toBe(true);
+  });
+
+  it("leaves a file alone while its row may still be on its way", () => {
+    /*
+     * A capture is written into the folder a moment before its row is
+     * inserted. A drain finishing in that moment used to see a file no row
+     * referred to and delete it: a walkthrough's video, moved in at Stop, lost
+     * to the sweep after an unrelated photo landed.
+     */
+    const RECORDING = "file:///app/cache/Camera/VID_0193.mp4";
+    const now = 1_000_000_000;
+    fs.__seedFile(RECORDING, 40_000_000, now - 5_000);
+    const fresh = media.persistRecording(RECORDING, "row-not-yet-inserted");
+
+    expect(media.sweepOrphans([], now)).toBe(0);
+    expect(fs.__exists(fresh)).toBe(true);
+
+    // Once it is old enough to be a real orphan, it goes.
+    expect(media.sweepOrphans([], now + media.ORPHAN_GRACE_MS)).toBe(1);
+    expect(fs.__exists(fresh)).toBe(false);
   });
 
   it("never reaches outside the outbox directory", () => {

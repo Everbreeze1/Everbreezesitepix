@@ -168,6 +168,7 @@ export {
   setWalkthroughStatusService,
   listProjectWalkthroughsService,
   transcribeWalkthroughService,
+  getWalkthroughTranscriptionService,
   generateWalkthroughReportService,
   setWalkthroughShareService,
   getPublicWalkthroughService,

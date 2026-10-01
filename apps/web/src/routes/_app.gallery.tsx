@@ -6,6 +6,8 @@ export type GallerySearch = {
   photo?: string;
   /** Which of the gallery's two views to open on. Also where /timeline lands. */
   view?: "grid" | "calendar";
+  /** Seeds the search box. The global search palette's "Photos matching" lands here. */
+  q?: string;
 };
 
 export const Route = createFileRoute("/_app/gallery")({
@@ -14,6 +16,7 @@ export const Route = createFileRoute("/_app/gallery")({
     project: typeof s.project === "string" ? s.project : undefined,
     photo: typeof s.photo === "string" ? s.photo : undefined,
     view: s.view === "calendar" || s.view === "grid" ? s.view : undefined,
+    q: typeof s.q === "string" && s.q.trim() ? s.q : undefined,
   }),
   component: GalleryPage,
 });

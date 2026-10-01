@@ -83,7 +83,8 @@ describe("family: a job can be staffed from the project, not only from Team sett
   it("both screens the client named can open the dialog", () => {
     const list = read("apps/web/src/features/projects/pages/ProjectsPage.tsx");
     expect(list).toMatch(/<AssignTeammatesDialog/);
-    expect(list).toMatch(/Assign teammates/);
+    // From the CREW column's "+", the one place on a row to staff the job.
+    expect(list).toMatch(/Assign crew/);
 
     const detail = read("apps/web/src/features/projects/pages/ProjectDetailPage.tsx");
     expect(detail).toMatch(/<AssignTeammatesDialog/);

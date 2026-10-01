@@ -36,6 +36,8 @@ export const qk = {
       ? (["gallery", "photos", userId, filters] as const)
       : (["gallery", "photos", userId] as const),
   galleryProjects: (userId: string) => ["gallery", "projects", userId] as const,
+  /** The Cmd/Ctrl+K palette's projects and reports (components/GlobalSearch.tsx). */
+  globalSearch: (userId: string) => ["global-search", userId] as const,
   galleryTotalPhotos: (userId: string) => ["gallery", "total-photos", userId] as const,
   /** Day-bucketed photo counts behind the calendar's cells and heatmap. */
   photoActivity: (

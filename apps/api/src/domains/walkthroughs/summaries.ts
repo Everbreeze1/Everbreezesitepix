@@ -411,6 +411,22 @@ export async function generateSummaryFromPhotosService(
   return { summary: toSummary(row), aiFailed };
 }
 
+/**
+ * Whether a stored summary still describes its walkthrough: every linked photo
+ * is in it, and it was written from the transcript the walk has now.
+ *
+ * An empty transcript on both sides counts as the same, so a silent walk with
+ * no new photos keeps its summary rather than paying to rewrite it.
+ */
+export function summaryCoversWalk(
+  summaryRow: { photo_notes?: unknown; transcript?: string | null },
+  walk: { photoIds: string[]; transcript: string },
+): boolean {
+  const covered = new Set(parsePhotoNotes(summaryRow.photo_notes).map((n) => n.photoId));
+  if (walk.photoIds.some((id) => !covered.has(id))) return false;
+  return (summaryRow.transcript ?? "").trim() === walk.transcript.trim();
+}
+
 export const generateSummaryForWalkthroughInputSchema = z.object({
   walkthroughId: z.string().uuid(),
   /** Rebuild even when this walkthrough already has a summary. */
@@ -430,8 +446,10 @@ export const generateSummaryForWalkthroughInputSchema = z.object({
  * from `walkthrough_photos`, each matched to what was said nearest the moment
  * it was taken.
  *
- * Returns the existing summary untouched unless `force` is set, so the auto
- * publish after a recording cannot produce a second copy on a retry.
+ * Returns the newest existing summary untouched unless `force` is set or that
+ * summary is out of date (see `summaryCoversWalk`), so the auto publish after a
+ * recording cannot produce a second copy on a retry, and a Generate after late
+ * photos or a new transcript writes one that includes them.
  */
 export async function generateSummaryForWalkthroughService(
   ctx: AuthedContext,
@@ -453,17 +471,6 @@ export async function generateSummaryForWalkthroughService(
     .maybeSingle();
   if (!project) throw new Error("Walkthrough not found");
 
-  if (!data.force) {
-    const { data: existing } = await supabaseAdmin
-      .from("walkthrough_summaries" as any)
-      .select("*")
-      .eq("walkthrough_id", data.walkthroughId)
-      .order("created_at", { ascending: true })
-      .limit(1);
-    const first = ((existing as any[]) ?? [])[0];
-    if (first) return { summary: toSummary(first), aiFailed: null, created: false };
-  }
-
   // The photos taken during the walk, in the order they were taken.
   const { data: links } = await supabaseAdmin
     .from("walkthrough_photos" as any)
@@ -471,6 +478,32 @@ export async function generateSummaryForWalkthroughService(
     .eq("walkthrough_id", data.walkthroughId)
     .order("position", { ascending: true });
   const linkRows = ((links as any[]) ?? []).filter((l) => l.photo_id);
+
+  /*
+   * The newest summary is reused only while it still describes the walk. Snaps
+   * queued on a phone with no signal land after the auto publish has written
+   * the first summary, and a transcript retried later arrives after it too;
+   * handing back the cached copy then left those photos and that narration out
+   * for good unless somebody knew to press Regenerate.
+   */
+  if (!data.force) {
+    const { data: existing } = await supabaseAdmin
+      .from("walkthrough_summaries" as any)
+      .select("*")
+      .eq("walkthrough_id", data.walkthroughId)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    const latest = ((existing as any[]) ?? [])[0];
+    if (
+      latest &&
+      summaryCoversWalk(latest, {
+        photoIds: linkRows.map((l) => l.photo_id as string),
+        transcript: ((walk as any).transcript ?? "").trim(),
+      })
+    ) {
+      return { summary: toSummary(latest), aiFailed: null, created: false };
+    }
+  }
 
   const captionById = new Map<string, string | null>();
   if (linkRows.length) {

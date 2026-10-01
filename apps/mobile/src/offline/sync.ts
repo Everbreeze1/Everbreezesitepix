@@ -6,6 +6,8 @@ import { flushCaptureSessions } from "./capture-session";
 import {
   claimNext,
   counts,
+  DeferredError,
+  deferRow,
   markDone,
   markFailed,
   recoverInterrupted,
@@ -31,6 +33,21 @@ let online = true;
 let started = false;
 /** Set when a trigger fires mid-drain, so the loop runs again rather than racing. */
 let rerun = false;
+/** The one wake-up for a deferred row; a later deferral never stacks a second. */
+let deferredWake: ReturnType<typeof setTimeout> | null = null;
+
+/*
+ * The queue has no timer of its own (see `startSync`), so a row that asked to
+ * wait would otherwise sit until the next reconnect or app foreground. This
+ * is the one exception: a wake-up for work that is known to be due, not a poll.
+ */
+function wakeAfter(delayMs: number) {
+  if (deferredWake) return;
+  deferredWake = setTimeout(() => {
+    deferredWake = null;
+    requestSync();
+  }, delayMs);
+}
 
 export function subscribeToQueue(listener: Listener): () => void {
   listeners.add(listener);
@@ -112,6 +129,14 @@ async function drain(): Promise<void> {
           await handler(row);
           await markDone(row);
         } catch (error) {
+          if (error instanceof DeferredError) {
+            // Not a failure: no attempt counted and the project is not parked,
+            // since what it waits for is usually the next row in its lane.
+            await deferRow(row, error.delayMs, error.message);
+            wakeAfter(error.delayMs);
+            await publish();
+            continue;
+          }
           const message = error instanceof Error ? error.message : "Upload failed";
           const permanent = isPermanent(error);
           await markFailed(row, message, permanent);

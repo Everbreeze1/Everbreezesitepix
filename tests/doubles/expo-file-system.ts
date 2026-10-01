@@ -8,15 +8,24 @@
  */
 
 const files = new Map<string, number>();
+const modified = new Map<string, number>();
 const directories = new Set<string>();
 
 export function __reset(): void {
   files.clear();
+  modified.clear();
   directories.clear();
 }
 
-export function __seedFile(uri: string, size = 1024): void {
+/** A file already on the device, written long ago unless `modifiedAt` says otherwise. */
+export function __seedFile(uri: string, size = 1024, modifiedAt = 0): void {
   files.set(uri, size);
+  modified.set(uri, modifiedAt);
+}
+
+/** Set when a file was last written, as the sweep's grace period reads it. */
+export function __setModified(uri: string, modifiedAt: number): void {
+  modified.set(uri, modifiedAt);
 }
 
 export function __exists(uri: string): boolean {
@@ -78,20 +87,30 @@ export class File {
     return files.get(this.uri) ?? null;
   }
 
+  get modificationTime(): number | null {
+    return modified.get(this.uri) ?? null;
+  }
+
   copySync(destination: File | Directory): void {
     const target = destination instanceof File ? destination.uri : join(destination.uri, "copy");
     files.set(target, files.get(this.uri) ?? 0);
+    // A copy is a new file, written now.
+    modified.set(target, Date.now());
   }
 
   moveSync(destination: File | Directory): void {
     const target = destination instanceof File ? destination.uri : join(destination.uri, "moved");
     files.set(target, files.get(this.uri) ?? 0);
+    // A move is a rename: the file keeps its own time.
+    modified.set(target, modified.get(this.uri) ?? 0);
     files.delete(this.uri);
+    modified.delete(this.uri);
     this.uri = target;
   }
 
   delete(): void {
     files.delete(this.uri);
+    modified.delete(this.uri);
   }
 }
 

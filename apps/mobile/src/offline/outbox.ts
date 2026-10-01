@@ -17,6 +17,7 @@ export type OutboxKind =
   | "photo_upload"
   | "video_upload"
   | "walkthrough_photo"
+  | "walkthrough_video"
   | "checklist_item_patch"
   | "task_create"
   | "task_patch"
@@ -311,6 +312,47 @@ export async function markFailed(row: OutboxRow, error: string, permanent = fals
       row.id,
     ],
   );
+}
+
+/**
+ * Thrown by a handler whose row is not failing but is not ready yet either.
+ *
+ * A walkthrough's report has to wait for the walk's photos to land, and
+ * counting that wait as a failed attempt would spend the row's retries on
+ * nothing and park its whole project for the pass, which is exactly what keeps
+ * those photos from landing. The drain puts the row back with `deferRow`
+ * instead and tries it again after `delayMs`.
+ */
+export class DeferredError extends Error {
+  readonly delayMs: number;
+
+  constructor(message: string, delayMs: number) {
+    super(message);
+    this.name = "DeferredError";
+    this.delayMs = delayMs;
+  }
+}
+
+/** Put a deferred row back in line after `delayMs`, without counting an attempt. */
+export async function deferRow(row: OutboxRow, delayMs: number, reason: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    `UPDATE outbox SET state = 'pending', next_attempt = ?, last_error = ? WHERE id = ?`,
+    [Date.now() + delayMs, reason.slice(0, 500), row.id],
+  );
+}
+
+/**
+ * Write a row's payload back while its handler is running.
+ *
+ * How a handler with several steps keeps its place: each step that lands is
+ * recorded on the row itself, so a retry after a dropped connection, or after
+ * the app was killed, picks up at the next step instead of repeating the ones
+ * that already happened.
+ */
+export async function saveRowPayload(id: string, payload: unknown): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(`UPDATE outbox SET payload = ? WHERE id = ?`, [JSON.stringify(payload), id]);
 }
 
 /**

@@ -2248,6 +2248,8 @@ export function ProjectDetailPage() {
           });
           if (
             !transcription?.transcript?.trim() &&
+            // The server already retried from the stored video when it could.
+            !transcription?.videoFallback &&
             data.audioBlob &&
             data.mediaBlob &&
             data.mediaMimeType &&

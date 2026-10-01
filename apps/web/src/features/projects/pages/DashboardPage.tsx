@@ -13,6 +13,7 @@ import { CaptureUpdateDialog } from "@/components/CaptureUpdateDialog";
 import { AccountSetupCard } from "@/features/settings/components/AccountSetupCard";
 import type { ProjectPickerRow } from "@/features/projects/components/CreateGroupDialog";
 import { qk } from "@/lib/query-keys";
+import { useGlobalSearch } from "@/components/GlobalSearch";
 
 interface ProjectRow {
   id: string;
@@ -61,6 +62,7 @@ export function DashboardPage() {
   const { user } = useAuth();
   const { profile, loading: profileLoading } = useProfile();
   const { guard } = useSubscriptionGate();
+  const { openSearch } = useGlobalSearch();
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [activeCards, setActiveCards] = useState<ActiveProjectCard[]>([]);
   const [newRecordsCount, setNewRecordsCount] = useState(0);
@@ -394,12 +396,28 @@ export function DashboardPage() {
             AccountSetupCard, which renders nothing in every other case. */}
         <AccountSetupCard className="mb-5" />
 
-        {/* Search + Capture update */}
+        {/*
+          Search + Capture update. The page's one search box, and the app's
+          global one: it opens the same palette as Cmd/Ctrl+K, which finds
+          projects and reports and hands photo searches to the Photo Library.
+          It used to be a drawing of a search box beside the header's real one.
+        */}
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex h-[38px] w-[320px] items-center gap-2.5 rounded-[10px] border border-border bg-card px-3.5">
+          <button
+            type="button"
+            onClick={openSearch}
+            aria-label="Search projects, photos and reports"
+            aria-haspopup="dialog"
+            className="flex h-[38px] w-full max-w-[320px] items-center gap-2.5 rounded-[10px] border border-border bg-card px-3.5 text-left transition-colors hover:border-primary/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
             <Search className="h-3.5 w-3.5 shrink-0 text-faint" />
-            <span className="text-[13px] text-faint">Search projects, photos, reports...</span>
-          </div>
+            <span className="min-w-0 flex-1 truncate text-[13px] text-faint">
+              Search projects, photos, reports...
+            </span>
+            <kbd className="hidden shrink-0 rounded bg-secondary px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground lg:inline-block">
+              ⌘K
+            </kbd>
+          </button>
           <div className="flex items-center gap-4">
             <Bell className="h-[19px] w-[19px] shrink-0 text-muted-foreground" aria-hidden />
             <Button

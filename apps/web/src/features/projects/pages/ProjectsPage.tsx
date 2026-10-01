@@ -1220,9 +1220,7 @@ export function ProjectsPage() {
       <Input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder={
-          tab === "groups" ? "Search groupsÃ¢â‚¬Â¦" : "Search projects by name or addressÃ¢â‚¬Â¦"
-        }
+        placeholder={tab === "groups" ? "Search groups…" : "Search projects by name or address…"}
         className="h-8 rounded-lg border-border bg-card/80 pl-8 pr-8 text-xs shadow-none placeholder:text-muted-foreground"
       />
       {query && (
@@ -1540,7 +1538,7 @@ export function ProjectsPage() {
             <div className="max-h-60 overflow-y-auto pr-1">
               {labelCatalog.rows.length === 0 ? (
                 <div className="px-1 py-3 text-xs text-muted-foreground">
-                  No labels yet - theyÃ¢â‚¬â„¢ll appear here after your first visit.
+                  No labels yet - they’ll appear here after your first visit.
                 </div>
               ) : (
                 <div className="space-y-0.5">
@@ -1724,7 +1722,7 @@ export function ProjectsPage() {
                 style={{ transform: refreshing ? undefined : `rotate(${progress * 270}deg)` }}
               />
               {refreshing
-                ? "RefreshingÃ¢â‚¬Â¦"
+                ? "Refreshing…"
                 : progress >= 1
                   ? "Release to refresh"
                   : "Pull to refresh"}
@@ -2173,27 +2171,8 @@ function CrewCell({
 
   return (
     <TooltipProvider delayDuration={150}>
-      <div className="flex items-center gap-0">
+      <div className="relative z-10 flex w-fit items-center gap-0">
         <div className="flex -space-x-1.5">
-          {crew.length === 0 && canAssign ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onAssign();
-                  }}
-                  className="flex h-[22px] w-[22px] cursor-pointer items-center justify-center rounded-full border-2 border-dashed border-border bg-secondary/60 text-[10px] font-extrabold text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
-                >
-                  +
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="text-xs">
-                Assign crew
-              </TooltipContent>
-            </Tooltip>
-          ) : null}
           {crew.slice(0, 3).map((m) => (
             <Tooltip key={m.user_id}>
               <TooltipTrigger asChild>
@@ -2217,32 +2196,60 @@ function CrewCell({
             +{extra}
           </span>
         )}
+        {/*
+          The one place on the row to staff the job, crewed or not. This cell
+          is not inside the row's link any more (see ProjectTableRow), but the
+          click still prevents its default and stops here, so nothing above it
+          can turn "open the picker" into "leave the page".
+        */}
+        {canAssign && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onAssign();
+                }}
+                aria-label={crew.length === 0 ? "Assign crew" : "Change crew"}
+                className={cn(
+                  "flex h-[22px] w-[22px] cursor-pointer items-center justify-center rounded-full border-2 border-dashed border-border bg-secondary/60 text-[10px] font-extrabold text-muted-foreground transition-colors hover:border-primary hover:text-foreground",
+                  crew.length > 0 && "ml-1.5",
+                )}
+              >
+                +
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-xs">
+              {crew.length === 0 ? "Assign crew" : "Change crew"}
+            </TooltipContent>
+          </Tooltip>
+        )}
       </div>
     </TooltipProvider>
   );
 }
 
 /**
- * Hover-revealed kebab for the last column. Wrapped in a stop-propagation
- * div so the click that opens the menu does not also navigate the row link.
+ * Hover-revealed kebab for the last column. It sits outside the row's link,
+ * and the wrapper still stops the click so a menu item can never reach a
+ * row-level handler.
+ *
+ * No crew item: the CREW column's "+" is the one place to staff a job from
+ * this row, so the menu does not offer a second door to the same dialog.
  */
 function RowActions({
   project,
-  crewCount,
-  canAssign,
-  onAssign,
   onStar,
   onArchive,
 }: {
   project: ProjectRow;
-  crewCount: number;
-  canAssign: boolean;
-  onAssign: () => void;
   onStar: (id: string, next: boolean) => void;
   onArchive: (id: string, next: boolean) => void;
 }) {
   return (
-    <div onClick={(e) => e.stopPropagation()}>
+    <div className="relative z-10" onClick={(e) => e.stopPropagation()}>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
@@ -2264,17 +2271,6 @@ function RowActions({
             />
             {project.starred ? "Unstar project" : "Star project"}
           </DropdownMenuItem>
-          {/*
-            Staffing a job from the list it is on. The empty crew cell's "+"
-            only covers a job with nobody on it; this reaches the rest. Hidden
-            when the viewer cannot assign, since the server would refuse.
-          */}
-          {canAssign && (
-            <DropdownMenuItem onClick={onAssign}>
-              <UsersIcon className="mr-2 h-4 w-4 text-muted-foreground" />
-              {crewCount === 0 ? "Assign teammates" : `Change crew (${crewCount})`}
-            </DropdownMenuItem>
-          )}
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => onArchive(project.id, !project.archived)}>
             <Archive
@@ -2333,68 +2329,77 @@ function ProjectTableRow({
   const loc = projectLocation(project);
   const badge = { label: statusLabel(project.status, project.archived) };
 
+  /*
+   * The row is a grid with the link stretched over it, not a link with the
+   * grid inside it.
+   *
+   * It used to be the latter, which put the CREW "+" and the "..." trigger
+   * inside an <a href="/projects/...">. Their handlers called
+   * stopPropagation(), and that is what broke them: it stopped the router's
+   * own click handler, the one that calls preventDefault() and navigates in
+   * place, so the browser fell back to following the href natively. The crew
+   * picker opened for a frame, then the whole app reloaded on the project page.
+   * Now the project name is the link, its ::after covers the row so the whole
+   * row still opens the job, and the two controls sit above it (z-10) as
+   * siblings rather than descendants of the anchor.
+   */
   return (
-    <div className="group relative">
+    <div className="group relative grid min-w-0 grid-cols-[2.6fr_1fr_1.4fr_1fr_0.9fr] items-center gap-3 px-[18px] py-[14px] transition-colors hover:bg-secondary/50">
+      <span className="flex min-w-0 items-center gap-3">
+        <span className="flex h-[38px] w-[38px] shrink-0 items-center justify-center overflow-hidden rounded-[7px] bg-secondary text-muted-foreground">
+          {coverUrl || coverPath ? (
+            <PhotoThumb
+              storagePath={coverPath}
+              thumbPath={coverThumbPath}
+              fallbackUrl={coverUrl}
+              width={200}
+              alt=""
+            />
+          ) : (
+            <FolderKanban className="h-4 w-4" />
+          )}
+        </span>
+        <span className="min-w-0">
+          <Link
+            to="/projects/$projectId"
+            params={{ projectId: project.id }}
+            className="block truncate text-[13.5px] font-semibold leading-snug text-foreground after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:after:rounded-sm focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-ring"
+          >
+            {project.name}
+          </Link>
+          {loc && <span className="block truncate text-[11.5px] text-muted-foreground">{loc}</span>}
+        </span>
+      </span>
+      {/*
+        One badge, not two. Where a job stands in a pipeline the stage is the
+        more precise status and decides the bucket, so the pill names the
+        stage and keeps the bucket's colour. Raised over the row's stretched
+        link so that hover title can show; a click on it still opens the job.
+        Out of the tab order, since the project name is already the row's link.
+      */}
       <Link
         to="/projects/$projectId"
         params={{ projectId: project.id }}
-        className="grid min-w-0 grid-cols-[2.6fr_1fr_1.4fr_1fr_0.9fr] items-center gap-3 px-[18px] py-[14px] transition-colors hover:bg-secondary/50"
+        tabIndex={-1}
+        className="relative z-10 w-fit"
+        title={
+          stage
+            ? `${stage.boardName}: ${stage.name}, which counts as ${badge.label.toLowerCase()}`
+            : undefined
+        }
       >
-        <span className="flex min-w-0 items-center gap-3">
-          <span className="flex h-[38px] w-[38px] shrink-0 items-center justify-center overflow-hidden rounded-[7px] bg-secondary text-muted-foreground">
-            {coverUrl || coverPath ? (
-              <PhotoThumb
-                storagePath={coverPath}
-                thumbPath={coverThumbPath}
-                fallbackUrl={coverUrl}
-                width={200}
-                alt=""
-              />
-            ) : (
-              <FolderKanban className="h-4 w-4" />
-            )}
-          </span>
-          <span className="min-w-0">
-            <span className="block truncate text-[13.5px] font-semibold leading-snug text-foreground">
-              {project.name}
-            </span>
-            {loc && (
-              <span className="block truncate text-[11.5px] text-muted-foreground">{loc}</span>
-            )}
-          </span>
-        </span>
-        {/*
-          One badge, not two. Where a job stands in a pipeline the stage is the
-          more precise status and decides the bucket, so the pill names the
-          stage and keeps the bucket's colour.
-        */}
-        <span
-          title={
-            stage
-              ? `${stage.boardName}: ${stage.name}, which counts as ${badge.label.toLowerCase()}`
-              : undefined
-          }
-        >
-          <ReferencePill tone={statusTone(project.status, project.archived)}>
-            {stage ? stage.name : badge.label}
-          </ReferencePill>
-        </span>
-        <span className="truncate text-[12.5px] text-muted-foreground">
-          {blueprintName || <span className="text-faint">-</span>}
-        </span>
-        <CrewCell crew={crew} extra={extra} canAssign={canAssign} onAssign={onAssign} />
-        <span className="flex items-center justify-end gap-1 text-[12px] text-muted-foreground">
-          {timeAgo(project.updated_at)}
-          <RowActions
-            project={project}
-            crewCount={assigned.length}
-            canAssign={canAssign}
-            onAssign={onAssign}
-            onStar={onStar}
-            onArchive={onArchive}
-          />
-        </span>
+        <ReferencePill tone={statusTone(project.status, project.archived)}>
+          {stage ? stage.name : badge.label}
+        </ReferencePill>
       </Link>
+      <span className="truncate text-[12.5px] text-muted-foreground">
+        {blueprintName || <span className="text-faint">-</span>}
+      </span>
+      <CrewCell crew={crew} extra={extra} canAssign={canAssign} onAssign={onAssign} />
+      <span className="flex items-center justify-end gap-1 text-[12px] text-muted-foreground">
+        {timeAgo(project.updated_at)}
+        <RowActions project={project} onStar={onStar} onArchive={onArchive} />
+      </span>
     </div>
   );
 }
