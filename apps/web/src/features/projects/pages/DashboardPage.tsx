@@ -1,7 +1,7 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Camera, FileText, Search, Bell } from "lucide-react";
+import { Camera, FileText, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ReferencePill } from "@/components/ui/reference";
 import { useAuth } from "@/hooks/use-auth";
@@ -13,7 +13,6 @@ import { CaptureUpdateDialog } from "@/components/CaptureUpdateDialog";
 import { AccountSetupCard } from "@/features/settings/components/AccountSetupCard";
 import type { ProjectPickerRow } from "@/features/projects/components/CreateGroupDialog";
 import { qk } from "@/lib/query-keys";
-import { useGlobalSearch } from "@/components/GlobalSearch";
 
 interface ProjectRow {
   id: string;
@@ -62,7 +61,6 @@ export function DashboardPage() {
   const { user } = useAuth();
   const { profile, loading: profileLoading } = useProfile();
   const { guard } = useSubscriptionGate();
-  const { openSearch } = useGlobalSearch();
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [activeCards, setActiveCards] = useState<ActiveProjectCard[]>([]);
   const [newRecordsCount, setNewRecordsCount] = useState(0);
@@ -397,27 +395,11 @@ export function DashboardPage() {
         <AccountSetupCard className="mb-5" />
 
         {/*
-          Search + Capture update. The page's one search box, and the app's
-          global one: it opens the same palette as Cmd/Ctrl+K, which finds
-          projects and reports and hands photo searches to the Photo Library.
-          It used to be a drawing of a search box beside the header's real one.
+          Search + Capture update. No search box here: Jon (2026-10-01) wants
+          search only where it matters, the Projects page and Photo Library;
+          Cmd/Ctrl+K still opens the global search from any page.
         */}
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <button
-            type="button"
-            onClick={openSearch}
-            aria-label="Search projects, photos and reports"
-            aria-haspopup="dialog"
-            className="flex h-[38px] w-full max-w-[320px] items-center gap-2.5 rounded-[10px] border border-border bg-card px-3.5 text-left transition-colors hover:border-primary/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <Search className="h-3.5 w-3.5 shrink-0 text-faint" />
-            <span className="min-w-0 flex-1 truncate text-[13px] text-faint">
-              Search projects, photos, reports...
-            </span>
-            <kbd className="hidden shrink-0 rounded bg-secondary px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground lg:inline-block">
-              ⌘K
-            </kbd>
-          </button>
+        <div className="flex flex-wrap items-center justify-end gap-4">
           <div className="flex items-center gap-4">
             <Bell className="h-[19px] w-[19px] shrink-0 text-muted-foreground" aria-hidden />
             <Button
