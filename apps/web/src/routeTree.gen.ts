@@ -9,135 +9,84 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as TermsOfServiceRouteImport } from './routes/terms-of-service'
-import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
-import { Route as SignupRouteImport } from './routes/signup'
-import { Route as ResetPasswordRouteImport } from './routes/reset-password'
-import { Route as PrivacyPolicyRouteImport } from './routes/privacy-policy'
-import { Route as PricingRouteImport } from './routes/pricing'
-import { Route as LoginRouteImport } from './routes/login'
-import { Route as HowItWorksRouteImport } from './routes/how-it-works'
-import { Route as FeaturesRouteImport } from './routes/features'
-import { Route as FaqRouteImport } from './routes/faq'
-import { Route as EmbedDotjsRouteImport } from './routes/embed[.]js'
-import { Route as DemoRouteImport } from './routes/demo'
-import { Route as ContactRouteImport } from './routes/contact'
-import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as SubcontractorInviteTokenRouteImport } from './routes/subcontractor-invite.$token'
-import { Route as PSlugRouteImport } from './routes/p.$slug'
-import { Route as InviteTokenRouteImport } from './routes/invite.$token'
-import { Route as AuthConfirmRouteImport } from './routes/auth.confirm'
-import { Route as AppTimelineRouteImport } from './routes/_app.timeline'
-import { Route as AppTemplatesRouteImport } from './routes/_app.templates'
-import { Route as AppTeamsRouteImport } from './routes/_app.teams'
-import { Route as AppShowcasesRouteImport } from './routes/_app.showcases'
-import { Route as AppReportsRouteImport } from './routes/_app.reports'
-import { Route as AppReportIssueRouteImport } from './routes/_app.report-issue'
-import { Route as AppNotificationsRouteImport } from './routes/_app.notifications'
-import { Route as AppMapRouteImport } from './routes/_app.map'
-import { Route as AppHelpRouteImport } from './routes/_app.help'
-import { Route as AppGalleryRouteImport } from './routes/_app.gallery'
-import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
-import { Route as AppCollaboratorsRouteImport } from './routes/_app.collaborators'
+import { Route as AppRouteImport } from './routes/_app'
+import { Route as ContactRouteImport } from './routes/contact'
+import { Route as DemoRouteImport } from './routes/demo'
+import { Route as EmbedDotjsRouteImport } from './routes/embed[.]js'
+import { Route as FaqRouteImport } from './routes/faq'
+import { Route as FeaturesRouteImport } from './routes/features'
+import { Route as HowItWorksRouteImport } from './routes/how-it-works'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as PricingRouteImport } from './routes/pricing'
+import { Route as PrivacyPolicyRouteImport } from './routes/privacy-policy'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as SignupRouteImport } from './routes/signup'
+import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
+import { Route as TermsOfServiceRouteImport } from './routes/terms-of-service'
 import { Route as AppAdminRouteImport } from './routes/_app.admin'
-import { Route as AppSettingsIndexRouteImport } from './routes/_app.settings.index'
-import { Route as AppProjectsIndexRouteImport } from './routes/_app.projects.index'
+import { Route as AppCollaboratorsRouteImport } from './routes/_app.collaborators'
+import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
+import { Route as AppGalleryRouteImport } from './routes/_app.gallery'
+import { Route as AppHelpRouteImport } from './routes/_app.help'
+import { Route as AppMapRouteImport } from './routes/_app.map'
+import { Route as AppNotificationsRouteImport } from './routes/_app.notifications'
+import { Route as AppReportIssueRouteImport } from './routes/_app.report-issue'
+import { Route as AppReportsRouteImport } from './routes/_app.reports'
+import { Route as AppShowcasesRouteImport } from './routes/_app.showcases'
+import { Route as AppTeamsRouteImport } from './routes/_app.teams'
+import { Route as AppTemplatesRouteImport } from './routes/_app.templates'
+import { Route as AppTimelineRouteImport } from './routes/_app.timeline'
+import { Route as AuthConfirmRouteImport } from './routes/auth.confirm'
+import { Route as InviteTokenRouteImport } from './routes/invite.$token'
+import { Route as PSlugRouteImport } from './routes/p.$slug'
+import { Route as SubcontractorInviteTokenRouteImport } from './routes/subcontractor-invite.$token'
 import { Route as AppAdminIndexRouteImport } from './routes/_app.admin.index'
-import { Route as ShareWorkflowsTokenRouteImport } from './routes/share.workflows.$token'
-import { Route as ShareWalkthroughsTokenRouteImport } from './routes/share.walkthroughs.$token'
-import { Route as ShareSummariesTokenRouteImport } from './routes/share.summaries.$token'
-import { Route as ShareShowcasesTokenRouteImport } from './routes/share.showcases.$token'
-import { Route as ShareReportsTokenRouteImport } from './routes/share.reports.$token'
-import { Route as ShareProjectsTokenRouteImport } from './routes/share.projects.$token'
-import { Route as SharePhotosTokenRouteImport } from './routes/share.photos.$token'
-import { Route as SharePagesTokenRouteImport } from './routes/share.pages.$token'
-import { Route as ShareChecklistsTokenRouteImport } from './routes/share.checklists.$token'
-import { Route as PSlugShowcaseSlugRouteImport } from './routes/p.$slug_.$showcaseSlug'
-import { Route as EmbedMapKeyRouteImport } from './routes/embed.map.$key'
-import { Route as EmbedGalleryKeyRouteImport } from './routes/embed.gallery.$key'
-import { Route as AppWalkthroughsWalkthroughIdRouteImport } from './routes/_app.walkthroughs.$walkthroughId'
-import { Route as AppSummariesSummaryIdRouteImport } from './routes/_app.summaries.$summaryId'
-import { Route as AppShowcasesShowcaseIdRouteImport } from './routes/_app.showcases_.$showcaseId'
-import { Route as AppSettingsWorkflowsRouteImport } from './routes/_app.settings.workflows'
-import { Route as AppSettingsChecklistsRouteImport } from './routes/_app.settings.checklists'
-import { Route as AppProjectsTrashRouteImport } from './routes/_app.projects.trash'
-import { Route as AppProjectsNewRouteImport } from './routes/_app.projects.new'
-import { Route as AppProjectsProjectIdRouteImport } from './routes/_app.projects.$projectId'
-import { Route as AppGroupsGroupIdRouteImport } from './routes/_app.groups.$groupId'
-import { Route as AppAdminUsersRouteImport } from './routes/_app.admin.users'
-import { Route as AppAdminUsageRouteImport } from './routes/_app.admin.usage'
-import { Route as AppAdminTeamsRouteImport } from './routes/_app.admin.teams'
-import { Route as AppAdminSecurityRouteImport } from './routes/_app.admin.security'
-import { Route as AppAdminNotificationsRouteImport } from './routes/_app.admin.notifications'
-import { Route as AppAdminHealthRouteImport } from './routes/_app.admin.health'
-import { Route as AppAdminFeedbackRouteImport } from './routes/_app.admin.feedback'
 import { Route as AppAdminAuditLogRouteImport } from './routes/_app.admin.audit-log'
-import { Route as AppAdminUsersUserIdRouteImport } from './routes/_app.admin.users_.$userId'
+import { Route as AppAdminFeedbackRouteImport } from './routes/_app.admin.feedback'
+import { Route as AppAdminHealthRouteImport } from './routes/_app.admin.health'
+import { Route as AppAdminNotificationsRouteImport } from './routes/_app.admin.notifications'
+import { Route as AppAdminSecurityRouteImport } from './routes/_app.admin.security'
+import { Route as AppAdminTeamsRouteImport } from './routes/_app.admin.teams'
+import { Route as AppAdminUsageRouteImport } from './routes/_app.admin.usage'
+import { Route as AppAdminUsersRouteImport } from './routes/_app.admin.users'
+import { Route as AppGroupsGroupIdRouteImport } from './routes/_app.groups.$groupId'
+import { Route as AppProjectsIndexRouteImport } from './routes/_app.projects.index'
+import { Route as AppProjectsProjectIdRouteImport } from './routes/_app.projects.$projectId'
+import { Route as AppProjectsNewRouteImport } from './routes/_app.projects.new'
+import { Route as AppProjectsTrashRouteImport } from './routes/_app.projects.trash'
+import { Route as AppSettingsIndexRouteImport } from './routes/_app.settings.index'
+import { Route as AppSettingsChecklistsRouteImport } from './routes/_app.settings.checklists'
+import { Route as AppSettingsWorkflowsRouteImport } from './routes/_app.settings.workflows'
+import { Route as AppShowcasesShowcaseIdRouteImport } from './routes/_app.showcases_.$showcaseId'
+import { Route as AppSummariesSummaryIdRouteImport } from './routes/_app.summaries.$summaryId'
+import { Route as AppWalkthroughsWalkthroughIdRouteImport } from './routes/_app.walkthroughs.$walkthroughId'
+import { Route as EmbedGalleryKeyRouteImport } from './routes/embed.gallery.$key'
+import { Route as EmbedMapKeyRouteImport } from './routes/embed.map.$key'
+import { Route as PSlugShowcaseSlugRouteImport } from './routes/p.$slug_.$showcaseSlug'
+import { Route as ShareChecklistsTokenRouteImport } from './routes/share.checklists.$token'
+import { Route as SharePagesTokenRouteImport } from './routes/share.pages.$token'
+import { Route as SharePhotosTokenRouteImport } from './routes/share.photos.$token'
+import { Route as ShareProjectsTokenRouteImport } from './routes/share.projects.$token'
+import { Route as ShareReportsTokenRouteImport } from './routes/share.reports.$token'
+import { Route as ShareShowcasesTokenRouteImport } from './routes/share.showcases.$token'
+import { Route as ShareSummariesTokenRouteImport } from './routes/share.summaries.$token'
+import { Route as ShareWalkthroughsTokenRouteImport } from './routes/share.walkthroughs.$token'
+import { Route as ShareWorkflowsTokenRouteImport } from './routes/share.workflows.$token'
 import { Route as AppAdminTeamsTeamIdRouteImport } from './routes/_app.admin.teams_.$teamId'
-import { Route as AppProjectsProjectIdWorkflowsWorkflowIdRouteImport } from './routes/_app.projects.$projectId_.workflows.$workflowId'
-import { Route as AppProjectsProjectIdReportsReportIdRouteImport } from './routes/_app.projects.$projectId_.reports.$reportId'
-import { Route as AppProjectsProjectIdPagesPageIdRouteImport } from './routes/_app.projects.$projectId_.pages.$pageId'
+import { Route as AppAdminUsersUserIdRouteImport } from './routes/_app.admin.users_.$userId'
 import { Route as AppProjectsProjectIdChecklistsChecklistIdRouteImport } from './routes/_app.projects.$projectId_.checklists.$checklistId'
+import { Route as AppProjectsProjectIdPagesPageIdRouteImport } from './routes/_app.projects.$projectId_.pages.$pageId'
+import { Route as AppProjectsProjectIdReportsReportIdRouteImport } from './routes/_app.projects.$projectId_.reports.$reportId'
+import { Route as AppProjectsProjectIdWorkflowsWorkflowIdRouteImport } from './routes/_app.projects.$projectId_.workflows.$workflowId'
 
-const TermsOfServiceRoute = TermsOfServiceRouteImport.update({
-  id: '/terms-of-service',
-  path: '/terms-of-service',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
-  id: '/sitemap.xml',
-  path: '/sitemap.xml',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SignupRoute = SignupRouteImport.update({
-  id: '/signup',
-  path: '/signup',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ResetPasswordRoute = ResetPasswordRouteImport.update({
-  id: '/reset-password',
-  path: '/reset-password',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PrivacyPolicyRoute = PrivacyPolicyRouteImport.update({
-  id: '/privacy-policy',
-  path: '/privacy-policy',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PricingRoute = PricingRouteImport.update({
-  id: '/pricing',
-  path: '/pricing',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LoginRoute = LoginRouteImport.update({
-  id: '/login',
-  path: '/login',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const HowItWorksRoute = HowItWorksRouteImport.update({
-  id: '/how-it-works',
-  path: '/how-it-works',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const FeaturesRoute = FeaturesRouteImport.update({
-  id: '/features',
-  path: '/features',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const FaqRoute = FaqRouteImport.update({
-  id: '/faq',
-  path: '/faq',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const EmbedDotjsRoute = EmbedDotjsRouteImport.update({
-  id: '/embed.js',
-  path: '/embed.js',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DemoRoute = DemoRouteImport.update({
-  id: '/demo',
-  path: '/demo',
+const AppRoute = AppRouteImport.update({
+  id: '/_app',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ContactRoute = ContactRouteImport.update({
@@ -145,13 +94,144 @@ const ContactRoute = ContactRouteImport.update({
   path: '/contact',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AppRoute = AppRouteImport.update({
-  id: '/_app',
+const DemoRoute = DemoRouteImport.update({
+  id: '/demo',
+  path: '/demo',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const EmbedDotjsRoute = EmbedDotjsRouteImport.update({
+  id: '/embed.js',
+  path: '/embed.js',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FaqRoute = FaqRouteImport.update({
+  id: '/faq',
+  path: '/faq',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FeaturesRoute = FeaturesRouteImport.update({
+  id: '/features',
+  path: '/features',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HowItWorksRoute = HowItWorksRouteImport.update({
+  id: '/how-it-works',
+  path: '/how-it-works',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PricingRoute = PricingRouteImport.update({
+  id: '/pricing',
+  path: '/pricing',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyPolicyRoute = PrivacyPolicyRouteImport.update({
+  id: '/privacy-policy',
+  path: '/privacy-policy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignupRoute = SignupRouteImport.update({
+  id: '/signup',
+  path: '/signup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
+  id: '/sitemap.xml',
+  path: '/sitemap.xml',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TermsOfServiceRoute = TermsOfServiceRouteImport.update({
+  id: '/terms-of-service',
+  path: '/terms-of-service',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppAdminRoute = AppAdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppCollaboratorsRoute = AppCollaboratorsRouteImport.update({
+  id: '/collaborators',
+  path: '/collaborators',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDashboardRoute = AppDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppGalleryRoute = AppGalleryRouteImport.update({
+  id: '/gallery',
+  path: '/gallery',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppHelpRoute = AppHelpRouteImport.update({
+  id: '/help',
+  path: '/help',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppMapRoute = AppMapRouteImport.update({
+  id: '/map',
+  path: '/map',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppNotificationsRoute = AppNotificationsRouteImport.update({
+  id: '/notifications',
+  path: '/notifications',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppReportIssueRoute = AppReportIssueRouteImport.update({
+  id: '/report-issue',
+  path: '/report-issue',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppReportsRoute = AppReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppShowcasesRoute = AppShowcasesRouteImport.update({
+  id: '/showcases',
+  path: '/showcases',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppTeamsRoute = AppTeamsRouteImport.update({
+  id: '/teams',
+  path: '/teams',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppTemplatesRoute = AppTemplatesRouteImport.update({
+  id: '/templates',
+  path: '/templates',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppTimelineRoute = AppTimelineRouteImport.update({
+  id: '/timeline',
+  path: '/timeline',
+  getParentRoute: () => AppRoute,
+} as any)
+const AuthConfirmRoute = AuthConfirmRouteImport.update({
+  id: '/auth/confirm',
+  path: '/auth/confirm',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InviteTokenRoute = InviteTokenRouteImport.update({
+  id: '/invite/$token',
+  path: '/invite/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PSlugRoute = PSlugRouteImport.update({
+  id: '/p/$slug',
+  path: '/p/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SubcontractorInviteTokenRoute =
@@ -160,240 +240,9 @@ const SubcontractorInviteTokenRoute =
     path: '/subcontractor-invite/$token',
     getParentRoute: () => rootRouteImport,
   } as any)
-const PSlugRoute = PSlugRouteImport.update({
-  id: '/p/$slug',
-  path: '/p/$slug',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const InviteTokenRoute = InviteTokenRouteImport.update({
-  id: '/invite/$token',
-  path: '/invite/$token',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AuthConfirmRoute = AuthConfirmRouteImport.update({
-  id: '/auth/confirm',
-  path: '/auth/confirm',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AppTimelineRoute = AppTimelineRouteImport.update({
-  id: '/timeline',
-  path: '/timeline',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppTemplatesRoute = AppTemplatesRouteImport.update({
-  id: '/templates',
-  path: '/templates',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppTeamsRoute = AppTeamsRouteImport.update({
-  id: '/teams',
-  path: '/teams',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppShowcasesRoute = AppShowcasesRouteImport.update({
-  id: '/showcases',
-  path: '/showcases',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppReportsRoute = AppReportsRouteImport.update({
-  id: '/reports',
-  path: '/reports',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppReportIssueRoute = AppReportIssueRouteImport.update({
-  id: '/report-issue',
-  path: '/report-issue',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppNotificationsRoute = AppNotificationsRouteImport.update({
-  id: '/notifications',
-  path: '/notifications',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppMapRoute = AppMapRouteImport.update({
-  id: '/map',
-  path: '/map',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppHelpRoute = AppHelpRouteImport.update({
-  id: '/help',
-  path: '/help',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppGalleryRoute = AppGalleryRouteImport.update({
-  id: '/gallery',
-  path: '/gallery',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppDashboardRoute = AppDashboardRouteImport.update({
-  id: '/dashboard',
-  path: '/dashboard',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppCollaboratorsRoute = AppCollaboratorsRouteImport.update({
-  id: '/collaborators',
-  path: '/collaborators',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppAdminRoute = AppAdminRouteImport.update({
-  id: '/admin',
-  path: '/admin',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppSettingsIndexRoute = AppSettingsIndexRouteImport.update({
-  id: '/settings/',
-  path: '/settings/',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppProjectsIndexRoute = AppProjectsIndexRouteImport.update({
-  id: '/projects/',
-  path: '/projects/',
-  getParentRoute: () => AppRoute,
-} as any)
 const AppAdminIndexRoute = AppAdminIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => AppAdminRoute,
-} as any)
-const ShareWorkflowsTokenRoute = ShareWorkflowsTokenRouteImport.update({
-  id: '/share/workflows/$token',
-  path: '/share/workflows/$token',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ShareWalkthroughsTokenRoute = ShareWalkthroughsTokenRouteImport.update({
-  id: '/share/walkthroughs/$token',
-  path: '/share/walkthroughs/$token',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ShareSummariesTokenRoute = ShareSummariesTokenRouteImport.update({
-  id: '/share/summaries/$token',
-  path: '/share/summaries/$token',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ShareShowcasesTokenRoute = ShareShowcasesTokenRouteImport.update({
-  id: '/share/showcases/$token',
-  path: '/share/showcases/$token',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ShareReportsTokenRoute = ShareReportsTokenRouteImport.update({
-  id: '/share/reports/$token',
-  path: '/share/reports/$token',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ShareProjectsTokenRoute = ShareProjectsTokenRouteImport.update({
-  id: '/share/projects/$token',
-  path: '/share/projects/$token',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SharePhotosTokenRoute = SharePhotosTokenRouteImport.update({
-  id: '/share/photos/$token',
-  path: '/share/photos/$token',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SharePagesTokenRoute = SharePagesTokenRouteImport.update({
-  id: '/share/pages/$token',
-  path: '/share/pages/$token',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ShareChecklistsTokenRoute = ShareChecklistsTokenRouteImport.update({
-  id: '/share/checklists/$token',
-  path: '/share/checklists/$token',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PSlugShowcaseSlugRoute = PSlugShowcaseSlugRouteImport.update({
-  id: '/p/$slug_/$showcaseSlug',
-  path: '/p/$slug/$showcaseSlug',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const EmbedMapKeyRoute = EmbedMapKeyRouteImport.update({
-  id: '/embed/map/$key',
-  path: '/embed/map/$key',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const EmbedGalleryKeyRoute = EmbedGalleryKeyRouteImport.update({
-  id: '/embed/gallery/$key',
-  path: '/embed/gallery/$key',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AppWalkthroughsWalkthroughIdRoute =
-  AppWalkthroughsWalkthroughIdRouteImport.update({
-    id: '/walkthroughs/$walkthroughId',
-    path: '/walkthroughs/$walkthroughId',
-    getParentRoute: () => AppRoute,
-  } as any)
-const AppSummariesSummaryIdRoute = AppSummariesSummaryIdRouteImport.update({
-  id: '/summaries/$summaryId',
-  path: '/summaries/$summaryId',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppShowcasesShowcaseIdRoute = AppShowcasesShowcaseIdRouteImport.update({
-  id: '/showcases_/$showcaseId',
-  path: '/showcases/$showcaseId',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppSettingsWorkflowsRoute = AppSettingsWorkflowsRouteImport.update({
-  id: '/settings/workflows',
-  path: '/settings/workflows',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppSettingsChecklistsRoute = AppSettingsChecklistsRouteImport.update({
-  id: '/settings/checklists',
-  path: '/settings/checklists',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppProjectsTrashRoute = AppProjectsTrashRouteImport.update({
-  id: '/projects/trash',
-  path: '/projects/trash',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppProjectsNewRoute = AppProjectsNewRouteImport.update({
-  id: '/projects/new',
-  path: '/projects/new',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppProjectsProjectIdRoute = AppProjectsProjectIdRouteImport.update({
-  id: '/projects/$projectId',
-  path: '/projects/$projectId',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppGroupsGroupIdRoute = AppGroupsGroupIdRouteImport.update({
-  id: '/groups/$groupId',
-  path: '/groups/$groupId',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppAdminUsersRoute = AppAdminUsersRouteImport.update({
-  id: '/users',
-  path: '/users',
-  getParentRoute: () => AppAdminRoute,
-} as any)
-const AppAdminUsageRoute = AppAdminUsageRouteImport.update({
-  id: '/usage',
-  path: '/usage',
-  getParentRoute: () => AppAdminRoute,
-} as any)
-const AppAdminTeamsRoute = AppAdminTeamsRouteImport.update({
-  id: '/teams',
-  path: '/teams',
-  getParentRoute: () => AppAdminRoute,
-} as any)
-const AppAdminSecurityRoute = AppAdminSecurityRouteImport.update({
-  id: '/security',
-  path: '/security',
-  getParentRoute: () => AppAdminRoute,
-} as any)
-const AppAdminNotificationsRoute = AppAdminNotificationsRouteImport.update({
-  id: '/notifications',
-  path: '/notifications',
-  getParentRoute: () => AppAdminRoute,
-} as any)
-const AppAdminHealthRoute = AppAdminHealthRouteImport.update({
-  id: '/health',
-  path: '/health',
-  getParentRoute: () => AppAdminRoute,
-} as any)
-const AppAdminFeedbackRoute = AppAdminFeedbackRouteImport.update({
-  id: '/feedback',
-  path: '/feedback',
   getParentRoute: () => AppAdminRoute,
 } as any)
 const AppAdminAuditLogRoute = AppAdminAuditLogRouteImport.update({
@@ -401,26 +250,171 @@ const AppAdminAuditLogRoute = AppAdminAuditLogRouteImport.update({
   path: '/audit-log',
   getParentRoute: () => AppAdminRoute,
 } as any)
-const AppAdminUsersUserIdRoute = AppAdminUsersUserIdRouteImport.update({
-  id: '/users_/$userId',
-  path: '/users/$userId',
+const AppAdminFeedbackRoute = AppAdminFeedbackRouteImport.update({
+  id: '/feedback',
+  path: '/feedback',
   getParentRoute: () => AppAdminRoute,
+} as any)
+const AppAdminHealthRoute = AppAdminHealthRouteImport.update({
+  id: '/health',
+  path: '/health',
+  getParentRoute: () => AppAdminRoute,
+} as any)
+const AppAdminNotificationsRoute = AppAdminNotificationsRouteImport.update({
+  id: '/notifications',
+  path: '/notifications',
+  getParentRoute: () => AppAdminRoute,
+} as any)
+const AppAdminSecurityRoute = AppAdminSecurityRouteImport.update({
+  id: '/security',
+  path: '/security',
+  getParentRoute: () => AppAdminRoute,
+} as any)
+const AppAdminTeamsRoute = AppAdminTeamsRouteImport.update({
+  id: '/teams',
+  path: '/teams',
+  getParentRoute: () => AppAdminRoute,
+} as any)
+const AppAdminUsageRoute = AppAdminUsageRouteImport.update({
+  id: '/usage',
+  path: '/usage',
+  getParentRoute: () => AppAdminRoute,
+} as any)
+const AppAdminUsersRoute = AppAdminUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => AppAdminRoute,
+} as any)
+const AppGroupsGroupIdRoute = AppGroupsGroupIdRouteImport.update({
+  id: '/groups/$groupId',
+  path: '/groups/$groupId',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppProjectsIndexRoute = AppProjectsIndexRouteImport.update({
+  id: '/projects/',
+  path: '/projects/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppProjectsProjectIdRoute = AppProjectsProjectIdRouteImport.update({
+  id: '/projects/$projectId',
+  path: '/projects/$projectId',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppProjectsNewRoute = AppProjectsNewRouteImport.update({
+  id: '/projects/new',
+  path: '/projects/new',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppProjectsTrashRoute = AppProjectsTrashRouteImport.update({
+  id: '/projects/trash',
+  path: '/projects/trash',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSettingsIndexRoute = AppSettingsIndexRouteImport.update({
+  id: '/settings/',
+  path: '/settings/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSettingsChecklistsRoute = AppSettingsChecklistsRouteImport.update({
+  id: '/settings/checklists',
+  path: '/settings/checklists',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSettingsWorkflowsRoute = AppSettingsWorkflowsRouteImport.update({
+  id: '/settings/workflows',
+  path: '/settings/workflows',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppShowcasesShowcaseIdRoute = AppShowcasesShowcaseIdRouteImport.update({
+  id: '/showcases_/$showcaseId',
+  path: '/showcases/$showcaseId',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSummariesSummaryIdRoute = AppSummariesSummaryIdRouteImport.update({
+  id: '/summaries/$summaryId',
+  path: '/summaries/$summaryId',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppWalkthroughsWalkthroughIdRoute =
+  AppWalkthroughsWalkthroughIdRouteImport.update({
+    id: '/walkthroughs/$walkthroughId',
+    path: '/walkthroughs/$walkthroughId',
+    getParentRoute: () => AppRoute,
+  } as any)
+const EmbedGalleryKeyRoute = EmbedGalleryKeyRouteImport.update({
+  id: '/embed/gallery/$key',
+  path: '/embed/gallery/$key',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EmbedMapKeyRoute = EmbedMapKeyRouteImport.update({
+  id: '/embed/map/$key',
+  path: '/embed/map/$key',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PSlugShowcaseSlugRoute = PSlugShowcaseSlugRouteImport.update({
+  id: '/p/$slug_/$showcaseSlug',
+  path: '/p/$slug/$showcaseSlug',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ShareChecklistsTokenRoute = ShareChecklistsTokenRouteImport.update({
+  id: '/share/checklists/$token',
+  path: '/share/checklists/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SharePagesTokenRoute = SharePagesTokenRouteImport.update({
+  id: '/share/pages/$token',
+  path: '/share/pages/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SharePhotosTokenRoute = SharePhotosTokenRouteImport.update({
+  id: '/share/photos/$token',
+  path: '/share/photos/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ShareProjectsTokenRoute = ShareProjectsTokenRouteImport.update({
+  id: '/share/projects/$token',
+  path: '/share/projects/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ShareReportsTokenRoute = ShareReportsTokenRouteImport.update({
+  id: '/share/reports/$token',
+  path: '/share/reports/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ShareShowcasesTokenRoute = ShareShowcasesTokenRouteImport.update({
+  id: '/share/showcases/$token',
+  path: '/share/showcases/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ShareSummariesTokenRoute = ShareSummariesTokenRouteImport.update({
+  id: '/share/summaries/$token',
+  path: '/share/summaries/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ShareWalkthroughsTokenRoute = ShareWalkthroughsTokenRouteImport.update({
+  id: '/share/walkthroughs/$token',
+  path: '/share/walkthroughs/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ShareWorkflowsTokenRoute = ShareWorkflowsTokenRouteImport.update({
+  id: '/share/workflows/$token',
+  path: '/share/workflows/$token',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AppAdminTeamsTeamIdRoute = AppAdminTeamsTeamIdRouteImport.update({
   id: '/teams_/$teamId',
   path: '/teams/$teamId',
   getParentRoute: () => AppAdminRoute,
 } as any)
-const AppProjectsProjectIdWorkflowsWorkflowIdRoute =
-  AppProjectsProjectIdWorkflowsWorkflowIdRouteImport.update({
-    id: '/projects/$projectId_/workflows/$workflowId',
-    path: '/projects/$projectId/workflows/$workflowId',
-    getParentRoute: () => AppRoute,
-  } as any)
-const AppProjectsProjectIdReportsReportIdRoute =
-  AppProjectsProjectIdReportsReportIdRouteImport.update({
-    id: '/projects/$projectId_/reports/$reportId',
-    path: '/projects/$projectId/reports/$reportId',
+const AppAdminUsersUserIdRoute = AppAdminUsersUserIdRouteImport.update({
+  id: '/users_/$userId',
+  path: '/users/$userId',
+  getParentRoute: () => AppAdminRoute,
+} as any)
+const AppProjectsProjectIdChecklistsChecklistIdRoute =
+  AppProjectsProjectIdChecklistsChecklistIdRouteImport.update({
+    id: '/projects/$projectId_/checklists/$checklistId',
+    path: '/projects/$projectId/checklists/$checklistId',
     getParentRoute: () => AppRoute,
   } as any)
 const AppProjectsProjectIdPagesPageIdRoute =
@@ -429,10 +423,16 @@ const AppProjectsProjectIdPagesPageIdRoute =
     path: '/projects/$projectId/pages/$pageId',
     getParentRoute: () => AppRoute,
   } as any)
-const AppProjectsProjectIdChecklistsChecklistIdRoute =
-  AppProjectsProjectIdChecklistsChecklistIdRouteImport.update({
-    id: '/projects/$projectId_/checklists/$checklistId',
-    path: '/projects/$projectId/checklists/$checklistId',
+const AppProjectsProjectIdReportsReportIdRoute =
+  AppProjectsProjectIdReportsReportIdRouteImport.update({
+    id: '/projects/$projectId_/reports/$reportId',
+    path: '/projects/$projectId/reports/$reportId',
+    getParentRoute: () => AppRoute,
+  } as any)
+const AppProjectsProjectIdWorkflowsWorkflowIdRoute =
+  AppProjectsProjectIdWorkflowsWorkflowIdRouteImport.update({
+    id: '/projects/$projectId_/workflows/$workflowId',
+    path: '/projects/$projectId/workflows/$workflowId',
     getParentRoute: () => AppRoute,
   } as any)
 
@@ -902,95 +902,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/terms-of-service': {
-      id: '/terms-of-service'
-      path: '/terms-of-service'
-      fullPath: '/terms-of-service'
-      preLoaderRoute: typeof TermsOfServiceRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/sitemap.xml': {
-      id: '/sitemap.xml'
-      path: '/sitemap.xml'
-      fullPath: '/sitemap.xml'
-      preLoaderRoute: typeof SitemapDotxmlRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/signup': {
-      id: '/signup'
-      path: '/signup'
-      fullPath: '/signup'
-      preLoaderRoute: typeof SignupRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/reset-password': {
-      id: '/reset-password'
-      path: '/reset-password'
-      fullPath: '/reset-password'
-      preLoaderRoute: typeof ResetPasswordRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/privacy-policy': {
-      id: '/privacy-policy'
-      path: '/privacy-policy'
-      fullPath: '/privacy-policy'
-      preLoaderRoute: typeof PrivacyPolicyRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/pricing': {
-      id: '/pricing'
-      path: '/pricing'
-      fullPath: '/pricing'
-      preLoaderRoute: typeof PricingRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/how-it-works': {
-      id: '/how-it-works'
-      path: '/how-it-works'
-      fullPath: '/how-it-works'
-      preLoaderRoute: typeof HowItWorksRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/features': {
-      id: '/features'
-      path: '/features'
-      fullPath: '/features'
-      preLoaderRoute: typeof FeaturesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/faq': {
-      id: '/faq'
-      path: '/faq'
-      fullPath: '/faq'
-      preLoaderRoute: typeof FaqRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/embed.js': {
-      id: '/embed.js'
-      path: '/embed.js'
-      fullPath: '/embed.js'
-      preLoaderRoute: typeof EmbedDotjsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/demo': {
-      id: '/demo'
-      path: '/demo'
-      fullPath: '/demo'
-      preLoaderRoute: typeof DemoRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/contact': {
-      id: '/contact'
-      path: '/contact'
-      fullPath: '/contact'
-      preLoaderRoute: typeof ContactRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app': {
@@ -1000,116 +916,102 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/contact': {
+      id: '/contact'
+      path: '/contact'
+      fullPath: '/contact'
+      preLoaderRoute: typeof ContactRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/subcontractor-invite/$token': {
-      id: '/subcontractor-invite/$token'
-      path: '/subcontractor-invite/$token'
-      fullPath: '/subcontractor-invite/$token'
-      preLoaderRoute: typeof SubcontractorInviteTokenRouteImport
+    '/demo': {
+      id: '/demo'
+      path: '/demo'
+      fullPath: '/demo'
+      preLoaderRoute: typeof DemoRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/p/$slug': {
-      id: '/p/$slug'
-      path: '/p/$slug'
-      fullPath: '/p/$slug'
-      preLoaderRoute: typeof PSlugRouteImport
+    '/embed.js': {
+      id: '/embed.js'
+      path: '/embed.js'
+      fullPath: '/embed.js'
+      preLoaderRoute: typeof EmbedDotjsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/invite/$token': {
-      id: '/invite/$token'
-      path: '/invite/$token'
-      fullPath: '/invite/$token'
-      preLoaderRoute: typeof InviteTokenRouteImport
+    '/faq': {
+      id: '/faq'
+      path: '/faq'
+      fullPath: '/faq'
+      preLoaderRoute: typeof FaqRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/auth/confirm': {
-      id: '/auth/confirm'
-      path: '/auth/confirm'
-      fullPath: '/auth/confirm'
-      preLoaderRoute: typeof AuthConfirmRouteImport
+    '/features': {
+      id: '/features'
+      path: '/features'
+      fullPath: '/features'
+      preLoaderRoute: typeof FeaturesRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_app/timeline': {
-      id: '/_app/timeline'
-      path: '/timeline'
-      fullPath: '/timeline'
-      preLoaderRoute: typeof AppTimelineRouteImport
-      parentRoute: typeof AppRoute
+    '/how-it-works': {
+      id: '/how-it-works'
+      path: '/how-it-works'
+      fullPath: '/how-it-works'
+      preLoaderRoute: typeof HowItWorksRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/_app/templates': {
-      id: '/_app/templates'
-      path: '/templates'
-      fullPath: '/templates'
-      preLoaderRoute: typeof AppTemplatesRouteImport
-      parentRoute: typeof AppRoute
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/_app/teams': {
-      id: '/_app/teams'
-      path: '/teams'
-      fullPath: '/teams'
-      preLoaderRoute: typeof AppTeamsRouteImport
-      parentRoute: typeof AppRoute
+    '/pricing': {
+      id: '/pricing'
+      path: '/pricing'
+      fullPath: '/pricing'
+      preLoaderRoute: typeof PricingRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/_app/showcases': {
-      id: '/_app/showcases'
-      path: '/showcases'
-      fullPath: '/showcases'
-      preLoaderRoute: typeof AppShowcasesRouteImport
-      parentRoute: typeof AppRoute
+    '/privacy-policy': {
+      id: '/privacy-policy'
+      path: '/privacy-policy'
+      fullPath: '/privacy-policy'
+      preLoaderRoute: typeof PrivacyPolicyRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/_app/reports': {
-      id: '/_app/reports'
-      path: '/reports'
-      fullPath: '/reports'
-      preLoaderRoute: typeof AppReportsRouteImport
-      parentRoute: typeof AppRoute
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/_app/report-issue': {
-      id: '/_app/report-issue'
-      path: '/report-issue'
-      fullPath: '/report-issue'
-      preLoaderRoute: typeof AppReportIssueRouteImport
-      parentRoute: typeof AppRoute
+    '/signup': {
+      id: '/signup'
+      path: '/signup'
+      fullPath: '/signup'
+      preLoaderRoute: typeof SignupRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/_app/notifications': {
-      id: '/_app/notifications'
-      path: '/notifications'
-      fullPath: '/notifications'
-      preLoaderRoute: typeof AppNotificationsRouteImport
-      parentRoute: typeof AppRoute
+    '/sitemap.xml': {
+      id: '/sitemap.xml'
+      path: '/sitemap.xml'
+      fullPath: '/sitemap.xml'
+      preLoaderRoute: typeof SitemapDotxmlRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/_app/map': {
-      id: '/_app/map'
-      path: '/map'
-      fullPath: '/map'
-      preLoaderRoute: typeof AppMapRouteImport
-      parentRoute: typeof AppRoute
+    '/terms-of-service': {
+      id: '/terms-of-service'
+      path: '/terms-of-service'
+      fullPath: '/terms-of-service'
+      preLoaderRoute: typeof TermsOfServiceRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/_app/help': {
-      id: '/_app/help'
-      path: '/help'
-      fullPath: '/help'
-      preLoaderRoute: typeof AppHelpRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/gallery': {
-      id: '/_app/gallery'
-      path: '/gallery'
-      fullPath: '/gallery'
-      preLoaderRoute: typeof AppGalleryRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/dashboard': {
-      id: '/_app/dashboard'
-      path: '/dashboard'
-      fullPath: '/dashboard'
-      preLoaderRoute: typeof AppDashboardRouteImport
+    '/_app/admin': {
+      id: '/_app/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AppAdminRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/collaborators': {
@@ -1119,228 +1021,116 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppCollaboratorsRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_app/admin': {
-      id: '/_app/admin'
-      path: '/admin'
-      fullPath: '/admin'
-      preLoaderRoute: typeof AppAdminRouteImport
+    '/_app/dashboard': {
+      id: '/_app/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof AppDashboardRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_app/settings/': {
-      id: '/_app/settings/'
-      path: '/settings'
-      fullPath: '/settings/'
-      preLoaderRoute: typeof AppSettingsIndexRouteImport
+    '/_app/gallery': {
+      id: '/_app/gallery'
+      path: '/gallery'
+      fullPath: '/gallery'
+      preLoaderRoute: typeof AppGalleryRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_app/projects/': {
-      id: '/_app/projects/'
-      path: '/projects'
-      fullPath: '/projects/'
-      preLoaderRoute: typeof AppProjectsIndexRouteImport
+    '/_app/help': {
+      id: '/_app/help'
+      path: '/help'
+      fullPath: '/help'
+      preLoaderRoute: typeof AppHelpRouteImport
       parentRoute: typeof AppRoute
+    }
+    '/_app/map': {
+      id: '/_app/map'
+      path: '/map'
+      fullPath: '/map'
+      preLoaderRoute: typeof AppMapRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/notifications': {
+      id: '/_app/notifications'
+      path: '/notifications'
+      fullPath: '/notifications'
+      preLoaderRoute: typeof AppNotificationsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/report-issue': {
+      id: '/_app/report-issue'
+      path: '/report-issue'
+      fullPath: '/report-issue'
+      preLoaderRoute: typeof AppReportIssueRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/reports': {
+      id: '/_app/reports'
+      path: '/reports'
+      fullPath: '/reports'
+      preLoaderRoute: typeof AppReportsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/showcases': {
+      id: '/_app/showcases'
+      path: '/showcases'
+      fullPath: '/showcases'
+      preLoaderRoute: typeof AppShowcasesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/teams': {
+      id: '/_app/teams'
+      path: '/teams'
+      fullPath: '/teams'
+      preLoaderRoute: typeof AppTeamsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/templates': {
+      id: '/_app/templates'
+      path: '/templates'
+      fullPath: '/templates'
+      preLoaderRoute: typeof AppTemplatesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/timeline': {
+      id: '/_app/timeline'
+      path: '/timeline'
+      fullPath: '/timeline'
+      preLoaderRoute: typeof AppTimelineRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/auth/confirm': {
+      id: '/auth/confirm'
+      path: '/auth/confirm'
+      fullPath: '/auth/confirm'
+      preLoaderRoute: typeof AuthConfirmRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/invite/$token': {
+      id: '/invite/$token'
+      path: '/invite/$token'
+      fullPath: '/invite/$token'
+      preLoaderRoute: typeof InviteTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/p/$slug': {
+      id: '/p/$slug'
+      path: '/p/$slug'
+      fullPath: '/p/$slug'
+      preLoaderRoute: typeof PSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/subcontractor-invite/$token': {
+      id: '/subcontractor-invite/$token'
+      path: '/subcontractor-invite/$token'
+      fullPath: '/subcontractor-invite/$token'
+      preLoaderRoute: typeof SubcontractorInviteTokenRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_app/admin/': {
       id: '/_app/admin/'
       path: '/'
       fullPath: '/admin/'
       preLoaderRoute: typeof AppAdminIndexRouteImport
-      parentRoute: typeof AppAdminRoute
-    }
-    '/share/workflows/$token': {
-      id: '/share/workflows/$token'
-      path: '/share/workflows/$token'
-      fullPath: '/share/workflows/$token'
-      preLoaderRoute: typeof ShareWorkflowsTokenRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/share/walkthroughs/$token': {
-      id: '/share/walkthroughs/$token'
-      path: '/share/walkthroughs/$token'
-      fullPath: '/share/walkthroughs/$token'
-      preLoaderRoute: typeof ShareWalkthroughsTokenRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/share/summaries/$token': {
-      id: '/share/summaries/$token'
-      path: '/share/summaries/$token'
-      fullPath: '/share/summaries/$token'
-      preLoaderRoute: typeof ShareSummariesTokenRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/share/showcases/$token': {
-      id: '/share/showcases/$token'
-      path: '/share/showcases/$token'
-      fullPath: '/share/showcases/$token'
-      preLoaderRoute: typeof ShareShowcasesTokenRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/share/reports/$token': {
-      id: '/share/reports/$token'
-      path: '/share/reports/$token'
-      fullPath: '/share/reports/$token'
-      preLoaderRoute: typeof ShareReportsTokenRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/share/projects/$token': {
-      id: '/share/projects/$token'
-      path: '/share/projects/$token'
-      fullPath: '/share/projects/$token'
-      preLoaderRoute: typeof ShareProjectsTokenRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/share/photos/$token': {
-      id: '/share/photos/$token'
-      path: '/share/photos/$token'
-      fullPath: '/share/photos/$token'
-      preLoaderRoute: typeof SharePhotosTokenRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/share/pages/$token': {
-      id: '/share/pages/$token'
-      path: '/share/pages/$token'
-      fullPath: '/share/pages/$token'
-      preLoaderRoute: typeof SharePagesTokenRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/share/checklists/$token': {
-      id: '/share/checklists/$token'
-      path: '/share/checklists/$token'
-      fullPath: '/share/checklists/$token'
-      preLoaderRoute: typeof ShareChecklistsTokenRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/p/$slug_/$showcaseSlug': {
-      id: '/p/$slug_/$showcaseSlug'
-      path: '/p/$slug/$showcaseSlug'
-      fullPath: '/p/$slug/$showcaseSlug'
-      preLoaderRoute: typeof PSlugShowcaseSlugRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/embed/map/$key': {
-      id: '/embed/map/$key'
-      path: '/embed/map/$key'
-      fullPath: '/embed/map/$key'
-      preLoaderRoute: typeof EmbedMapKeyRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/embed/gallery/$key': {
-      id: '/embed/gallery/$key'
-      path: '/embed/gallery/$key'
-      fullPath: '/embed/gallery/$key'
-      preLoaderRoute: typeof EmbedGalleryKeyRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_app/walkthroughs/$walkthroughId': {
-      id: '/_app/walkthroughs/$walkthroughId'
-      path: '/walkthroughs/$walkthroughId'
-      fullPath: '/walkthroughs/$walkthroughId'
-      preLoaderRoute: typeof AppWalkthroughsWalkthroughIdRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/summaries/$summaryId': {
-      id: '/_app/summaries/$summaryId'
-      path: '/summaries/$summaryId'
-      fullPath: '/summaries/$summaryId'
-      preLoaderRoute: typeof AppSummariesSummaryIdRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/showcases_/$showcaseId': {
-      id: '/_app/showcases_/$showcaseId'
-      path: '/showcases/$showcaseId'
-      fullPath: '/showcases/$showcaseId'
-      preLoaderRoute: typeof AppShowcasesShowcaseIdRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/settings/workflows': {
-      id: '/_app/settings/workflows'
-      path: '/settings/workflows'
-      fullPath: '/settings/workflows'
-      preLoaderRoute: typeof AppSettingsWorkflowsRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/settings/checklists': {
-      id: '/_app/settings/checklists'
-      path: '/settings/checklists'
-      fullPath: '/settings/checklists'
-      preLoaderRoute: typeof AppSettingsChecklistsRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/projects/trash': {
-      id: '/_app/projects/trash'
-      path: '/projects/trash'
-      fullPath: '/projects/trash'
-      preLoaderRoute: typeof AppProjectsTrashRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/projects/new': {
-      id: '/_app/projects/new'
-      path: '/projects/new'
-      fullPath: '/projects/new'
-      preLoaderRoute: typeof AppProjectsNewRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/projects/$projectId': {
-      id: '/_app/projects/$projectId'
-      path: '/projects/$projectId'
-      fullPath: '/projects/$projectId'
-      preLoaderRoute: typeof AppProjectsProjectIdRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/groups/$groupId': {
-      id: '/_app/groups/$groupId'
-      path: '/groups/$groupId'
-      fullPath: '/groups/$groupId'
-      preLoaderRoute: typeof AppGroupsGroupIdRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/admin/users': {
-      id: '/_app/admin/users'
-      path: '/users'
-      fullPath: '/admin/users'
-      preLoaderRoute: typeof AppAdminUsersRouteImport
-      parentRoute: typeof AppAdminRoute
-    }
-    '/_app/admin/usage': {
-      id: '/_app/admin/usage'
-      path: '/usage'
-      fullPath: '/admin/usage'
-      preLoaderRoute: typeof AppAdminUsageRouteImport
-      parentRoute: typeof AppAdminRoute
-    }
-    '/_app/admin/teams': {
-      id: '/_app/admin/teams'
-      path: '/teams'
-      fullPath: '/admin/teams'
-      preLoaderRoute: typeof AppAdminTeamsRouteImport
-      parentRoute: typeof AppAdminRoute
-    }
-    '/_app/admin/security': {
-      id: '/_app/admin/security'
-      path: '/security'
-      fullPath: '/admin/security'
-      preLoaderRoute: typeof AppAdminSecurityRouteImport
-      parentRoute: typeof AppAdminRoute
-    }
-    '/_app/admin/notifications': {
-      id: '/_app/admin/notifications'
-      path: '/notifications'
-      fullPath: '/admin/notifications'
-      preLoaderRoute: typeof AppAdminNotificationsRouteImport
-      parentRoute: typeof AppAdminRoute
-    }
-    '/_app/admin/health': {
-      id: '/_app/admin/health'
-      path: '/health'
-      fullPath: '/admin/health'
-      preLoaderRoute: typeof AppAdminHealthRouteImport
-      parentRoute: typeof AppAdminRoute
-    }
-    '/_app/admin/feedback': {
-      id: '/_app/admin/feedback'
-      path: '/feedback'
-      fullPath: '/admin/feedback'
-      preLoaderRoute: typeof AppAdminFeedbackRouteImport
       parentRoute: typeof AppAdminRoute
     }
     '/_app/admin/audit-log': {
@@ -1350,12 +1140,215 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAdminAuditLogRouteImport
       parentRoute: typeof AppAdminRoute
     }
-    '/_app/admin/users_/$userId': {
-      id: '/_app/admin/users_/$userId'
-      path: '/users/$userId'
-      fullPath: '/admin/users/$userId'
-      preLoaderRoute: typeof AppAdminUsersUserIdRouteImport
+    '/_app/admin/feedback': {
+      id: '/_app/admin/feedback'
+      path: '/feedback'
+      fullPath: '/admin/feedback'
+      preLoaderRoute: typeof AppAdminFeedbackRouteImport
       parentRoute: typeof AppAdminRoute
+    }
+    '/_app/admin/health': {
+      id: '/_app/admin/health'
+      path: '/health'
+      fullPath: '/admin/health'
+      preLoaderRoute: typeof AppAdminHealthRouteImport
+      parentRoute: typeof AppAdminRoute
+    }
+    '/_app/admin/notifications': {
+      id: '/_app/admin/notifications'
+      path: '/notifications'
+      fullPath: '/admin/notifications'
+      preLoaderRoute: typeof AppAdminNotificationsRouteImport
+      parentRoute: typeof AppAdminRoute
+    }
+    '/_app/admin/security': {
+      id: '/_app/admin/security'
+      path: '/security'
+      fullPath: '/admin/security'
+      preLoaderRoute: typeof AppAdminSecurityRouteImport
+      parentRoute: typeof AppAdminRoute
+    }
+    '/_app/admin/teams': {
+      id: '/_app/admin/teams'
+      path: '/teams'
+      fullPath: '/admin/teams'
+      preLoaderRoute: typeof AppAdminTeamsRouteImport
+      parentRoute: typeof AppAdminRoute
+    }
+    '/_app/admin/usage': {
+      id: '/_app/admin/usage'
+      path: '/usage'
+      fullPath: '/admin/usage'
+      preLoaderRoute: typeof AppAdminUsageRouteImport
+      parentRoute: typeof AppAdminRoute
+    }
+    '/_app/admin/users': {
+      id: '/_app/admin/users'
+      path: '/users'
+      fullPath: '/admin/users'
+      preLoaderRoute: typeof AppAdminUsersRouteImport
+      parentRoute: typeof AppAdminRoute
+    }
+    '/_app/groups/$groupId': {
+      id: '/_app/groups/$groupId'
+      path: '/groups/$groupId'
+      fullPath: '/groups/$groupId'
+      preLoaderRoute: typeof AppGroupsGroupIdRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/projects/': {
+      id: '/_app/projects/'
+      path: '/projects'
+      fullPath: '/projects/'
+      preLoaderRoute: typeof AppProjectsIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/projects/$projectId': {
+      id: '/_app/projects/$projectId'
+      path: '/projects/$projectId'
+      fullPath: '/projects/$projectId'
+      preLoaderRoute: typeof AppProjectsProjectIdRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/projects/new': {
+      id: '/_app/projects/new'
+      path: '/projects/new'
+      fullPath: '/projects/new'
+      preLoaderRoute: typeof AppProjectsNewRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/projects/trash': {
+      id: '/_app/projects/trash'
+      path: '/projects/trash'
+      fullPath: '/projects/trash'
+      preLoaderRoute: typeof AppProjectsTrashRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/settings/': {
+      id: '/_app/settings/'
+      path: '/settings'
+      fullPath: '/settings/'
+      preLoaderRoute: typeof AppSettingsIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/settings/checklists': {
+      id: '/_app/settings/checklists'
+      path: '/settings/checklists'
+      fullPath: '/settings/checklists'
+      preLoaderRoute: typeof AppSettingsChecklistsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/settings/workflows': {
+      id: '/_app/settings/workflows'
+      path: '/settings/workflows'
+      fullPath: '/settings/workflows'
+      preLoaderRoute: typeof AppSettingsWorkflowsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/showcases_/$showcaseId': {
+      id: '/_app/showcases_/$showcaseId'
+      path: '/showcases/$showcaseId'
+      fullPath: '/showcases/$showcaseId'
+      preLoaderRoute: typeof AppShowcasesShowcaseIdRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/summaries/$summaryId': {
+      id: '/_app/summaries/$summaryId'
+      path: '/summaries/$summaryId'
+      fullPath: '/summaries/$summaryId'
+      preLoaderRoute: typeof AppSummariesSummaryIdRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/walkthroughs/$walkthroughId': {
+      id: '/_app/walkthroughs/$walkthroughId'
+      path: '/walkthroughs/$walkthroughId'
+      fullPath: '/walkthroughs/$walkthroughId'
+      preLoaderRoute: typeof AppWalkthroughsWalkthroughIdRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/embed/gallery/$key': {
+      id: '/embed/gallery/$key'
+      path: '/embed/gallery/$key'
+      fullPath: '/embed/gallery/$key'
+      preLoaderRoute: typeof EmbedGalleryKeyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/embed/map/$key': {
+      id: '/embed/map/$key'
+      path: '/embed/map/$key'
+      fullPath: '/embed/map/$key'
+      preLoaderRoute: typeof EmbedMapKeyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/p/$slug_/$showcaseSlug': {
+      id: '/p/$slug_/$showcaseSlug'
+      path: '/p/$slug/$showcaseSlug'
+      fullPath: '/p/$slug/$showcaseSlug'
+      preLoaderRoute: typeof PSlugShowcaseSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/share/checklists/$token': {
+      id: '/share/checklists/$token'
+      path: '/share/checklists/$token'
+      fullPath: '/share/checklists/$token'
+      preLoaderRoute: typeof ShareChecklistsTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/share/pages/$token': {
+      id: '/share/pages/$token'
+      path: '/share/pages/$token'
+      fullPath: '/share/pages/$token'
+      preLoaderRoute: typeof SharePagesTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/share/photos/$token': {
+      id: '/share/photos/$token'
+      path: '/share/photos/$token'
+      fullPath: '/share/photos/$token'
+      preLoaderRoute: typeof SharePhotosTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/share/projects/$token': {
+      id: '/share/projects/$token'
+      path: '/share/projects/$token'
+      fullPath: '/share/projects/$token'
+      preLoaderRoute: typeof ShareProjectsTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/share/reports/$token': {
+      id: '/share/reports/$token'
+      path: '/share/reports/$token'
+      fullPath: '/share/reports/$token'
+      preLoaderRoute: typeof ShareReportsTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/share/showcases/$token': {
+      id: '/share/showcases/$token'
+      path: '/share/showcases/$token'
+      fullPath: '/share/showcases/$token'
+      preLoaderRoute: typeof ShareShowcasesTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/share/summaries/$token': {
+      id: '/share/summaries/$token'
+      path: '/share/summaries/$token'
+      fullPath: '/share/summaries/$token'
+      preLoaderRoute: typeof ShareSummariesTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/share/walkthroughs/$token': {
+      id: '/share/walkthroughs/$token'
+      path: '/share/walkthroughs/$token'
+      fullPath: '/share/walkthroughs/$token'
+      preLoaderRoute: typeof ShareWalkthroughsTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/share/workflows/$token': {
+      id: '/share/workflows/$token'
+      path: '/share/workflows/$token'
+      fullPath: '/share/workflows/$token'
+      preLoaderRoute: typeof ShareWorkflowsTokenRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_app/admin/teams_/$teamId': {
       id: '/_app/admin/teams_/$teamId'
@@ -1364,18 +1357,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAdminTeamsTeamIdRouteImport
       parentRoute: typeof AppAdminRoute
     }
-    '/_app/projects/$projectId_/workflows/$workflowId': {
-      id: '/_app/projects/$projectId_/workflows/$workflowId'
-      path: '/projects/$projectId/workflows/$workflowId'
-      fullPath: '/projects/$projectId/workflows/$workflowId'
-      preLoaderRoute: typeof AppProjectsProjectIdWorkflowsWorkflowIdRouteImport
-      parentRoute: typeof AppRoute
+    '/_app/admin/users_/$userId': {
+      id: '/_app/admin/users_/$userId'
+      path: '/users/$userId'
+      fullPath: '/admin/users/$userId'
+      preLoaderRoute: typeof AppAdminUsersUserIdRouteImport
+      parentRoute: typeof AppAdminRoute
     }
-    '/_app/projects/$projectId_/reports/$reportId': {
-      id: '/_app/projects/$projectId_/reports/$reportId'
-      path: '/projects/$projectId/reports/$reportId'
-      fullPath: '/projects/$projectId/reports/$reportId'
-      preLoaderRoute: typeof AppProjectsProjectIdReportsReportIdRouteImport
+    '/_app/projects/$projectId_/checklists/$checklistId': {
+      id: '/_app/projects/$projectId_/checklists/$checklistId'
+      path: '/projects/$projectId/checklists/$checklistId'
+      fullPath: '/projects/$projectId/checklists/$checklistId'
+      preLoaderRoute: typeof AppProjectsProjectIdChecklistsChecklistIdRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/projects/$projectId_/pages/$pageId': {
@@ -1385,11 +1378,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppProjectsProjectIdPagesPageIdRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_app/projects/$projectId_/checklists/$checklistId': {
-      id: '/_app/projects/$projectId_/checklists/$checklistId'
-      path: '/projects/$projectId/checklists/$checklistId'
-      fullPath: '/projects/$projectId/checklists/$checklistId'
-      preLoaderRoute: typeof AppProjectsProjectIdChecklistsChecklistIdRouteImport
+    '/_app/projects/$projectId_/reports/$reportId': {
+      id: '/_app/projects/$projectId_/reports/$reportId'
+      path: '/projects/$projectId/reports/$reportId'
+      fullPath: '/projects/$projectId/reports/$reportId'
+      preLoaderRoute: typeof AppProjectsProjectIdReportsReportIdRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/projects/$projectId_/workflows/$workflowId': {
+      id: '/_app/projects/$projectId_/workflows/$workflowId'
+      path: '/projects/$projectId/workflows/$workflowId'
+      fullPath: '/projects/$projectId/workflows/$workflowId'
+      preLoaderRoute: typeof AppProjectsProjectIdWorkflowsWorkflowIdRouteImport
       parentRoute: typeof AppRoute
     }
   }
