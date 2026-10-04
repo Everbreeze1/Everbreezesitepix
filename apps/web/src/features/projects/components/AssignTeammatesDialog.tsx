@@ -189,8 +189,8 @@ export function AssignTeammatesDialog({
                   const secondary =
                     role === "restricted"
                       ? checked
-                        ? "Can open this job because it is ticked here"
-                        : "Sees only the jobs ticked for them"
+                        ? "Has access to this job"
+                        : "No access until added to this job"
                       : m.email && m.email !== name
                         ? m.email
                         : "";
@@ -281,9 +281,9 @@ export function AssignTeammatesDialog({
             <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>
               {restrictedSelected === 1
-                ? "One person here is"
-                : `${restrictedSelected} people here are`}{" "}
-              Restricted. Ticking them is what lets them open this job at all.
+                ? "1 Restricted member is selected."
+                : `${restrictedSelected} Restricted members are selected.`}{" "}
+              Restricted members can only see the jobs they are added to.
             </span>
           </p>
         )}
