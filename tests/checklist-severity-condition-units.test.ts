@@ -149,4 +149,17 @@ describe("wiring", () => {
     expect(src).toMatch(/unit: "/);
     expect(src).toMatch(/photo_required: true/);
   });
+
+  it("lets the main Checklists page choose the answer type, unit and photo switch", () => {
+    // The sidebar's Checklists page uses its own editor, which once saved every
+    // item as a plain checkbox, so none of the answer types were reachable there.
+    const src = read("apps/web/src/features/settings/components/ChecklistLibraryContent.tsx");
+    expect(src).toMatch(/TYPE_ORDER\.map/);
+    expect(src).toMatch(/MEASUREMENT_UNITS\.map/);
+    expect(src).toMatch(/photo_required: !item\.photo_required/);
+    expect(src, "new items are still forced to checkbox").not.toMatch(
+      /item_type: "checkbox",\s*\}\);/,
+    );
+    expect(src).toMatch(/ITEM_COLUMNS =[\s\S]*item_type, required, unit, photo_required/);
+  });
 });

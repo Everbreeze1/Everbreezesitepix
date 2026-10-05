@@ -2,7 +2,21 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/everlumen/client";
 import { useAuth } from "@/hooks/use-auth";
+import { Camera, CheckSquare, Ruler } from "lucide-react";
+import { MEASUREMENT_UNITS, normalizeUnit } from "@everlumen/shared";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { RequiredToggle } from "@/components/builder/builder-ui";
+import { usePrompt } from "@/hooks/use-prompt";
+import { TYPE_META, TYPE_ORDER, type ItemType } from "@/lib/checklist-items";
+import { cn } from "@/lib/utils";
 import { STARTER_TEMPLATES } from "./checklist-starters";
 
 /*
@@ -30,6 +44,42 @@ interface ChecklistItem {
   /** Empty for an item that has not been saved yet. */
   id: string;
   label: string;
+  /** How the crew answers it: a tick, Pass/Fail, Severity, a measurement... */
+  item_type: ItemType;
+  required: boolean;
+  /** What a Number item is measured in; null for every other type. */
+  unit: string | null;
+  /** The crew must attach a photo before the checklist can be completed. */
+  photo_required: boolean;
+}
+
+/** The columns `ChecklistItem` is built from, everywhere this page reads items. */
+const ITEM_COLUMNS = "id, template_id, label, position, item_type, required, unit, photo_required";
+
+function toItem(r: any): ChecklistItem {
+  const type = r.item_type as ItemType | null;
+  return {
+    id: r.id as string,
+    label: (r.label as string) ?? "",
+    // An unknown or missing type falls back to a plain tick rather than a
+    // chip with no label.
+    item_type: type && type in TYPE_META ? type : "checkbox",
+    required: !!r.required,
+    unit: r.unit ?? null,
+    photo_required: !!r.photo_required,
+  };
+}
+
+/** Whether anything the editor can change differs from the saved row. */
+function itemChanged(a: ChecklistItem | undefined, b: ChecklistItem): boolean {
+  return (
+    !a ||
+    a.label !== b.label ||
+    a.item_type !== b.item_type ||
+    a.required !== b.required ||
+    a.unit !== b.unit ||
+    a.photo_required !== b.photo_required
+  );
 }
 
 /** "Edited 2 weeks ago" style relative time, matching the mockup's meta line. */
@@ -137,6 +187,7 @@ function ChecklistEditor({
   onName,
   onAdd,
   onRename,
+  onPatch,
   onRemove,
   onBack,
   onSave,
@@ -150,11 +201,13 @@ function ChecklistEditor({
   onName: (name: string) => void;
   onAdd: (label: string) => void;
   onRename: (index: number, label: string) => void;
+  onPatch: (index: number, patch: Partial<ChecklistItem>) => void;
   onRemove: (index: number) => void;
   onBack: () => void;
   onSave: () => void;
 }) {
   const [draft, setDraft] = useState("");
+  const promptFor = usePrompt();
   const nameRef = useRef<HTMLInputElement>(null);
   const [nameMissing, setNameMissing] = useState(false);
   const commitDraft = () => {
@@ -233,36 +286,156 @@ function ChecklistEditor({
       <div className="mb-2.5 text-xs font-semibold uppercase tracking-[0.05em] text-faint">
         Items
       </div>
+      <div className="mb-2 text-[12px] text-faint">
+        Tap the chip on an item to choose how it is answered: a tick, Pass/Fail, Condition, Severity
+        1 to 5, a measurement, and more. The camera marks an item that needs a photo.
+      </div>
       <div className="rounded-xl border border-border bg-card px-[18px] py-0.5">
         {items.length === 0 ? (
           <div className="px-1 py-[11px] text-[13px] italic text-faint">No items yet.</div>
         ) : (
-          items.map((item, index) => (
-            <div
-              key={item.id || `new-${index}`}
-              className="flex items-center gap-3 border-b border-border px-1 py-[11px] last:border-b-0"
-            >
-              <span className="shrink-0 text-faint">
-                <RowsIcon />
-              </span>
-              {/* Template items are definitions, not completed work, so the box
-                  is drawn open rather than claiming a done state. */}
-              <span className="h-[17px] w-[17px] shrink-0 rounded-[5px] border-[1.6px] border-border" />
-              <input
-                value={item.label}
-                onChange={(e) => onRename(index, e.target.value)}
-                aria-label={`Item ${index + 1}`}
-                className="min-w-0 flex-grow bg-transparent text-[13px] text-foreground outline-none"
-              />
-              <button
-                onClick={() => onRemove(index)}
-                className="shrink-0 cursor-pointer text-faint transition-colors hover:text-foreground"
-                aria-label={`Delete "${item.label}"`}
+          items.map((item, index) => {
+            const meta = TYPE_META[item.item_type] ?? TYPE_META.checkbox;
+            const TypeIcon = meta.icon;
+            return (
+              <div
+                key={item.id || `new-${index}`}
+                className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border px-1 py-[11px] last:border-b-0"
               >
-                <XIcon />
-              </button>
-            </div>
-          ))
+                <span className="shrink-0 text-faint">
+                  <RowsIcon />
+                </span>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      title={`${meta.label} - click to change`}
+                      className={cn(
+                        "inline-flex min-h-7 shrink-0 items-center gap-1.5 rounded-lg border px-2 py-1 text-[10.5px] font-extrabold uppercase tracking-wide transition-opacity hover:opacity-80",
+                        meta.tint,
+                      )}
+                    >
+                      <TypeIcon className="h-3.5 w-3.5" />
+                      {meta.short}
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-64">
+                    <DropdownMenuLabel className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+                      How is it answered?
+                    </DropdownMenuLabel>
+                    {TYPE_ORDER.map((t) => {
+                      const m = TYPE_META[t];
+                      const I = m.icon;
+                      return (
+                        <DropdownMenuItem
+                          key={t}
+                          onClick={() =>
+                            onPatch(index, {
+                              item_type: t,
+                              unit: t === "numeric" ? item.unit : null,
+                            })
+                          }
+                        >
+                          <I className="mr-2 h-4 w-4" />
+                          <span className="flex-1">
+                            {m.label}
+                            <span className="block text-[11px] text-muted-foreground">
+                              {m.hint}
+                            </span>
+                          </span>
+                          {item.item_type === t && (
+                            <CheckSquare className="ml-2 h-3.5 w-3.5 text-primary" />
+                          )}
+                        </DropdownMenuItem>
+                      );
+                    })}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <input
+                  value={item.label}
+                  onChange={(e) => onRename(index, e.target.value)}
+                  aria-label={`Item ${index + 1}`}
+                  className="min-w-[8rem] flex-grow basis-40 bg-transparent text-[13px] text-foreground outline-none"
+                />
+                {item.item_type === "numeric" && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        title="Measurement unit"
+                        className="inline-flex min-h-7 shrink-0 items-center gap-1 rounded-lg border border-border px-2 py-0.5 text-[11px] font-semibold text-muted-foreground hover:bg-muted/60"
+                      >
+                        <Ruler className="h-3 w-3" />
+                        {item.unit ?? "Unit"}
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="max-h-72 w-44 overflow-y-auto">
+                      <DropdownMenuLabel className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+                        Measured in
+                      </DropdownMenuLabel>
+                      <DropdownMenuItem onClick={() => onPatch(index, { unit: null })}>
+                        No unit
+                      </DropdownMenuItem>
+                      {MEASUREMENT_UNITS.map((u) => (
+                        <DropdownMenuItem key={u} onClick={() => onPatch(index, { unit: u })}>
+                          <span className="flex-1">{u}</span>
+                          {item.unit === u && (
+                            <CheckSquare className="ml-2 h-3.5 w-3.5 text-primary" />
+                          )}
+                        </DropdownMenuItem>
+                      ))}
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() =>
+                          void promptFor({
+                            title: "Measurement unit",
+                            description: "Shown next to the number, for example ft, sq ft or psi.",
+                            label: "Unit",
+                            defaultValue: item.unit ?? "",
+                            confirmText: "Save unit",
+                          }).then((raw) => {
+                            if (raw !== null) onPatch(index, { unit: normalizeUnit(raw) });
+                          })
+                        }
+                      >
+                        Other…
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+                <button
+                  type="button"
+                  onClick={() => onPatch(index, { photo_required: !item.photo_required })}
+                  aria-pressed={item.photo_required}
+                  title={
+                    item.photo_required
+                      ? "Photo required - click to make it optional"
+                      : "Require a photo"
+                  }
+                  className={cn(
+                    "inline-flex min-h-7 shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide transition-colors",
+                    item.photo_required
+                      ? "border-orange-500/40 bg-orange-500/12 text-orange-700 dark:text-orange-300"
+                      : "border-border text-muted-foreground/70 hover:border-orange-500/40 hover:text-orange-600",
+                  )}
+                >
+                  <Camera className="h-3 w-3" />
+                  Photo
+                </button>
+                <RequiredToggle
+                  required={item.required}
+                  onToggle={(next) => onPatch(index, { required: next })}
+                />
+                <button
+                  onClick={() => onRemove(index)}
+                  className="shrink-0 cursor-pointer text-faint transition-colors hover:text-foreground"
+                  aria-label={`Delete "${item.label}"`}
+                >
+                  <XIcon />
+                </button>
+              </div>
+            );
+          })
         )}
       </div>
 
@@ -344,7 +517,7 @@ export function ChecklistLibraryContent({
         .order("updated_at", { ascending: false }),
       supabase
         .from("checklist_template_items" as any)
-        .select("id, template_id, label, position")
+        .select(ITEM_COLUMNS)
         .order("position", { ascending: true }),
       supabase
         .from("project_template_checklists" as any)
@@ -362,7 +535,7 @@ export function ChecklistLibraryContent({
     for (const it of (itemsRes.data as any[]) ?? []) {
       if (!it.template_id) continue;
       itemCount[it.template_id] = (itemCount[it.template_id] ?? 0) + 1;
-      (items[it.template_id] ??= []).push({ id: it.id, label: it.label ?? "" });
+      (items[it.template_id] ??= []).push(toItem(it));
     }
     const usage: Record<string, string[]> = {};
     for (const u of (usageRes.data as any[]) ?? []) {
@@ -397,7 +570,14 @@ export function ChecklistLibraryContent({
   };
 
   const addItem = (label: string) => {
-    setLocalItems((xs) => [...xs, { id: "", label }]);
+    setLocalItems((xs) => [
+      ...xs,
+      { id: "", label, item_type: "checkbox", required: false, unit: null, photo_required: false },
+    ]);
+  };
+
+  const patchItem = (index: number, patch: Partial<ChecklistItem>) => {
+    setLocalItems((xs) => xs.map((x, i) => (i === index ? { ...x, ...patch } : x)));
   };
 
   const renameItem = (index: number, label: string) => {
@@ -448,23 +628,27 @@ export function ChecklistLibraryContent({
 
       const originalIndex = new Map(original.map((i, index) => [i.id, index]));
       for (const [position, item] of items.entries()) {
-        const label = item.label.trim();
+        const next = { ...item, label: item.label.trim() };
+        const fields = {
+          label: next.label,
+          position,
+          item_type: next.item_type,
+          required: next.required,
+          unit: next.item_type === "numeric" ? normalizeUnit(next.unit) : null,
+          photo_required: next.photo_required,
+        };
         if (!item.id) {
-          const { error } = await supabase.from("checklist_template_items" as any).insert({
-            template_id: templateId,
-            position,
-            label,
-            required: false,
-            item_type: "checkbox",
-          });
+          const { error } = await supabase
+            .from("checklist_template_items" as any)
+            .insert({ template_id: templateId, ...fields });
           if (error) throw error;
         } else if (
-          original[originalIndex.get(item.id) ?? -1]?.label !== label ||
+          itemChanged(original[originalIndex.get(item.id) ?? -1], next) ||
           originalIndex.get(item.id) !== position
         ) {
           const { error } = await supabase
             .from("checklist_template_items" as any)
-            .update({ label, position })
+            .update(fields)
             .eq("id", item.id);
           if (error) throw error;
         }
@@ -522,14 +706,12 @@ export function ChecklistLibraryContent({
             photo_required: !!it.photo_required,
           })),
         )
-        .select("id, label, position");
+        .select(ITEM_COLUMNS);
       if (itemsError) throw itemsError;
       toast.success(`Created “${s.name}”`);
       onStartersOpenChange?.(false);
       await load();
-      const items = ((rows as any[]) ?? [])
-        .sort((a, b) => a.position - b.position)
-        .map((r) => ({ id: r.id as string, label: (r.label as string) ?? "" }));
+      const items = ((rows as any[]) ?? []).sort((a, b) => a.position - b.position).map(toItem);
       setEditing({
         id: templateId,
         name: s.name,
@@ -600,6 +782,7 @@ export function ChecklistLibraryContent({
           onName={setName}
           onAdd={addItem}
           onRename={renameItem}
+          onPatch={patchItem}
           onRemove={removeItem}
           onBack={() => setView("list")}
           onSave={() => void save()}
