@@ -16,6 +16,10 @@ export function friendlyError(e: unknown, fallback: string): string {
   // fallback that used to swallow it (the delete-workflow bug, spec §6).
   if (/only an owner, admin, or manager/i.test(msg))
     return "Only an Owner, Admin, or Manager on Pro or Team can do that";
+  // The workflow stage gates (20261012000000) explain exactly what is missing
+  // ("This stage still needs 2 photos and sign-off."), so pass them through.
+  if (/^(This stage still needs |Finish ".*" first\.|Mark ".*" done before closing)/.test(msg))
+    return msg;
   if (/duplicate key|already exists/i.test(msg)) return "That already exists";
   if (/violates foreign key/i.test(msg))
     return "Something it depends on was removed - refresh and try again";

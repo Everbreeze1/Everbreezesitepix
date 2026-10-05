@@ -87,7 +87,7 @@ export const STARTER_WORKFLOWS: {
         name: "Diagnose",
         items: [
           { kind: "note", label: "Fault found", required: true },
-          { kind: "photo", label: "Failed component" },
+          { kind: "photo", label: "Failed component", required: true },
           { kind: "check", label: "Estimate approved by customer", required: true },
         ],
       },
@@ -159,7 +159,7 @@ export const STARTER_WORKFLOWS: {
         items: [
           { kind: "check", label: "Rough-in inspection booked", required: true },
           { kind: "check", label: "Inspection passed", required: true },
-          { kind: "photo", label: "Inspection notice or sticker" },
+          { kind: "photo", label: "Inspection notice or sticker", required: true },
           { kind: "note", label: "Corrections required" },
         ],
       },
@@ -206,7 +206,7 @@ export const STARTER_WORKFLOWS: {
           { kind: "check", label: "Pressure test held", required: true },
           { kind: "check", label: "System evacuated to spec", required: true },
           { kind: "check", label: "Condensate routed and trapped", required: true },
-          { kind: "photo", label: "Line set and electrical connections" },
+          { kind: "photo", label: "Line set and electrical connections", required: true },
         ],
       },
       {
@@ -262,7 +262,7 @@ export const STARTER_WORKFLOWS: {
           { kind: "check", label: "Fixtures set level and sealed", required: true },
           { kind: "check", label: "Shut-offs fitted and operating", required: true },
           { kind: "check", label: "Traps and tailpieces correct", required: true },
-          { kind: "photo", label: "Each fixture installed" },
+          { kind: "photo", label: "Each fixture installed", required: true },
         ],
       },
       {
@@ -505,7 +505,7 @@ export const STARTER_WORKFLOWS: {
           { kind: "check", label: "Edging and paths set out", required: true },
           { kind: "check", label: "Bases compacted", required: true },
           { kind: "check", label: "Surfaces laid and jointed", required: true },
-          { kind: "photo", label: "Hard landscaping complete" },
+          { kind: "photo", label: "Hard landscaping complete", required: true },
         ],
       },
       {

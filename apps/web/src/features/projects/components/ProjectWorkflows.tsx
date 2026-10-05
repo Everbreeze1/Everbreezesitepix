@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { photoObjectPaths } from "@everlumen/shared";
+import {
+  describeMissing,
+  isStagedRun,
+  isStepDone,
+  stageViews,
+  photoObjectPaths,
+  type StageView,
+} from "@everlumen/shared";
 import { uploadPhotoThumbnail } from "@/lib/photo-thumbnails";
 import {
   Workflow as WorkflowIcon,
@@ -21,6 +28,9 @@ import {
   Upload,
   Undo2,
   UserCircle2,
+  Lock,
+  Unlock,
+  ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -153,6 +163,13 @@ export interface Phase {
   signed_off_by: string | null;
   signed_off_at: string | null;
   signoff_name: string | null;
+  /**
+   * When the stage was marked done (20261012000000). Optional as well as
+   * nullable: walkthrough runs and older reads may not carry it.
+   */
+  completed_at?: string | null;
+  /** A manager opened this stage before the ones ahead of it. */
+  unlocked_at?: string | null;
 }
 export interface Item {
   id: string;
@@ -165,6 +182,8 @@ export interface Item {
   completed_by: string | null;
   photo_id: string | null;
   note_text: string | null;
+  /** The linked project checklist, for a `checklist` step. */
+  checklist_id?: string | null;
 }
 /** Enough of a photo row to render a thumbnail that can re-sign itself. */
 interface PhotoRef {
@@ -182,10 +201,9 @@ export const TABLES = {
 
 /* ------------------------------------------------------------ completeness */
 
+/** Same rule as the database and the app - see packages/shared/src/workflow-stages.ts. */
 function isItemComplete(it: Item): boolean {
-  if (it.kind === "photo") return !!it.photo_id;
-  if (it.kind === "note") return !!it.note_text?.trim();
-  return !!it.completed_at;
+  return isStepDone(it);
 }
 
 interface PhaseState {
@@ -196,8 +214,13 @@ interface PhaseState {
   signedOk: boolean;
   /** Something mandatory is outstanding - the phase cannot be closed. */
   blocked: boolean;
-  /** Nothing left to do here at all. */
+  /** Nothing left to do here at all. On a staged run: marked done. */
   complete: boolean;
+  /**
+   * Order, lock and what is missing, for a staged run (every workflow that is
+   * not a walkthrough). Null on a walkthrough, which is a shot list.
+   */
+  stage: StageView<Phase> | null;
 }
 
 /**
@@ -228,6 +251,7 @@ function phaseState(ph: Phase, its: Item[]): PhaseState {
     signedOk,
     blocked,
     complete: !blocked && done === its.length,
+    stage: null,
   };
 }
 
@@ -268,13 +292,33 @@ export function workflowState(wf: Workflow, allPhases: Phase[], allItems: Item[]
   }
   for (const bucket of itemsByPhase.values()) bucket.sort((a, b) => a.position - b.position);
 
+  /*
+   * A staged run (every workflow but a walkthrough) is done stage by stage: a
+   * stage is complete when someone marked it done, the stages open in order,
+   * and the run closes only once every stage is done. The database enforces
+   * the same rules (20261012000000), so the buttons here only ever offer what
+   * it will accept.
+   */
+  const staged = isStagedRun(wf.source_kind);
+  const views = staged ? stageViews(phases, (id) => itemsByPhase.get(id) ?? []) : [];
+  const viewById = new Map(views.map((v) => [v.phase.id, v]));
+
   const stateByPhase = new Map<string, PhaseState>();
-  for (const ph of phases) stateByPhase.set(ph.id, phaseState(ph, itemsByPhase.get(ph.id) ?? []));
+  for (const ph of phases) {
+    const base = phaseState(ph, itemsByPhase.get(ph.id) ?? []);
+    const stage = viewById.get(ph.id) ?? null;
+    stateByPhase.set(
+      ph.id,
+      stage ? { ...base, complete: stage.done, blocked: !stage.done, stage } : base,
+    );
+  }
 
   const required = items.filter((i) => i.required);
   const signoffPhases = phases.filter((p) => p.requires_signoff);
   const activePhaseId = phases.find((p) => !stateByPhase.get(p.id)!.complete)?.id ?? null;
-  const canComplete = phases.length > 0 && phases.every((p) => !stateByPhase.get(p.id)!.blocked);
+  const canComplete = staged
+    ? phases.length > 0 && views.every((v) => v.done)
+    : phases.length > 0 && phases.every((p) => !stateByPhase.get(p.id)!.blocked);
   const isComplete = !!wf.completed_at;
   const done = items.filter(isItemComplete).length;
 
@@ -484,7 +528,7 @@ export function ProjectWorkflows({
         const phRes = await supabase
           .from(TABLES.phases as any)
           .select(
-            "id, workflow_id, position, name, description, requires_signoff, notes, signed_off_by, signed_off_at, signoff_name",
+            "id, workflow_id, position, name, description, requires_signoff, notes, signed_off_by, signed_off_at, signoff_name, completed_at, unlocked_at",
           )
           .in(
             "workflow_id",
@@ -505,7 +549,7 @@ export function ProjectWorkflows({
         const itRes = await supabase
           .from(TABLES.items as any)
           .select(
-            "id, phase_id, position, kind, label, required, completed_at, completed_by, photo_id, note_text",
+            "id, phase_id, position, kind, label, required, completed_at, completed_by, photo_id, note_text, checklist_id",
           )
           .in(
             "phase_id",
@@ -765,7 +809,7 @@ export function ProjectWorkflows({
       const { data: titems, error: titErr } = tphList.length
         ? await supabase
             .from("workflow_template_items" as any)
-            .select("phase_id, position, kind, label, required")
+            .select("phase_id, position, kind, label, required, checklist_template_id")
             .in(
               "phase_id",
               tphList.map((p) => p.id),
@@ -779,6 +823,7 @@ export function ProjectWorkflows({
         kind: ItemKind;
         label: string;
         required: boolean;
+        checklist_template_id: string | null;
       }[];
 
       const { data: wf, error: wfErr } = await supabase
@@ -829,6 +874,9 @@ export function ProjectWorkflows({
               kind: it.kind,
               label: it.label,
               required: it.required,
+              // The database makes the project checklist from this and links it
+              // (20261012000000, attach_workflow_step_checklist).
+              checklist_template_id: it.checklist_template_id ?? null,
             }));
         });
         if (rows.length) {
@@ -1028,6 +1076,49 @@ export function ProjectWorkflows({
         .eq("id", ph.id),
     );
     if (!ok) setPhases((prev) => prev.map((x) => (x.id === ph.id ? before : x)));
+  };
+
+  /**
+   * Mark a stage done. The database checks the same things the button does
+   * (required steps, sign-off, the stage before it) and says what is missing
+   * if it refuses, which the save queue's error toast passes through.
+   */
+  const markStageDone = async (ph: Phase, done: boolean) => {
+    const patch = done
+      ? { completed_at: new Date().toISOString(), completed_by: user?.id ?? null }
+      : { completed_at: null, completed_by: null };
+    const before = ph;
+    setPhases((prev) => prev.map((x) => (x.id === ph.id ? { ...x, ...patch } : x)));
+    const ok = await save.runImmediate(() =>
+      supabase
+        .from(TABLES.phases as any)
+        .update(patch)
+        .eq("id", ph.id),
+    );
+    if (!ok) {
+      setPhases((prev) => prev.map((x) => (x.id === ph.id ? before : x)));
+      return;
+    }
+    toast.success(done ? `${ph.name} done` : `${ph.name} reopened`);
+    onChanged?.();
+  };
+
+  /** A manager opens a stage before the ones ahead of it are finished. */
+  const unlockStage = async (ph: Phase) => {
+    const patch = { unlocked_at: new Date().toISOString(), unlocked_by: user?.id ?? null };
+    const before = ph;
+    setPhases((prev) => prev.map((x) => (x.id === ph.id ? { ...x, ...patch } : x)));
+    const ok = await save.runImmediate(() =>
+      supabase
+        .from(TABLES.phases as any)
+        .update(patch)
+        .eq("id", ph.id),
+    );
+    if (!ok) {
+      setPhases((prev) => prev.map((x) => (x.id === ph.id ? before : x)));
+      return;
+    }
+    toast.success(`${ph.name} unlocked`);
   };
 
   /*
@@ -1322,6 +1413,8 @@ export function ProjectWorkflows({
           onDetachPhoto={detachPhoto}
           onSignOff={signOff}
           onRevokeSignoff={revokeSignoff}
+          onMarkStageDone={(ph, done) => void markStageDone(ph, done)}
+          onUnlockStage={canAuthor ? (ph) => void unlockStage(ph) : undefined}
           onSetComplete={(c) => void setWorkflowComplete(open, c)}
           members={members}
           rights={workflowRights(open)}
@@ -1479,6 +1572,8 @@ function WorkflowRunner({
   onDetachPhoto,
   onSignOff,
   onRevokeSignoff,
+  onMarkStageDone,
+  onUnlockStage,
   onSetComplete,
   members,
   rights,
@@ -1505,6 +1600,9 @@ function WorkflowRunner({
   onDetachPhoto: (it: Item) => void;
   onSignOff: (ph: Phase, name: string) => Promise<boolean>;
   onRevokeSignoff: (ph: Phase) => void;
+  onMarkStageDone: (ph: Phase, done: boolean) => void;
+  /** Present only for people who may open a stage early. */
+  onUnlockStage?: (ph: Phase) => void;
   onSetComplete: (complete: boolean) => void;
   onDelete: () => void;
   onNotesChange: (html: string) => void;
@@ -1710,6 +1808,15 @@ function WorkflowRunner({
                 Completed {new Date(workflow.completed_at!).toLocaleDateString()} - reopen it to
                 make changes.
               </div>
+            ) : !state.canComplete && isStagedRun(workflow.source_kind) ? (
+              <div className="mt-2.5 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11.5px] font-semibold text-amber-700 dark:text-amber-300">
+                {(() => {
+                  const open = state.phases.find((p) => !state.stateByPhase.get(p.id)!.complete);
+                  return open
+                    ? `Mark “${open.name}” done to keep the job moving. The workflow closes once every stage is done.`
+                    : "Add a stage to this workflow before closing it.";
+                })()}
+              </div>
             ) : !state.canComplete && state.requiredDone < state.requiredTotal ? (
               <div className="mt-2.5 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11.5px] font-semibold text-amber-700 dark:text-amber-300">
                 {state.requiredTotal - state.requiredDone} required step
@@ -1788,7 +1895,9 @@ function WorkflowRunner({
                   items={state.itemsByPhase.get(ph.id) ?? []}
                   phaseState={state.stateByPhase.get(ph.id)!}
                   isActive={ph.id === state.activePhaseId}
-                  locked={state.isComplete}
+                  locked={state.isComplete || !!state.stateByPhase.get(ph.id)!.stage?.locked}
+                  workflowClosed={state.isComplete}
+                  projectId={workflow.project_id}
                   photos={photos}
                   open={openPhases.includes(ph.id)}
                   onOpenChange={(next) =>
@@ -1803,6 +1912,8 @@ function WorkflowRunner({
                   onDetachPhoto={onDetachPhoto}
                   onSignOff={onSignOff}
                   onRevokeSignoff={onRevokeSignoff}
+                  onMarkStageDone={onMarkStageDone}
+                  onUnlockStage={onUnlockStage}
                 />
               ))}
             </div>
@@ -1822,6 +1933,8 @@ function PhaseCard({
   phaseState: st,
   isActive,
   locked,
+  workflowClosed,
+  projectId,
   photos,
   open,
   onOpenChange,
@@ -1832,14 +1945,21 @@ function PhaseCard({
   onDetachPhoto,
   onSignOff,
   onRevokeSignoff,
+  onMarkStageDone,
+  onUnlockStage,
 }: {
   index: number;
   phase: Phase;
   items: Item[];
   phaseState: PhaseState;
   isActive: boolean;
-  /** The whole workflow is closed - nothing here should invite an edit. */
+  /**
+   * Nothing here should invite an edit: the workflow is closed, or this stage
+   * is waiting on an earlier one.
+   */
   locked: boolean;
+  workflowClosed: boolean;
+  projectId: string;
   photos: Record<string, PhotoRef>;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -1850,7 +1970,10 @@ function PhaseCard({
   onDetachPhoto: (it: Item) => void;
   onSignOff: (ph: Phase, name: string) => Promise<boolean>;
   onRevokeSignoff: (ph: Phase) => void;
+  onMarkStageDone: (ph: Phase, done: boolean) => void;
+  onUnlockStage?: (ph: Phase) => void;
 }) {
+  const stage = st.stage;
   const [signOpen, setSignOpen] = useState(false);
   const [signName, setSignName] = useState("");
   const [signing, setSigning] = useState(false);
@@ -1904,6 +2027,12 @@ function PhaseCard({
         <span className="min-w-0 flex-1">
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="text-sm font-bold text-foreground">{phase.name}</span>
+            {stage?.done && <RunnerStatusPill tone="complete">Done</RunnerStatusPill>}
+            {stage?.locked && (
+              <RunnerStatusPill tone="idle" icon={Lock}>
+                Locked
+              </RunnerStatusPill>
+            )}
             {isActive && !st.complete && <RunnerStatusPill tone="active">Now</RunnerStatusPill>}
             {requiredLeft > 0 && (
               <RunnerStatusPill tone="blocked">{requiredLeft} required left</RunnerStatusPill>
@@ -1955,6 +2084,25 @@ function PhaseCard({
 
       {open && (
         <div id={panelId} className="space-y-2 border-t border-border/70 px-2.5 py-2.5 sm:px-3">
+          {stage?.locked && !workflowClosed && (
+            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-muted/50 px-3 py-2.5">
+              <Lock className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 text-xs font-semibold text-muted-foreground">
+                Finish “{stage.waitingOn}” first. This stage opens when it&apos;s done.
+              </span>
+              {onUnlockStage && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="min-h-9"
+                  onClick={() => onUnlockStage(phase)}
+                >
+                  <Unlock className="mr-1.5 h-3.5 w-3.5" />
+                  Unlock early
+                </Button>
+              )}
+            </div>
+          )}
           {items.length === 0 ? (
             <p className="rounded-xl border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
               No steps in this phase - it's a marker, nothing to tick off.
@@ -1963,6 +2111,8 @@ function PhaseCard({
             items.map((it) =>
               it.kind === "check" ? (
                 <CheckStep key={it.id} item={it} locked={locked} onToggle={onToggleItem} />
+              ) : it.kind === "checklist" ? (
+                <ChecklistStep key={it.id} item={it} projectId={projectId} />
               ) : it.kind === "photo" ? (
                 <PhotoStep
                   key={it.id}
@@ -2055,6 +2205,10 @@ function PhaseCard({
               )}
             </div>
           )}
+
+          {stage && !workflowClosed && (
+            <StageDoneBar phase={phase} stage={stage} onMarkStageDone={onMarkStageDone} />
+          )}
         </div>
       )}
 
@@ -2101,6 +2255,71 @@ function PhaseCard({
   );
 }
 
+/**
+ * The stage's own finish line: "Mark stage done", or why it can't be yet.
+ *
+ * Kept on screen while something is missing (rather than hidden) so the crew
+ * can read what the stage is still waiting for, in the same words the
+ * database uses if it refuses.
+ */
+function StageDoneBar({
+  phase,
+  stage,
+  onMarkStageDone,
+}: {
+  phase: Phase;
+  stage: StageView<Phase>;
+  onMarkStageDone: (ph: Phase, done: boolean) => void;
+}) {
+  if (stage.done) {
+    return (
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/[0.07] px-3 py-2.5">
+        <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+        <span className="min-w-0 flex-1 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+          Stage done
+          {phase.completed_at ? ` ${new Date(phase.completed_at).toLocaleDateString()}` : ""}
+        </span>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="min-h-9 text-xs"
+          onClick={() => onMarkStageDone(phase, false)}
+        >
+          <Undo2 className="mr-1.5 h-3.5 w-3.5" />
+          Reopen stage
+        </Button>
+      </div>
+    );
+  }
+  const missing = describeMissing(stage.missing);
+  const hint = stage.locked
+    ? `Finish “${stage.waitingOn}” first.`
+    : missing
+      ? `${missing.charAt(0).toUpperCase()}${missing.slice(1)} left.`
+      : "Everything required is in.";
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-muted/25 px-3 py-2.5">
+      <span
+        className={cn(
+          "min-w-0 flex-1 text-xs font-semibold",
+          stage.canMarkDone ? "text-foreground" : "text-amber-700 dark:text-amber-300",
+        )}
+      >
+        {hint}
+      </span>
+      <Button
+        size="sm"
+        className="min-h-10"
+        disabled={!stage.canMarkDone}
+        onClick={() => onMarkStageDone(phase, true)}
+      >
+        <CheckCircle2 className="mr-1.5 h-4 w-4" />
+        Mark stage done
+      </Button>
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------ steps */
 
 const STEP_ROW = "rounded-xl border border-border bg-background/60 transition-colors";
@@ -2110,6 +2329,63 @@ function RequiredChip() {
     <span className="shrink-0 rounded-full border border-amber-500/40 bg-amber-500/12 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-amber-700 dark:text-amber-300">
       Required
     </span>
+  );
+}
+
+/**
+ * A linked checklist. The crew finishes it on its own page; the step follows
+ * it (the database copies the checklist's completion onto the step), so there
+ * is nothing to tick here.
+ */
+function ChecklistStep({ item, projectId }: { item: Item; projectId: string }) {
+  const Icon = KIND_META.checklist.icon;
+  const done = isItemComplete(item);
+  const body = (
+    <>
+      <Icon
+        className={cn(
+          "h-4 w-4 shrink-0",
+          done ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground",
+        )}
+      />
+      <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">
+        <span className="block text-sm font-medium text-foreground">{item.label}</span>
+        <span className="block text-[11.5px] text-muted-foreground">
+          {!item.checklist_id
+            ? "Checklist was removed"
+            : done
+              ? "Checklist complete"
+              : "Open the checklist and complete it"}
+        </span>
+      </span>
+      {item.required && !done && <RequiredChip />}
+      {done ? (
+        <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
+      ) : (
+        item.checklist_id && <ExternalLink className="h-4 w-4 shrink-0 text-muted-foreground" />
+      )}
+    </>
+  );
+  const rowClass = cn(
+    STEP_ROW,
+    "flex min-h-12 w-full items-center gap-3 px-3 py-2.5 text-left",
+    done && "bg-emerald-500/[0.05]",
+  );
+  // Opens even on a locked stage: reading the checklist is harmless, and the
+  // checklist page applies its own rules to editing.
+  return item.checklist_id ? (
+    <Link
+      to="/projects/$projectId/checklists/$checklistId"
+      params={{ projectId, checklistId: item.checklist_id }}
+      className={cn(
+        rowClass,
+        "hover:border-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
+      )}
+    >
+      {body}
+    </Link>
+  ) : (
+    <div className={rowClass}>{body}</div>
   );
 }
 

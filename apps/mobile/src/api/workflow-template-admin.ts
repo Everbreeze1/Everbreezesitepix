@@ -20,7 +20,7 @@ import { asPositionedPhase } from "./workflow-template-edit";
  */
 
 const PHASE_FIELDS = "id, template_id, position, name, description, requires_signoff";
-const ITEM_FIELDS = "id, phase_id, position, kind, label, required";
+const ITEM_FIELDS = "id, phase_id, position, kind, label, required, checklist_template_id";
 
 export async function listPhases(templateId: string): Promise<WorkflowPhase[]> {
   const { data, error } = await supabase
@@ -101,6 +101,8 @@ export async function createItem(args: {
   kind: WorkflowItemKind;
   required: boolean;
   position: number;
+  /** The library checklist a `checklist` step links. */
+  checklistTemplateId?: string | null;
 }): Promise<WorkflowTemplateItem> {
   const { data, error } = await supabase
     .from("workflow_template_items")
@@ -110,6 +112,7 @@ export async function createItem(args: {
       kind: args.kind,
       required: args.required,
       position: args.position,
+      checklist_template_id: args.kind === "checklist" ? (args.checklistTemplateId ?? null) : null,
     } as never)
     .select(ITEM_FIELDS)
     .single();
@@ -119,7 +122,12 @@ export async function createItem(args: {
 
 export async function updateItem(
   id: string,
-  patch: { label?: string; kind?: WorkflowItemKind; required?: boolean },
+  patch: {
+    label?: string;
+    kind?: WorkflowItemKind;
+    required?: boolean;
+    checklist_template_id?: string | null;
+  },
 ): Promise<void> {
   const { error } = await supabase
     .from("workflow_template_items")
@@ -249,6 +257,7 @@ export async function duplicateWorkflowTemplate(source: WorkflowTemplateRow): Pr
         kind: step.kind as WorkflowItemKind,
         required: step.required,
         position: i,
+        checklistTemplateId: step.checklist_template_id ?? null,
       });
     }
   }

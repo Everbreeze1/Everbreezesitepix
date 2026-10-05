@@ -88,6 +88,11 @@ import { AssignTeammatesDialog } from "@/features/projects/components/AssignTeam
 import { ProjectCrew } from "@/features/projects/components/ProjectCrew";
 import { WorkspaceSchedule } from "@/features/projects/components/WorkspaceSchedule";
 import { useProjectAssignees } from "@/hooks/use-project-assignees";
+import {
+  stageWaitLabel,
+  useProjectWorkflowStages,
+  type ProjectWorkflowStage,
+} from "@/hooks/use-project-workflow-stages";
 import { useWorkspaceSchedule } from "@/hooks/use-workspace-schedule";
 import { attentionCount, type StageLite } from "@/lib/workspace-schedule";
 
@@ -2298,6 +2303,7 @@ function ProjectTableRow({
   coverPath,
   coverThumbPath,
   stage,
+  workflowStage,
   assigned,
   canAssign,
   onAssign,
@@ -2307,6 +2313,8 @@ function ProjectTableRow({
   project: ProjectRow;
   /** The pipeline stage the job stands in, if any. It owns the bucket. */
   stage?: { name: string; boardName: string };
+  /** Where the job's open workflow stands, if it has one. */
+  workflowStage?: ProjectWorkflowStage;
   blueprintName?: string;
   coverUrl?: string;
   coverPath?: string;
@@ -2368,6 +2376,21 @@ function ProjectTableRow({
             {project.name}
           </Link>
           {loc && <span className="block truncate text-[11.5px] text-muted-foreground">{loc}</span>}
+          {workflowStage && (
+            <span
+              className="flex min-w-0 items-center gap-1.5 text-[11.5px] text-muted-foreground"
+              title={`${workflowStage.workflowName}: stage ${workflowStage.number} of ${workflowStage.total}, on it for ${stageWaitLabel(workflowStage.since)}`}
+            >
+              <span className="truncate">
+                Stage {workflowStage.number}/{workflowStage.total} · {workflowStage.stageName}
+              </span>
+              {workflowStage.stuck && (
+                <span className="shrink-0 rounded-full border border-red-500/30 bg-red-500/10 px-1.5 py-px text-[10px] font-bold text-red-700 dark:text-red-300">
+                  Stuck {stageWaitLabel(workflowStage.since)}
+                </span>
+              )}
+            </span>
+          )}
         </span>
       </span>
       {/*
@@ -2437,9 +2460,10 @@ function ProjectsList({
    * is scrolling past the point where a crew stack on card 201 is what anybody
    * is looking for. The cards past the cut simply render without one.
    */
-  const { byProject, canAssign } = useProjectAssignees(
-    useMemo(() => projects.slice(0, 200).map((p) => p.id), [projects]),
-  );
+  const visibleIds = useMemo(() => projects.slice(0, 200).map((p) => p.id), [projects]);
+  const { byProject, canAssign } = useProjectAssignees(visibleIds);
+  /* Which stage each job's workflow is on, and which have sat there too long. */
+  const workflowStages = useProjectWorkflowStages(visibleIds);
   const [assignFor, setAssignFor] = useState<ProjectRow | null>(null);
 
   if (loading) {
@@ -2500,6 +2524,7 @@ function ProjectsList({
               stage={
                 !p.archived && p.pipeline_stage_id ? stageLookup[p.pipeline_stage_id] : undefined
               }
+              workflowStage={p.archived ? undefined : workflowStages[p.id]}
               coverUrl={coverUrls[p.id]}
               coverPath={coverPaths[p.id]}
               coverThumbPath={coverThumbPaths[p.id]}

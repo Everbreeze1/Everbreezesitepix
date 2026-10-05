@@ -1,5 +1,11 @@
 import { supabase } from "@/lib/supabase";
-import { isItemComplete, type WorkflowItemLike, type WorkflowPhaseLike } from "./workflow-state";
+import {
+  isItemComplete,
+  stageDonePatch,
+  stageUnlockPatch,
+  type WorkflowItemLike,
+  type WorkflowPhaseLike,
+} from "./workflow-state";
 
 /**
  * Project workflows: multi-phase job runs with sign-off.
@@ -37,6 +43,8 @@ export type WorkflowPhase = WorkflowPhaseLike & {
   notes: string | null;
   signoff_name: string | null;
   signed_off_by: string | null;
+  completed_at: string | null;
+  unlocked_at: string | null;
   items: WorkflowItem[];
 };
 
@@ -46,6 +54,11 @@ export type WorkflowDetail = {
   project_id: string;
   description: string | null;
   completed_at: string | null;
+  /**
+   * `walkthrough` for a walkthrough run, which shares these tables but is a
+   * shot list: no stage order, no "Mark stage done". Anything else is staged.
+   */
+  source_kind: string | null;
   /** Who holds it and who handed it over: the completion rule reads both. */
   assigned_to: string | null;
   assigned_by: string | null;
@@ -60,9 +73,9 @@ export type WorkflowDetail = {
 };
 
 const PHASE_FIELDS =
-  "id, workflow_id, name, description, position, notes, requires_signoff, signed_off_at, signed_off_by, signoff_name";
+  "id, workflow_id, name, description, position, notes, requires_signoff, signed_off_at, signed_off_by, signoff_name, completed_at, unlocked_at";
 const ITEM_FIELDS =
-  "id, phase_id, kind, label, position, required, completed_at, completed_by, note_text, photo_id";
+  "id, phase_id, kind, label, position, required, completed_at, completed_by, note_text, photo_id, checklist_id";
 
 export async function listProjectWorkflows(projectId: string): Promise<WorkflowSummary[]> {
   const { data, error } = await supabase
@@ -97,7 +110,7 @@ export async function listProjectWorkflows(projectId: string): Promise<WorkflowS
   if (phaseRows.length > 0) {
     const { data: items } = await supabase
       .from("project_workflow_items")
-      .select("phase_id, kind, required, completed_at, note_text, photo_id")
+      .select("phase_id, kind, required, completed_at, note_text, photo_id, checklist_id")
       .in(
         "phase_id",
         phaseRows.map((phase) => phase.id),
@@ -124,7 +137,7 @@ export async function getWorkflow(workflowId: string): Promise<WorkflowDetail | 
   const { data: workflow, error } = await supabase
     .from("project_workflows")
     .select(
-      "id, name, project_id, description, completed_at, assigned_to, assigned_by, share_token, revoked_at",
+      "id, name, project_id, description, completed_at, source_kind, assigned_to, assigned_by, share_token, revoked_at",
     )
     .eq("id", workflowId)
     .maybeSingle();
@@ -231,5 +244,36 @@ export async function completeWorkflow(workflowId: string, completedAt: string):
     .from("project_workflows")
     .update({ completed_at: completedAt } as never)
     .eq("id", workflowId);
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Mark one stage done.
+ *
+ * Not queued, like closing the workflow: the database decides whether the
+ * stage is really finished (every required step and sign-off in, every earlier
+ * stage done or this one unlocked), and when it is not it refuses with the
+ * sentence the crew needs ("This stage still needs 2 photos and sign-off.").
+ * Queued, that refusal would surface later with nothing on screen to explain
+ * it, so this happens now or visibly fails, and the message is passed through.
+ */
+export async function markStageDone(phaseId: string, userId: string | null): Promise<void> {
+  const { error } = await supabase
+    .from("project_workflow_phases")
+    .update(stageDonePatch(userId) as never)
+    .eq("id", phaseId);
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Open a stage before the ones ahead of it are done. An Owner, Admin or
+ * Manager's call; the authoring trigger refuses anybody else with its own
+ * sentence, which is passed through.
+ */
+export async function unlockStage(phaseId: string, userId: string | null): Promise<void> {
+  const { error } = await supabase
+    .from("project_workflow_phases")
+    .update(stageUnlockPatch(userId) as never)
+    .eq("id", phaseId);
   if (error) throw new Error(error.message);
 }

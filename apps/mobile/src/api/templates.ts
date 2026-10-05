@@ -178,11 +178,17 @@ export async function applyWorkflowTemplate(
         }[]
       | null) ?? [];
 
-  let templateItems: { phase_id: string; kind: string; label: string; required: boolean }[] = [];
+  let templateItems: {
+    phase_id: string;
+    kind: string;
+    label: string;
+    required: boolean;
+    checklist_template_id: string | null;
+  }[] = [];
   if (phases.length > 0) {
     const { data, error } = await supabase
       .from("workflow_template_items")
-      .select("phase_id, position, kind, label, required")
+      .select("phase_id, position, kind, label, required, checklist_template_id")
       .in(
         "phase_id",
         phases.map((p) => p.id),
@@ -247,6 +253,9 @@ export async function applyWorkflowTemplate(
             kind: item.kind,
             label: item.label,
             required: item.required,
+            // A checklist step carries its library template; the insert trigger
+            // makes the project checklist from it and links it to the step.
+            checklist_template_id: item.checklist_template_id ?? null,
           }));
       });
 

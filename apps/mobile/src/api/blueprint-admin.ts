@@ -493,7 +493,9 @@ async function resolveWorkflow(name: string, userId: string): Promise<string | n
           position: i,
           kind: it.kind,
           label: it.label,
-          required: !!it.required,
+          // A photo step is the stage's proof, so it is required unless the
+          // starter says otherwise.
+          required: it.kind === "photo" ? it.required !== false : !!it.required,
         })),
       );
       if (items.error) {

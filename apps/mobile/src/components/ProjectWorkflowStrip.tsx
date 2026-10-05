@@ -3,7 +3,7 @@ import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { getProjectWorkflowStrip } from "@/api/workflow-strip";
-import { currentPhaseIndex, phaseState } from "@/api/workflow-state";
+import { currentPhaseIndex, phaseDone, runIsStaged } from "@/api/workflow-state";
 import { spacing, useTheme } from "@/theme";
 import { Text } from "@/ui";
 
@@ -69,7 +69,9 @@ export function ProjectWorkflowStrip({
 
   const entries = workflow.phases.map((phase) => ({ phase, items: phase.items }));
   const doneAll = Boolean(workflow.completed_at);
-  const activeIndex = doneAll ? -1 : currentPhaseIndex(entries);
+  // A stage counts as done once it is marked done, the same as the runner.
+  const staged = runIsStaged(workflow);
+  const activeIndex = doneAll ? -1 : currentPhaseIndex(entries, staged);
   const done = theme.colors.success;
 
   return (
@@ -98,7 +100,7 @@ export function ProjectWorkflowStrip({
           })}
         >
           {entries.map(({ phase, items }, index) => {
-            const complete = doneAll || phaseState(phase, items).complete;
+            const complete = doneAll || phaseDone(phase, items, staged);
             const active = index === activeIndex;
             const last = index === entries.length - 1;
             return (
