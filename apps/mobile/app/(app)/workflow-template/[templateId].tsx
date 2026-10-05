@@ -3,6 +3,7 @@ import { Alert, View } from "react-native";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { moved, nextPosition, ordered, positionChanges, removed } from "@/api/template-edit";
+import { listChecklistTemplates } from "@/api/templates";
 import {
   createItem,
   createPhase,
@@ -15,12 +16,16 @@ import {
   updatePhase,
 } from "@/api/workflow-template-admin";
 import {
+  defaultRequired,
   emptyPhaseIds,
   ITEM_KINDS,
   itemsInPhase,
   normaliseKind,
   phaseNameError,
   phaseSummary,
+  requiredAfterKindChange,
+  stepError,
+  stepLabel,
   templateUsabilityWarning,
   type WorkflowItemKind,
   type WorkflowPhase,
@@ -76,6 +81,7 @@ export default function WorkflowTemplateScreen() {
   const [draftLabel, setDraftLabel] = useState("");
   const [draftKind, setDraftKind] = useState<WorkflowItemKind>("check");
   const [draftRequired, setDraftRequired] = useState(false);
+  const [draftChecklistId, setDraftChecklistId] = useState<string | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
 
@@ -104,6 +110,24 @@ export default function WorkflowTemplateScreen() {
   const items = useMemo(() => itemsQuery.data ?? [], [itemsQuery.data]);
   const empties = useMemo(() => new Set(emptyPhaseIds(phases, items)), [phases, items]);
   const warning = templateUsabilityWarning(phases.length, items.length);
+
+  /*
+   * The checklist library, for `checklist` steps: the same list the project
+   * screen offers when starting a checklist, archived ones left out. Read once
+   * any step links one or the step sheet is open, not on every visit.
+   */
+  const checklistsQuery = useQuery({
+    queryKey: ["checklist-templates"],
+    queryFn: listChecklistTemplates,
+    enabled: itemSheet !== null || items.some((item) => item.kind === "checklist"),
+    staleTime: 5 * 60 * 1000,
+  });
+  const checklistTemplates = useMemo(() => checklistsQuery.data ?? [], [checklistsQuery.data]);
+  const checklistName = useCallback(
+    (id: string | null | undefined) =>
+      id ? (checklistTemplates.find((t) => t.id === id)?.name ?? null) : null,
+    [checklistTemplates],
+  );
 
   const run = useMutation({
     mutationFn: async (work: () => Promise<unknown>) => work(),
@@ -191,9 +215,11 @@ export default function WorkflowTemplateScreen() {
   }, [phaseSheet, draftName, draftDescription, phases, templateId, run]);
 
   const saveItem = useCallback(() => {
-    const label = draftLabel.trim();
-    if (!label) {
-      setNameError("Give the step a label.");
+    const checklistId = draftKind === "checklist" ? draftChecklistId : null;
+    const label = stepLabel(draftLabel, draftKind, checklistName(checklistId));
+    const error = stepError(label, draftKind, checklistId);
+    if (error) {
+      setNameError(error);
       return;
     }
     const target = itemSheet;
@@ -202,7 +228,12 @@ export default function WorkflowTemplateScreen() {
 
     if (target.item) {
       run.mutate(() =>
-        updateItem(target.item!.id, { label, kind: draftKind, required: draftRequired }),
+        updateItem(target.item!.id, {
+          label,
+          kind: draftKind,
+          required: draftRequired,
+          checklist_template_id: checklistId,
+        }),
       );
     } else {
       run.mutate(() =>
@@ -212,10 +243,20 @@ export default function WorkflowTemplateScreen() {
           kind: draftKind,
           required: draftRequired,
           position: nextPosition(itemsInPhase(items, target.phaseId)),
+          checklistTemplateId: checklistId,
         }),
       );
     }
-  }, [itemSheet, draftLabel, draftKind, draftRequired, items, run]);
+  }, [
+    itemSheet,
+    draftLabel,
+    draftKind,
+    draftRequired,
+    draftChecklistId,
+    checklistName,
+    items,
+    run,
+  ]);
 
   // Named because the header calls it; the list no longer has its own copy.
   const startNewPhase = useCallback(() => {
@@ -404,6 +445,12 @@ export default function WorkflowTemplateScreen() {
                                   ITEM_KINDS.find(
                                     (kind) => kind.id === normaliseKind(templateItem.kind),
                                   )?.label,
+                                  templateItem.kind === "checklist"
+                                    ? (checklistName(templateItem.checklist_template_id) ??
+                                      (templateItem.checklist_template_id
+                                        ? null
+                                        : "No checklist picked"))
+                                    : null,
                                   templateItem.required ? "Required" : null,
                                 ]
                                   .filter(Boolean)
@@ -445,6 +492,7 @@ export default function WorkflowTemplateScreen() {
                                   setDraftLabel(templateItem.label);
                                   setDraftKind(normaliseKind(templateItem.kind));
                                   setDraftRequired(templateItem.required);
+                                  setDraftChecklistId(templateItem.checklist_template_id ?? null);
                                   setNameError(null);
                                   setItemSheet({ phaseId: phase.id, item: templateItem });
                                 }}
@@ -470,7 +518,8 @@ export default function WorkflowTemplateScreen() {
                           onPress={() => {
                             setDraftLabel("");
                             setDraftKind("check");
-                            setDraftRequired(false);
+                            setDraftRequired(defaultRequired("check"));
+                            setDraftChecklistId(null);
                             setNameError(null);
                             setItemSheet({ phaseId: phase.id, item: null });
                           }}
@@ -562,7 +611,11 @@ export default function WorkflowTemplateScreen() {
               setDraftLabel(next);
               if (nameError) setNameError(null);
             }}
-            placeholder="Photograph the consumer unit"
+            placeholder={
+              draftKind === "checklist"
+                ? (checklistName(draftChecklistId) ?? "Uses the checklist's name")
+                : "Photograph the consumer unit"
+            }
             error={nameError ?? undefined}
             autoCapitalize="sentences"
           />
@@ -579,12 +632,54 @@ export default function WorkflowTemplateScreen() {
                     title={kind.label}
                     subtitle={kind.hint}
                     value={draftKind === kind.id ? "Chosen" : undefined}
-                    onPress={() => setDraftKind(kind.id)}
+                    onPress={() => {
+                      setDraftRequired((current) =>
+                        requiredAfterKindChange(draftKind, kind.id, current),
+                      );
+                      setDraftKind(kind.id);
+                      if (nameError) setNameError(null);
+                    }}
                   />
                 </View>
               ))}
             </ListGroup>
           </View>
+
+          {draftKind === "checklist" ? (
+            <View style={{ gap: spacing.sm }}>
+              <Text variant="caption" tone="muted">
+                Which checklist
+              </Text>
+              {/*
+                Starting the workflow on a job makes this checklist on the
+                project and links it to the step; the step is done when the
+                checklist is completed.
+              */}
+              {checklistsQuery.isLoading ? (
+                <SkeletonList rows={2} />
+              ) : checklistTemplates.length === 0 ? (
+                <Text variant="caption" tone="muted">
+                  No checklist templates yet. Make one under Templates first.
+                </Text>
+              ) : (
+                <ListGroup>
+                  {checklistTemplates.map((template, index) => (
+                    <View key={template.id}>
+                      {index > 0 ? <RowDivider inset={false} /> : null}
+                      <ListRow
+                        title={template.name}
+                        value={draftChecklistId === template.id ? "Chosen" : undefined}
+                        onPress={() => {
+                          setDraftChecklistId(template.id);
+                          if (nameError) setNameError(null);
+                        }}
+                      />
+                    </View>
+                  ))}
+                </ListGroup>
+              )}
+            </View>
+          ) : null}
 
           <ListGroup>
             <ListRow

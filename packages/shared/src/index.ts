@@ -191,3 +191,21 @@ export {
 } from "./photo-comment-errors";
 export { readsAsDatabaseInternals, readableErrorMessage } from "./db-internals";
 export { titleWithinProject } from "./title-within-project";
+export {
+  STUCK_AFTER_HOURS,
+  describeMissing,
+  isStagedRun,
+  isStepDone,
+  isStuck,
+  missingCount,
+  runStage,
+  stageMissing,
+  stageStartedAt,
+  stageViews,
+  type RunStage,
+  type StageMissing,
+  type StagePhase,
+  type StageStep,
+  type StageView,
+  type WorkflowStepKind,
+} from "./workflow-stages";

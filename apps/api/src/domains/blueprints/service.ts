@@ -480,7 +480,7 @@ export async function applyProjectBlueprintService(
             // `kind` is NOT NULL with no default on project_workflow_items, so
             // omitting it here rejected every row - a blueprint containing a
             // workflow produced phases with no steps at all.
-            .select("label, position, required, kind")
+            .select("label, position, required, kind, checklist_template_id")
             .eq("phase_id", p.id)
             .order("position", { ascending: true });
           const rows = ((pItems as any[]) ?? []).map((x: any) => ({
@@ -489,6 +489,9 @@ export async function applyProjectBlueprintService(
             position: x.position,
             required: !!x.required,
             kind: x.kind ?? "check",
+            // The database makes and links the project checklist from this
+            // (20261012000000, attach_workflow_step_checklist).
+            checklist_template_id: x.checklist_template_id ?? null,
           }));
           if (rows.length) {
             const { error: itemsErr } = await supabaseAdmin

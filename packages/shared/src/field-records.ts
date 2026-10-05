@@ -21,7 +21,7 @@ export type ChecklistItemType =
   | "condition";
 
 /** Workflow step kinds. Mirrors `project_workflow_items.kind`. */
-export type WorkflowItemKind = "check" | "photo" | "note";
+export type WorkflowItemKind = "check" | "photo" | "note" | "checklist";
 
 /** Short, human labels for the printed record - no icons, no colours. */
 export const CHECKLIST_TYPE_LABELS: Record<ChecklistItemType, string> = {
@@ -117,6 +117,7 @@ export const WORKFLOW_KIND_LABELS: Record<WorkflowItemKind, string> = {
   check: "Check",
   photo: "Photo",
   note: "Note",
+  checklist: "Checklist",
 };
 
 /** Whether a recorded answer counts as given. Matches `hasResponse` in the app. */

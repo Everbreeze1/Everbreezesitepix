@@ -122,7 +122,17 @@ interface Item {
   kind: ItemKind;
   label: string;
   required: boolean;
+  /** The library checklist a `checklist` step links (20261012000000). */
+  checklist_template_id?: string | null;
 }
+
+/** A checklist a `checklist` step can link. */
+interface ChecklistOption {
+  id: string;
+  name: string;
+}
+
+const ITEM_COLUMNS = "id, phase_id, position, kind, label, required, checklist_template_id";
 
 const TABLES = {
   templates: "workflow_templates",
@@ -183,6 +193,8 @@ function WorkflowTemplatesBuilder({ embedded = false }: { embedded?: boolean } =
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   /** Row to focus after an insert, so adding a step drops you straight into it. */
   const [focusItemId, setFocusItemId] = useState<string | null>(null);
+  /** Library checklists a `checklist` step can link. */
+  const [checklistOptions, setChecklistOptions] = useState<ChecklistOption[]>([]);
 
   /*
    * The company's trade, from the account setup wizard. Orders the rail and the
@@ -230,7 +242,7 @@ function WorkflowTemplatesBuilder({ embedded = false }: { embedded?: boolean } =
         const phIds = phList.map((p) => p.id);
         const { data: its } = await supabase
           .from(TABLES.items as any)
-          .select("id, phase_id, position, kind, label, required")
+          .select(ITEM_COLUMNS)
           .in("phase_id", phIds)
           .order("position", { ascending: true });
         setItems(((its as any[]) ?? []) as Item[]);
@@ -252,6 +264,21 @@ function WorkflowTemplatesBuilder({ embedded = false }: { embedded?: boolean } =
 
   useEffect(() => {
     void load();
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const { data } = await supabase
+        .from("checklist_templates" as any)
+        .select("id, name")
+        .eq("archived", false)
+        .order("name", { ascending: true });
+      if (!cancelled) setChecklistOptions(((data as any[]) ?? []) as ChecklistOption[]);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const visibleTemplates = useMemo(() => {
@@ -476,6 +503,7 @@ function WorkflowTemplatesBuilder({ embedded = false }: { embedded?: boolean } =
             kind: it.kind,
             label: it.label,
             required: it.required,
+            checklist_template_id: it.checklist_template_id ?? null,
           })),
         );
         if (itErr) {
@@ -677,9 +705,10 @@ function WorkflowTemplatesBuilder({ embedded = false }: { embedded?: boolean } =
             kind: it.kind,
             label: it.label,
             required: it.required,
+            checklist_template_id: it.checklist_template_id ?? null,
           })),
         )
-        .select("id, phase_id, position, kind, label, required");
+        .select(ITEM_COLUMNS);
       if (itsErr) {
         toast.error(itsErr.message ?? "Couldn't copy that phase's steps");
         await load();
@@ -740,8 +769,10 @@ function WorkflowTemplatesBuilder({ embedded = false }: { embedded?: boolean } =
       : siblings.reduce((max, i) => Math.max(max, i.position), -1) + 1;
     const { data, error } = await supabase
       .from(TABLES.items as any)
-      .insert({ phase_id: phaseId, position, kind, label: "", required: false })
-      .select("id, phase_id, position, kind, label, required")
+      // Photo steps start required: a photo prompt is the proof a stage is
+      // gated on, so leaving it optional by default let jobs close without one.
+      .insert({ phase_id: phaseId, position, kind, label: "", required: kind === "photo" })
+      .select(ITEM_COLUMNS)
       .single();
     if (error || !data) {
       toast.error("Couldn't add that step");
@@ -756,6 +787,11 @@ function WorkflowTemplatesBuilder({ embedded = false }: { embedded?: boolean } =
   };
 
   const updateItem = (id: string, patch: Partial<Item>) => {
+    // Turning a step into a photo prompt makes it required, same as adding one.
+    if (patch.kind === "photo" && patch.required === undefined)
+      patch = { ...patch, required: true };
+    // Only a checklist step links a checklist.
+    if (patch.kind && patch.kind !== "checklist") patch = { ...patch, checklist_template_id: null };
     setItems((xs) => xs.map((x) => (x.id === id ? { ...x, ...patch } : x)));
     save.queueSave(TABLES.items, id, patch as Record<string, unknown>);
   };
@@ -1127,6 +1163,7 @@ function WorkflowTemplatesBuilder({ embedded = false }: { embedded?: boolean } =
                               onAddItem={(kind, after) => void addItem(ph.id, kind, after)}
                               onUpdateItem={updateItem}
                               onDeleteItem={(id) => void deleteItem(id)}
+                              checklistOptions={checklistOptions}
                             />
                           ))}
                         </div>
@@ -1312,6 +1349,7 @@ function PhaseCard({
   onAddItem,
   onUpdateItem,
   onDeleteItem,
+  checklistOptions,
 }: {
   index: number;
   phase: Phase;
@@ -1328,6 +1366,7 @@ function PhaseCard({
   onAddItem: (kind: ItemKind, after?: Item) => void;
   onUpdateItem: (id: string, patch: Partial<Item>) => void;
   onDeleteItem: (id: string) => void;
+  checklistOptions: ChecklistOption[];
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: phase.id,
@@ -1499,6 +1538,7 @@ function PhaseCard({
                     onChange={(patch) => onUpdateItem(it.id, patch)}
                     onDelete={() => onDeleteItem(it.id)}
                     onAddAfter={() => onAddItem(it.kind, it)}
+                    checklistOptions={checklistOptions}
                   />
                 ))}
               </ul>
@@ -1550,6 +1590,7 @@ function StepRow({
   onChange,
   onDelete,
   onAddAfter,
+  checklistOptions,
 }: {
   item: Item;
   autoFocus: boolean;
@@ -1557,6 +1598,7 @@ function StepRow({
   onChange: (patch: Partial<Item>) => void;
   onDelete: () => void;
   onAddAfter: () => void;
+  checklistOptions: ChecklistOption[];
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id,
@@ -1590,6 +1632,9 @@ function StepRow({
    */
   const discardIfUnnamed = (e: React.FocusEvent<HTMLInputElement>) => {
     if (item.label.trim()) return;
+    // A checklist step is named by the checklist it links, picked from a menu
+    // that takes focus outside this row.
+    if (item.kind === "checklist") return;
     const next = e.relatedTarget as Node | null;
     if (next && e.currentTarget.closest("li")?.contains(next)) return;
     remove();
@@ -1666,6 +1711,19 @@ function StepRow({
         aria-label="Step label"
       />
 
+      {item.kind === "checklist" && (
+        <ChecklistPicker
+          value={item.checklist_template_id ?? null}
+          options={checklistOptions}
+          onPick={(opt) =>
+            onChange({
+              checklist_template_id: opt.id,
+              ...(item.label.trim() ? {} : { label: opt.name }),
+            })
+          }
+        />
+      )}
+
       <RequiredToggle required={item.required} onToggle={(v) => onChange({ required: v })} />
 
       <Button
@@ -1679,6 +1737,59 @@ function StepRow({
         <Trash2 className="h-3.5 w-3.5" />
       </Button>
     </li>
+  );
+}
+
+/**
+ * Which library checklist a `checklist` step links. Applying the workflow to a
+ * job makes that checklist on the job, and the stage waits for it.
+ */
+function ChecklistPicker({
+  value,
+  options,
+  onPick,
+}: {
+  value: string | null;
+  options: ChecklistOption[];
+  onPick: (opt: ChecklistOption) => void;
+}) {
+  const current = options.find((o) => o.id === value) ?? null;
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "inline-flex max-w-[11rem] shrink-0 items-center gap-1 truncate rounded-lg border px-2 py-1 text-[11.5px] font-bold transition-colors",
+            current
+              ? "border-border text-foreground hover:border-primary/40"
+              : "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+          )}
+        >
+          <span className="truncate">{current ? current.name : "Pick a checklist"}</span>
+          <ChevronDown className="h-3 w-3 shrink-0 opacity-70" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-64">
+        <DropdownMenuLabel className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+          Link a checklist
+        </DropdownMenuLabel>
+        {options.length === 0 ? (
+          <p className="px-2 py-2 text-xs text-muted-foreground">
+            No checklists yet. Make one on the Checklists page first.
+          </p>
+        ) : (
+          <div className="max-h-64 overflow-y-auto">
+            {options.map((o) => (
+              <DropdownMenuItem key={o.id} onClick={() => onPick(o)}>
+                <span className="flex-1 truncate">{o.name}</span>
+                {o.id === value && <CheckSquare className="ml-2 h-3.5 w-3.5 text-primary" />}
+              </DropdownMenuItem>
+            ))}
+          </div>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -1760,7 +1871,11 @@ function WorkflowPreview({
                       )}
                     </div>
                     <div className="mt-2 rounded-lg border border-dashed border-border px-3 py-2 text-center text-[11px] text-muted-foreground">
-                      {it.kind === "photo" ? "Take / upload photo" : "Type a note…"}
+                      {it.kind === "photo"
+                        ? "Take / upload photo"
+                        : it.kind === "checklist"
+                          ? "Opens the linked checklist"
+                          : "Type a note…"}
                     </div>
                   </div>
                 );

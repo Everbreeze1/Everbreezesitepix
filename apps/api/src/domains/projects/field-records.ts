@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { formatChecklistAnswer, photoObjectPaths } from "@everlumen/shared";
+import { formatChecklistAnswer, isStepDone, photoObjectPaths } from "@everlumen/shared";
 import { getSupabaseAdmin } from "../../lib/supabase";
 import { sanitizePageHtml } from "./sanitize-page-html";
 
@@ -378,11 +378,14 @@ export async function getPublicWorkflowService(
     completed_at: string | null;
     photo_id: string | null;
     note_text: string | null;
+    checklist_id: string | null;
   };
   const { data: itemRows } = phases.length
     ? await (admin as any)
         .from("project_workflow_items")
-        .select("id, phase_id, position, kind, label, required, completed_at, photo_id, note_text")
+        .select(
+          "id, phase_id, position, kind, label, required, completed_at, photo_id, note_text, checklist_id",
+        )
         .in(
           "phase_id",
           phases.map((p) => p.id),
@@ -396,13 +399,8 @@ export async function getPublicWorkflowService(
     workflow.project_id,
   );
 
-  /** Same rule as `isItemComplete` in the runner - a photo step is done when a
-   *  photo exists, a note step when there is text, a check when it is ticked. */
-  const isDone = (it: ItemRow) => {
-    if (it.kind === "photo") return !!it.photo_id;
-    if (it.kind === "note") return !!it.note_text?.trim();
-    return !!it.completed_at;
-  };
+  /** Same rule as the runner and the app - see packages/shared/src/workflow-stages.ts. */
+  const isDone = (it: ItemRow) => isStepDone(it);
 
   const sections: PublicFieldRecordSection[] = phases.map((ph) => ({
     id: ph.id,

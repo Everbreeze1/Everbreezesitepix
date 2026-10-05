@@ -395,16 +395,32 @@ export function workflowCompletedMessage(
  * Whether a workflow is ready to close: web `workflowState.canComplete`, every
  * phase unblocked (required steps done and required sign-offs given), and at
  * least one phase. `requiredLeft` and `signoffsLeft` explain a no.
+ *
+ * A staged run (anything but a walkthrough) passes `stages` too: it closes only
+ * once every stage has been marked done, which is the rule the database
+ * enforces on close, so the first open stage is what the reason names. A
+ * walkthrough passes nothing and keeps the step-count rule.
  */
 export function workflowReadiness(
   phases: { blocked: boolean; requiredTotal: number; requiredDone: number; signedOk: boolean }[],
+  stages?: { name: string; done: boolean }[] | null,
 ): { canComplete: boolean; requiredLeft: number; signoffsLeft: number; reason: string | null } {
-  const canComplete = phases.length > 0 && phases.every((phase) => !phase.blocked);
   const requiredLeft = phases.reduce(
     (sum, phase) => sum + (phase.requiredTotal - phase.requiredDone),
     0,
   );
   const signoffsLeft = phases.filter((phase) => !phase.signedOk).length;
+
+  if (stages) {
+    const open = stages.find((stage) => !stage.done);
+    const canComplete = stages.length > 0 && !open;
+    let reason: string | null = null;
+    if (stages.length === 0) reason = "This workflow has no phases to complete.";
+    else if (open) reason = `Mark "${open.name}" done first.`;
+    return { canComplete, requiredLeft, signoffsLeft, reason };
+  }
+
+  const canComplete = phases.length > 0 && phases.every((phase) => !phase.blocked);
   let reason: string | null = null;
   if (!canComplete) {
     if (phases.length === 0) reason = "This workflow has no phases to complete.";

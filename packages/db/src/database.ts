@@ -2128,6 +2128,8 @@ export type Database = {
       };
       project_workflow_items: {
         Row: {
+          checklist_id: string | null;
+          checklist_template_id: string | null;
           completed_at: string | null;
           completed_by: string | null;
           created_at: string;
@@ -2141,6 +2143,8 @@ export type Database = {
           required: boolean;
         };
         Insert: {
+          checklist_id?: string | null;
+          checklist_template_id?: string | null;
           completed_at?: string | null;
           completed_by?: string | null;
           created_at?: string;
@@ -2154,6 +2158,8 @@ export type Database = {
           required?: boolean;
         };
         Update: {
+          checklist_id?: string | null;
+          checklist_template_id?: string | null;
           completed_at?: string | null;
           completed_by?: string | null;
           created_at?: string;
@@ -2198,6 +2204,8 @@ export type Database = {
           signed_off_at: string | null;
           signed_off_by: string | null;
           signoff_name: string | null;
+          unlocked_at: string | null;
+          unlocked_by: string | null;
           workflow_id: string;
         };
         Insert: {
@@ -2214,6 +2222,8 @@ export type Database = {
           signed_off_at?: string | null;
           signed_off_by?: string | null;
           signoff_name?: string | null;
+          unlocked_at?: string | null;
+          unlocked_by?: string | null;
           workflow_id: string;
         };
         Update: {
@@ -2230,6 +2240,8 @@ export type Database = {
           signed_off_at?: string | null;
           signed_off_by?: string | null;
           signoff_name?: string | null;
+          unlocked_at?: string | null;
+          unlocked_by?: string | null;
           workflow_id?: string;
         };
         Relationships: [
@@ -3597,6 +3609,7 @@ export type Database = {
       };
       workflow_template_items: {
         Row: {
+          checklist_template_id: string | null;
           created_at: string;
           id: string;
           kind: string;
@@ -3606,6 +3619,7 @@ export type Database = {
           required: boolean;
         };
         Insert: {
+          checklist_template_id?: string | null;
           created_at?: string;
           id?: string;
           kind: string;
@@ -3615,6 +3629,7 @@ export type Database = {
           required?: boolean;
         };
         Update: {
+          checklist_template_id?: string | null;
           created_at?: string;
           id?: string;
           kind?: string;

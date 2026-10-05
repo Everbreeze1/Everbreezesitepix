@@ -20,7 +20,7 @@ import type { Positioned } from "./template-edit";
  */
 
 /** Mirrors `project_workflow_items.kind` and the CHECK on the template table. */
-export type WorkflowItemKind = "check" | "photo" | "note";
+export type WorkflowItemKind = "check" | "photo" | "note" | "checklist";
 
 export type WorkflowPhase = Positioned & {
   template_id: string;
@@ -33,6 +33,8 @@ export type WorkflowTemplateItem = Positioned & {
   phase_id: string;
   kind: WorkflowItemKind | string;
   required: boolean;
+  /** The library checklist a `checklist` step links. Null for every other kind. */
+  checklist_template_id?: string | null;
 };
 
 /**
@@ -56,7 +58,62 @@ export const ITEM_KINDS: { id: WorkflowItemKind; label: string; hint: string }[]
   { id: "check", label: "Tick it off", hint: "A step somebody confirms is done" },
   { id: "photo", label: "Take a photo", hint: "Evidence, attached to this step" },
   { id: "note", label: "Write a note", hint: "A short line of text" },
+  { id: "checklist", label: "Complete a checklist", hint: "Crew completes a linked checklist" },
 ];
+
+/**
+ * Whether a new step of this kind starts out required.
+ *
+ * A photo step is the proof a stage waits for before it can be marked done, so
+ * it is required unless somebody switches it off. Every other kind starts
+ * optional, as before.
+ */
+export function defaultRequired(kind: WorkflowItemKind): boolean {
+  return kind === "photo";
+}
+
+/**
+ * The Required switch after the kind changes in the step sheet.
+ *
+ * Switching a step to a photo turns Required on, for the reason above. Any
+ * other change leaves the switch where the person put it, and so does picking
+ * photo again on a step that already was one.
+ */
+export function requiredAfterKindChange(
+  from: WorkflowItemKind,
+  to: WorkflowItemKind,
+  required: boolean,
+): boolean {
+  if (to === "photo" && from !== "photo") return true;
+  return required;
+}
+
+/**
+ * The label a step is saved with.
+ *
+ * A checklist step with no label of its own takes the checklist's name, which
+ * is almost always what it would have been called anyway.
+ */
+export function stepLabel(
+  label: string,
+  kind: WorkflowItemKind,
+  checklistName: string | null | undefined,
+): string {
+  const value = label.trim();
+  if (value) return value;
+  return kind === "checklist" ? (checklistName ?? "").trim() : "";
+}
+
+/** Why a step cannot be saved yet, or null. */
+export function stepError(
+  label: string,
+  kind: WorkflowItemKind,
+  checklistTemplateId: string | null,
+): string | null {
+  if (kind === "checklist" && !checklistTemplateId) return "Pick the checklist the crew completes.";
+  if (!label.trim()) return "Give the step a label.";
+  return null;
+}
 
 /**
  * A safe default for an unrecognised stored kind.

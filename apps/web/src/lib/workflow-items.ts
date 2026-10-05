@@ -1,4 +1,4 @@
-import { Camera, CheckSquare, StickyNote } from "lucide-react";
+import { Camera, CheckSquare, ClipboardList, StickyNote } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 /**
@@ -9,7 +9,7 @@ import type { LucideIcon } from "lucide-react";
  * a "photo prompt" looked like two unrelated things depending on which screen
  * you were on. One map, one look.
  */
-export type ItemKind = "check" | "photo" | "note";
+export type ItemKind = "check" | "photo" | "note" | "checklist";
 
 export interface ItemKindMeta {
   label: string;
@@ -47,6 +47,14 @@ export const KIND_META: Record<ItemKind, ItemKindMeta> = {
     tint: "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
     placeholder: "e.g. Customer concerns raised on site",
   },
+  checklist: {
+    icon: ClipboardList,
+    label: "Checklist",
+    short: "Checklist",
+    hint: "Crew completes a linked checklist",
+    tint: "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+    placeholder: "e.g. Final inspection checklist",
+  },
 };
 
-export const KIND_ORDER: ItemKind[] = ["check", "photo", "note"];
+export const KIND_ORDER: ItemKind[] = ["check", "photo", "note", "checklist"];

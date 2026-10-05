@@ -205,7 +205,7 @@ export const WORKFLOW_STARTER_PIECES: WorkflowStarter[] = [
         name: "Diagnose",
         items: [
           { kind: "note", label: "Fault found", required: true },
-          { kind: "photo", label: "Failed component" },
+          { kind: "photo", label: "Failed component", required: true },
           { kind: "check", label: "Estimate approved by customer", required: true },
         ],
       },

@@ -4,10 +4,35 @@
  * Ported from `apps/web/src/features/projects/components/ProjectWorkflows.tsx`
  * rather than reinvented, because the two clients read the same rows and a
  * phase that reads "blocked" on a phone and "done" on the web is worse than
- * either answer alone. Kept import-free so the rules can be tested directly.
+ * either answer alone. The stage rules (what a stage still needs, whether it
+ * is open yet) are not copied at all: they come from `@everlumen/shared`, the
+ * same module the web runner reads, so the button hint here and the sentence
+ * the database sends back when it refuses are always the same words.
  */
+import {
+  isStagedRun,
+  isStepDone,
+  stageViews,
+  type StagePhase,
+  type StageStep,
+  type StageView,
+  type WorkflowItemKind as SharedWorkflowItemKind,
+} from "@everlumen/shared";
 
-export type WorkflowItemKind = "check" | "photo" | "note";
+export {
+  describeMissing,
+  isStagedRun,
+  isStepDone,
+  missingCount,
+  stageMissing,
+  stageViews,
+  type StageMissing,
+  type StagePhase,
+  type StageStep,
+  type StageView,
+} from "@everlumen/shared";
+
+export type WorkflowItemKind = SharedWorkflowItemKind;
 
 export type WorkflowItemLike = {
   kind: string;
@@ -15,11 +40,17 @@ export type WorkflowItemLike = {
   completed_at: string | null;
   note_text: string | null;
   photo_id: string | null;
+  /** The linked project checklist, for a `checklist` step. */
+  checklist_id?: string | null;
 };
 
 export type WorkflowPhaseLike = {
   requires_signoff: boolean;
   signed_off_at: string | null;
+  /** Set when the stage was marked done (staged runs), or by the recompute (walkthroughs). */
+  completed_at?: string | null;
+  /** Set when a manager opened this stage before the ones ahead of it. */
+  unlocked_at?: string | null;
 };
 
 export type PhaseState = {
@@ -40,12 +71,12 @@ export type PhaseState = {
  * Each kind proves itself differently: a photo step is done when a photo is
  * attached, a note step when there is text, and a check step when it is ticked.
  * Reading `completed_at` for all three would leave a photo step showing
- * outstanding with the photo already on it.
+ * outstanding with the photo already on it. A checklist step is done when its
+ * linked checklist is (the database mirrors the checklist's completion onto
+ * the step), and one whose checklist was deleted has nothing left to wait for.
  */
 export function isItemComplete(item: WorkflowItemLike): boolean {
-  if (item.kind === "photo") return Boolean(item.photo_id);
-  if (item.kind === "note") return Boolean(item.note_text?.trim());
-  return Boolean(item.completed_at);
+  return isStepDone(item);
 }
 
 /**
@@ -96,14 +127,60 @@ export function canSignOff(phase: WorkflowPhaseLike, items: WorkflowItemLike[]):
 /**
  * Index of the phase the crew is working on now.
  *
- * The first one that is not complete. Returns -1 when everything is done, which
+ * The first one that is not done (see `phaseDone`). Returns -1 when everything is done, which
  * the caller shows as a finished workflow rather than parking the marker on the
  * last phase.
  */
 export function currentPhaseIndex(
   phases: ReadonlyArray<{ phase: WorkflowPhaseLike; items: WorkflowItemLike[] }>,
+  staged = false,
 ): number {
-  return phases.findIndex((entry) => !phaseState(entry.phase, entry.items).complete);
+  return phases.findIndex((entry) => !phaseDone(entry.phase, entry.items, staged));
+}
+
+/**
+ * Whether a phase is done.
+ *
+ * On a staged run (anything but a walkthrough) a stage is done only when
+ * somebody marked it done, which the database refuses until its required
+ * steps and sign-off are in, and takes back if one is later removed. So
+ * `completed_at` is the whole answer and the steps are not re-counted here.
+ * Walkthrough runs keep the old rule: done when every step is filled in.
+ */
+export function phaseDone(
+  phase: WorkflowPhaseLike,
+  items: WorkflowItemLike[],
+  staged: boolean,
+): boolean {
+  if (staged) return Boolean(phase.completed_at);
+  return phaseState(phase, items).complete;
+}
+
+/**
+ * Every stage of a staged run with its lock and what it still needs, from the
+ * shared `stageViews`. Phases already come sorted by position; the shared
+ * helper sorts again, which costs nothing and means a caller never has to.
+ */
+export function workflowStages<
+  P extends WorkflowPhaseLike & { id: string; position: number; name: string },
+>(phases: (P & { items: WorkflowItemLike[] })[]): StageView<P & StagePhase>[] {
+  const stepsById = new Map<string, StageStep[]>(phases.map((p) => [p.id, p.items]));
+  return stageViews(phases as (P & StagePhase)[], (id) => stepsById.get(id) ?? []);
+}
+
+/** Whether a run is staged, from its `source_kind`. Re-stated for screens that only hold the row. */
+export function runIsStaged(run: { source_kind?: string | null } | null | undefined): boolean {
+  return isStagedRun(run?.source_kind ?? null);
+}
+
+/** The patch "Mark stage done" writes. The database refuses it with a sentence when it is early. */
+export function stageDonePatch(userId: string | null, now: () => Date = () => new Date()) {
+  return { completed_at: now().toISOString(), completed_by: userId };
+}
+
+/** The patch "Unlock early" writes. Only an Owner, Admin or Manager may. */
+export function stageUnlockPatch(userId: string | null, now: () => Date = () => new Date()) {
+  return { unlocked_at: now().toISOString(), unlocked_by: userId };
 }
 
 /** The patch a tick on a check step writes. */
@@ -127,4 +204,39 @@ export function signoffPatch(
     signed_off_by: userId,
     signed_off_at: now().toISOString(),
   };
+}
+
+/**
+ * Queued writes that a stage's "done" still depends on: a tick, a note or a
+ * sign-off for this stage that has not reached the server, and photos for its
+ * steps that are still uploading.
+ *
+ * The screen shows those optimistically, so without this "Mark stage done"
+ * would light up and then be refused by the database for work the crew can see
+ * on screen. Marking done waits for these to drain first.
+ */
+export function pendingStageWrites(
+  rows: { id: string; kind: string; state: string; payload: string }[],
+  phaseId: string,
+  itemIds: string[],
+): number {
+  const ids = new Set(itemIds);
+  let count = 0;
+  for (const row of rows) {
+    if (row.state === "failed") continue;
+    if (row.id === `workflow_phase_patch:${phaseId}:signoff`) {
+      count += 1;
+    } else if (row.id.startsWith("workflow_item_patch:")) {
+      if (ids.has(row.id.slice("workflow_item_patch:".length))) count += 1;
+    } else if (row.kind === "photo_upload") {
+      try {
+        const target = (JSON.parse(row.payload) as { attachToWorkflowItemId?: unknown })
+          .attachToWorkflowItemId;
+        if (typeof target === "string" && ids.has(target)) count += 1;
+      } catch {
+        // A payload that does not parse cannot be waited on.
+      }
+    }
+  }
+  return count;
 }
