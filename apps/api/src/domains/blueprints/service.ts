@@ -268,7 +268,7 @@ export async function applyProjectBlueprintService(
         createdIds.project_checklists.push((created as any).id);
         const { data: tItems } = await supabaseAdmin
           .from("checklist_template_items" as any)
-          .select("position, label, required, item_type, description")
+          .select("position, label, required, item_type, description, unit, photo_required")
           .eq("template_id", it.ref_id)
           .order("position", { ascending: true });
         // Renumber from zero: the select above is already ordered by position,
@@ -281,6 +281,8 @@ export async function applyProjectBlueprintService(
           required: x.required ?? false,
           item_type: x.item_type ?? "checkbox",
           description: x.description ?? null,
+          unit: x.unit ?? null,
+          photo_required: !!x.photo_required,
         }));
         if (rows.length) await supabaseAdmin.from("project_checklist_items" as any).insert(rows);
         counts.checklists++;

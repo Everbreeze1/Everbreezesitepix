@@ -518,6 +518,8 @@ export function ChecklistLibraryContent({
             required: !!it.required,
             item_type: it.item_type,
             description: it.description ?? null,
+            unit: it.unit ?? null,
+            photo_required: !!it.photo_required,
           })),
         )
         .select("id, label, position");

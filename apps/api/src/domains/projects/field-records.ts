@@ -242,7 +242,7 @@ export async function getPublicChecklistService(
   const { data: itemRows } = await (admin as any)
     .from("project_checklist_items")
     .select(
-      "id, position, label, required, completed_at, notes, item_type, description, response_value",
+      "id, position, label, required, completed_at, notes, item_type, description, response_value, unit",
     )
     .eq("checklist_id", checklist.id)
     .order("position", { ascending: true });
@@ -257,6 +257,7 @@ export async function getPublicChecklistService(
     item_type: string | null;
     description: string | null;
     response_value: unknown;
+    unit: string | null;
   };
   const rows = ((itemRows as Row[]) ?? []).slice();
 
@@ -285,7 +286,7 @@ export async function getPublicChecklistService(
   }
 
   const items: PublicFieldRecordItem[] = rows.map((r) => {
-    const answer = formatChecklistAnswer(r.item_type, r.response_value);
+    const answer = formatChecklistAnswer(r.item_type, r.response_value, r.unit);
     return {
       id: r.id,
       label: r.label,

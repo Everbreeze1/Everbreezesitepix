@@ -272,9 +272,11 @@ export type Database = {
           id: string;
           item_type: string;
           label: string;
+          photo_required: boolean;
           position: number;
           required: boolean;
           template_id: string;
+          unit: string | null;
         };
         Insert: {
           created_at?: string;
@@ -282,9 +284,11 @@ export type Database = {
           id?: string;
           item_type?: string;
           label: string;
+          photo_required?: boolean;
           position?: number;
           required?: boolean;
           template_id: string;
+          unit?: string | null;
         };
         Update: {
           created_at?: string;
@@ -292,9 +296,11 @@ export type Database = {
           id?: string;
           item_type?: string;
           label?: string;
+          photo_required?: boolean;
           position?: number;
           required?: boolean;
           template_id?: string;
+          unit?: string | null;
         };
         Relationships: [
           {
@@ -1415,9 +1421,11 @@ export type Database = {
           item_type: string;
           label: string;
           notes: string | null;
+          photo_required: boolean;
           position: number;
           required: boolean;
           response_value: Json | null;
+          unit: string | null;
         };
         Insert: {
           checklist_id: string;
@@ -1429,9 +1437,11 @@ export type Database = {
           item_type?: string;
           label: string;
           notes?: string | null;
+          photo_required?: boolean;
           position?: number;
           required?: boolean;
           response_value?: Json | null;
+          unit?: string | null;
         };
         Update: {
           checklist_id?: string;
@@ -1443,9 +1453,11 @@ export type Database = {
           item_type?: string;
           label?: string;
           notes?: string | null;
+          photo_required?: boolean;
           position?: number;
           required?: boolean;
           response_value?: Json | null;
+          unit?: string | null;
         };
         Relationships: [
           {

@@ -4,6 +4,7 @@ import {
   AlertCircle,
   ArrowLeft,
   BookmarkPlus,
+  Camera,
   CheckSquare,
   ChevronDown,
   ChevronUp,
@@ -15,13 +16,21 @@ import {
   MoreHorizontal,
   Plus,
   Printer,
+  Ruler,
   Share2,
   Trash2,
   UserCircle2,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { formatChecklistAnswer, formatProjectAddress } from "@everlumen/shared";
+import {
+  MEASUREMENT_UNITS,
+  answerWantsPhoto,
+  formatChecklistAnswer,
+  formatProjectAddress,
+  isMissingRequiredPhoto,
+  normalizeUnit,
+} from "@everlumen/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -31,6 +40,9 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { BulkAddItemsDialog } from "@/components/BulkAddItemsDialog";
@@ -376,6 +388,10 @@ export function ChecklistDocumentPage() {
 
   const done = ordered.filter((x) => x.completed_at).length;
   const requiredOpen = ordered.filter((x) => x.required && !x.completed_at).length;
+  /** Items whose template asked for a photo and that do not have one yet. */
+  const photosNeeded = ordered.filter((x) =>
+    isMissingRequiredPhoto(x, photosByItem.get(x.id)?.length ?? 0),
+  ).length;
   const sealed = !!checklist?.completed_at;
   /*
    * Two different locks, deliberately kept apart.
@@ -495,6 +511,14 @@ export function ChecklistDocumentPage() {
       save.queueSave("project_checklist_items", item.id, patch);
       return;
     }
+    // A Fail, a Poor or a High/Critical severity is the moment a photo is worth
+    // most, so offer the picker right then instead of hoping someone goes back.
+    if (answerWantsPhoto(item.item_type, value) && !(photosByItem.get(item.id)?.length ?? 0)) {
+      toast("Add a photo of this issue?", {
+        description: item.label,
+        action: { label: "Add photo", onClick: () => setAttachForId(item.id) },
+      });
+    }
     const ok = await save.runImmediate(() =>
       supabase
         .from("project_checklist_items" as any)
@@ -578,6 +602,41 @@ export function ChecklistDocumentPage() {
         prev.map((x) => (x.id === item.id ? { ...x, required: item.required } : x)),
       );
     }
+  };
+
+  /**
+   * The two newer structure fields: whether the item needs a photo, and what a
+   * Number item measures in. Same authoring lock as `required`.
+   */
+  const patchItemStructure = async (
+    item: ChecklistItem,
+    patch: Partial<Pick<ChecklistItem, "photo_required" | "unit">>,
+  ) => {
+    if (!canStructure) return;
+    touch();
+    const before = { photo_required: item.photo_required, unit: item.unit };
+    setItems((prev) => prev.map((x) => (x.id === item.id ? { ...x, ...patch } : x)));
+    const ok = await save.runImmediate(() =>
+      supabase
+        .from("project_checklist_items" as any)
+        .update(patch)
+        .eq("id", item.id),
+    );
+    if (!ok) {
+      setItems((prev) => prev.map((x) => (x.id === item.id ? { ...x, ...before } : x)));
+    }
+  };
+
+  const setCustomUnit = async (item: ChecklistItem) => {
+    const raw = await promptFor({
+      title: "Measurement unit",
+      description: "Shown next to the number, for example ft, sq ft or psi.",
+      label: "Unit",
+      defaultValue: item.unit ?? "",
+      confirmText: "Save unit",
+    });
+    if (raw === null || raw === undefined) return;
+    await patchItemStructure(item, { unit: normalizeUnit(raw) });
   };
 
   /** The next free position, from max+1 rather than the array's length. */
@@ -730,6 +789,10 @@ export function ChecklistDocumentPage() {
         toast.error(`${requiredOpen} required item${requiredOpen === 1 ? "" : "s"} still open`);
         return;
       }
+      if (photosNeeded > 0) {
+        toast.error(`${photosNeeded} photo${photosNeeded === 1 ? "" : "s"} still needed`);
+        return;
+      }
       const now = new Date().toISOString();
       const snapshot = {
         name: checklist.name,
@@ -739,6 +802,8 @@ export function ChecklistDocumentPage() {
           required: it.required,
           item_type: it.item_type,
           description: it.description,
+          unit: it.unit,
+          photo_required: it.photo_required,
           completed_at: it.completed_at,
           response_value: it.response_value,
           notes: it.notes,
@@ -821,6 +886,8 @@ export function ChecklistDocumentPage() {
           required: it.required,
           item_type: it.item_type ?? "checkbox",
           description: it.description,
+          unit: it.unit,
+          photo_required: it.photo_required,
         })),
       );
       if (itErr) {
@@ -884,7 +951,7 @@ export function ChecklistDocumentPage() {
             // Shared with the server so the sheet the owner prints and the sheet
             // a customer prints from the link format an answer identically -
             // "4 / 5", not "4" in one place and "4/5" in the other.
-            answer: formatChecklistAnswer(it.item_type, it.response_value),
+            answer: formatChecklistAnswer(it.item_type, it.response_value, it.unit),
             notes: it.notes,
             completedAt: it.completed_at,
             photoUrls: (photosByItem.get(it.id) ?? [])
@@ -1170,6 +1237,11 @@ export function ChecklistDocumentPage() {
                     {requiredOpen} required still open
                   </span>
                 )}
+                {!sealed && photosNeeded > 0 && (
+                  <span className="ml-2 font-bold normal-case tracking-normal text-orange-700 dark:text-orange-400">
+                    {photosNeeded} photo{photosNeeded === 1 ? "" : "s"} needed
+                  </span>
+                )}
               </h2>
             </div>
 
@@ -1272,6 +1344,20 @@ export function ChecklistDocumentPage() {
                               Required
                             </span>
                           )}
+                          {it.photo_required && (
+                            <span
+                              className={cn(
+                                "inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide",
+                                photos.length
+                                  ? "border-border text-muted-foreground"
+                                  : "border-orange-500/40 bg-orange-500/12 text-orange-700 dark:text-orange-300",
+                              )}
+                              title="A photo is required before the checklist can be completed"
+                            >
+                              <Camera className="h-3 w-3" />
+                              {photos.length ? "Photo added" : "Photo needed"}
+                            </span>
+                          )}
                           {/* Read-only: switching the answer type wipes the
                               recorded response, so it is chosen in the template
                               designer, not next to a filled-in row. */}
@@ -1359,6 +1445,41 @@ export function ChecklistDocumentPage() {
                               <AlertCircle className="mr-2 h-4 w-4" />
                               {it.required ? "Make optional" : "Mark required"}
                             </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() =>
+                                void patchItemStructure(it, { photo_required: !it.photo_required })
+                              }
+                            >
+                              <Camera className="mr-2 h-4 w-4" />
+                              {it.photo_required ? "Photo optional" : "Require a photo"}
+                            </DropdownMenuItem>
+                            {it.item_type === "numeric" && (
+                              <DropdownMenuSub>
+                                <DropdownMenuSubTrigger>
+                                  <Ruler className="mr-2 h-4 w-4" />
+                                  Unit{it.unit ? `: ${it.unit}` : ""}
+                                </DropdownMenuSubTrigger>
+                                <DropdownMenuSubContent className="max-h-72 overflow-y-auto">
+                                  <DropdownMenuItem
+                                    onClick={() => void patchItemStructure(it, { unit: null })}
+                                  >
+                                    No unit
+                                  </DropdownMenuItem>
+                                  {MEASUREMENT_UNITS.map((u) => (
+                                    <DropdownMenuItem
+                                      key={u}
+                                      onClick={() => void patchItemStructure(it, { unit: u })}
+                                    >
+                                      {u}
+                                    </DropdownMenuItem>
+                                  ))}
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem onClick={() => void setCustomUnit(it)}>
+                                    Other…
+                                  </DropdownMenuItem>
+                                </DropdownMenuSubContent>
+                              </DropdownMenuSub>
+                            )}
                             <DropdownMenuItem
                               disabled={idx === 0}
                               onClick={() => void moveItem(it, -1)}
@@ -1516,6 +1637,11 @@ export function ChecklistDocumentPage() {
                 {requiredOpen} required item{requiredOpen === 1 ? "" : "s"} still open
               </span>
             )}
+            {!sealed && photosNeeded > 0 && (
+              <span className="text-[11.5px] font-semibold text-orange-700 dark:text-orange-400">
+                {photosNeeded} photo{photosNeeded === 1 ? "" : "s"} still needed
+              </span>
+            )}
 
             {/* Spelled out next to the button rather than hidden in a tooltip -
                 a disabled control with no explanation reads as a bug on a
@@ -1529,7 +1655,11 @@ export function ChecklistDocumentPage() {
                 className="ml-auto"
                 onClick={() => void completeChecklist()}
                 disabled={
-                  ordered.length === 0 || requiredOpen > 0 || completing || !rights.canComplete
+                  ordered.length === 0 ||
+                  requiredOpen > 0 ||
+                  photosNeeded > 0 ||
+                  completing ||
+                  !rights.canComplete
                 }
                 title={rights.reason ?? undefined}
               >
