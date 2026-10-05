@@ -1,3 +1,4 @@
+import { isMissingRequiredPhoto } from "@everlumen/shared";
 import { can } from "@everlumen/shared/team-permissions";
 import { isShareLive, shareUrl } from "./share-links";
 
@@ -250,6 +251,8 @@ export type SnapshotItem = {
   response_value: unknown;
   notes: string | null;
   position: number;
+  /** A Number item's unit. Optional so rows read by an older select still seal. */
+  unit?: string | null;
 };
 
 /** Required items still unanswered. */
@@ -263,12 +266,75 @@ export function requiredOpenCount(items: { required: boolean; completed_at: stri
  * latter as "N required items still open".
  */
 export function checklistCompletionBlock(
-  items: { required: boolean; completed_at: string | null }[],
+  items: (PhotoRequirement & { required: boolean; completed_at: string | null })[],
+  photoCounts?: Map<string, number>,
 ): string | null {
   if (items.length === 0) return "Add items before completing this checklist.";
   const open = requiredOpenCount(items);
-  if (open > 0) return `${open} required item${open === 1 ? "" : "s"} still open`;
-  return null;
+  const photos = photoCounts ? missingPhotoCount(items, photoCounts) : 0;
+  const reasons = [
+    open > 0 ? `${open} required item${open === 1 ? "" : "s"} still open` : null,
+    photos > 0 ? `${photos} photo${photos === 1 ? "" : "s"} still needed` : null,
+  ].filter(Boolean);
+  return reasons.length > 0 ? reasons.join(", ") : null;
+}
+
+/** The part of an item the photo rule reads. */
+export type PhotoRequirement = { id?: string; photo_required?: boolean | null };
+
+/**
+ * Photo-required items with no photo attached.
+ *
+ * Counted per item, not per photo: an item asks for evidence, and one picture
+ * satisfies it. An item missing from `photoCounts` has none.
+ */
+export function missingPhotoCount(
+  items: PhotoRequirement[],
+  photoCounts: Map<string, number>,
+): number {
+  return items.filter((item) =>
+    isMissingRequiredPhoto(item, item.id ? (photoCounts.get(item.id) ?? 0) : 0),
+  ).length;
+}
+
+/** Photos per item, from `listItemPhotoIds`. */
+export function photoCountsOf(photoIdsByItem: Map<string, string[]>): Map<string, number> {
+  return new Map([...photoIdsByItem].map(([itemId, ids]) => [itemId, ids.length]));
+}
+
+/**
+ * Photos still in the outbox that will be attached to a checklist item when
+ * they upload, per item.
+ *
+ * A photo taken in a basement is evidence the moment the shutter fires, even
+ * though `checklist_item_photos` will not hear about it until there is signal.
+ * Counting these keeps the "Photo needed" badge from nagging about a picture
+ * the person has already taken. A failed row is not counted: it may never land.
+ */
+export function queuedItemPhotoCounts(
+  rows: { kind: string; state: string; payload: string }[],
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    if (row.kind !== "photo_upload" || row.state === "failed") continue;
+    let itemId: unknown = null;
+    try {
+      itemId = (JSON.parse(row.payload) as { attachToChecklistItemId?: unknown })
+        .attachToChecklistItemId;
+    } catch {
+      continue;
+    }
+    if (typeof itemId !== "string" || !itemId) continue;
+    counts.set(itemId, (counts.get(itemId) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/** Two per-item counts added together. */
+export function addCounts(a: Map<string, number>, b: Map<string, number>): Map<string, number> {
+  const out = new Map(a);
+  for (const [key, value] of b) out.set(key, (out.get(key) ?? 0) + value);
+  return out;
 }
 
 /**
@@ -295,6 +361,8 @@ export function checklistSnapshot(
         completed_at: item.completed_at,
         response_value: item.response_value,
         notes: item.notes,
+        // Carried so a sealed Number prints with what it measured in.
+        unit: item.unit ?? null,
         photo_ids: photoIdsByItem.get(item.id) ?? [],
       })),
   };

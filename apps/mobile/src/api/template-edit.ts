@@ -35,6 +35,12 @@ export type TemplateItem = Positioned & {
   description: string | null;
   required: boolean;
   item_type: ChecklistItemType | string;
+  /**
+   * What a Number item measures in. Optional, like `photo_required`, because
+   * rows read before the 20261011 migration do not carry either column.
+   */
+  unit?: string | null;
+  photo_required?: boolean;
 };
 
 /** A row being added, before the database has given it an id. */
@@ -134,14 +140,17 @@ export function templateNameError(name: string): string | null {
 /**
  * The item types a phone offers.
  *
- * All six the runner understands, in the order somebody reaches for them: a
- * plain check is most of every template, and the numeric and text types are
- * the long tail.
+ * All eight the runner understands, in the order somebody reaches for them
+ * (the web builder's `TYPE_ORDER`): a plain check is most of every template,
+ * the judgement calls come next, and the numeric and text types are the long
+ * tail.
  */
 export const ITEM_TYPES: ChecklistItemType[] = [
   "checkbox",
   "pass_fail",
   "yes_no",
+  "condition",
+  "severity",
   "rating",
   "numeric",
   "text",

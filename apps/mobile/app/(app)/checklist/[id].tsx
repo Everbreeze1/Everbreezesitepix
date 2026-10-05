@@ -1,9 +1,17 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Keyboard, Pressable, RefreshControl, ScrollView, View } from "react-native";
 import * as WebBrowser from "expo-web-browser";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CHECKLIST_TYPE_LABELS, type ChecklistItemType } from "@everlumen/shared";
+import {
+  answerWantsPhoto,
+  CHECKLIST_TYPE_LABELS,
+  formatChecklistAnswer,
+  isMissingRequiredPhoto,
+  normalizeUnit,
+  SEVERITY_LEVELS,
+  type ChecklistItemType,
+} from "@everlumen/shared";
 import {
   addChecklistItems,
   applyItemPatch,
@@ -22,8 +30,10 @@ import {
   toggledResponse,
   type ChecklistDetail,
   type ChecklistItem,
+  type NewItemOptions,
 } from "@/api/checklists";
 import {
+  addCounts,
   canReopenRecord,
   CHECKLIST_OVERRIDE_DETAIL,
   checklistCompletedMessage,
@@ -31,8 +41,11 @@ import {
   checklistDeleteMessage,
   checklistSnapshot,
   completionRights,
+  missingPhotoCount,
   overrideConfirm,
   pendingAnswerWrites,
+  photoCountsOf,
+  queuedItemPhotoCounts,
   recordPrintLinks,
   reopenChecklistPatch,
 } from "@/api/record-edit-rules";
@@ -49,7 +62,8 @@ import { useRecordAuthoring } from "@/lib/use-access";
 import { checklistItemRowId, type ChecklistItemPatchPayload } from "@/offline/handlers";
 import { enqueue, listRows } from "@/offline/outbox";
 import { refreshQueue, requestSync } from "@/offline/sync";
-import { HIT_TARGET, radius, spacing, useLayout, useTheme } from "@/theme";
+import { useQueue } from "@/offline/use-queue";
+import { HIT_TARGET, radius, spacing, useLayout, useTheme, type Theme } from "@/theme";
 import {
   Camera,
   Check,
@@ -116,6 +130,36 @@ export default function ChecklistRunnerScreen() {
     enabled: Boolean(id),
   });
 
+  /*
+   * Photos per item, for the "Photo needed" badges and the completion gate.
+   *
+   * Attached photos plus the ones still in the outbox bound for an item: a
+   * picture taken in a basement is evidence already, and nagging for it until
+   * there is signal would teach people to ignore the badge. Refreshed when the
+   * screen regains focus (back from the camera) and whenever the queue moves,
+   * which is when a queued photo turns into an attached one.
+   */
+  const itemIds = useMemo(() => (data?.items ?? []).map((item) => item.id), [data?.items]);
+  const photosKey = useMemo(() => ["checklist-item-photos", id], [id]);
+  const photosQuery = useQuery({
+    queryKey: [...photosKey, itemIds.join(",")],
+    queryFn: async () => {
+      const [attached, rows] = await Promise.all([listItemPhotoIds(itemIds), listRows(500)]);
+      return addCounts(photoCountsOf(attached), queuedItemPhotoCounts(rows));
+    },
+    enabled: itemIds.length > 0,
+  });
+  const photoCounts = photosQuery.data;
+  const queue = useQueue();
+  useEffect(() => {
+    void queryClient.invalidateQueries({ queryKey: photosKey });
+  }, [queue.outstanding, photosKey, queryClient]);
+  useFocusEffect(
+    useCallback(() => {
+      void queryClient.invalidateQueries({ queryKey: photosKey });
+    }, [photosKey, queryClient]),
+  );
+
   /**
    * Record an answer.
    *
@@ -160,10 +204,39 @@ export default function ChecklistRunnerScreen() {
     [data?.project_id, queryClient, queryKey],
   );
 
+  /** The existing "Add photo evidence" flow: the camera, linked to this item. */
+  const addPhoto = useCallback(
+    (item: ChecklistItem) => {
+      if (!data?.project_id) return;
+      router.push(`/project/${data.project_id}/capture?checklistItemId=${item.id}`);
+    },
+    [data?.project_id],
+  );
+
+  /**
+   * Record an answer, then offer the camera if the answer describes a problem.
+   *
+   * A Fail, a Poor or a High or Critical severity is the moment a photo is
+   * worth most and the moment it is most often forgotten, so it is offered
+   * right then. Not offered when the item already has a photo: the evidence is
+   * there, and a prompt after every correction would be noise.
+   */
   const setResponse = useCallback(
-    (item: ChecklistItem, value: unknown) =>
-      void patchItem(item, responsePatch(value, user?.id ?? null)),
-    [patchItem, user?.id],
+    (item: ChecklistItem, value: unknown) => {
+      void patchItem(item, responsePatch(value, user?.id ?? null));
+      if (!answerWantsPhoto(item.item_type, value)) return;
+      if ((photoCounts?.get(item.id) ?? 0) > 0 || !data?.project_id) return;
+      const answer = formatChecklistAnswer(item.item_type, value, item.unit);
+      Alert.alert(
+        "Add a photo of this issue?",
+        `"${item.label}" was answered ${answer ?? "with a problem"}. A photo shows exactly what was found.`,
+        [
+          { text: "Not now", style: "cancel" },
+          { text: "Add photo", onPress: () => addPhoto(item) },
+        ],
+      );
+    },
+    [addPhoto, data?.project_id, patchItem, photoCounts, user?.id],
   );
 
   /**
@@ -288,7 +361,7 @@ export default function ChecklistRunnerScreen() {
     { userId: user?.id ?? null, isManager },
     nameOf(data?.assigned_to ?? null),
   );
-  const completionBlock = checklistCompletionBlock(sortedItems);
+  const completionBlock = checklistCompletionBlock(sortedItems, photoCounts);
   const [completing, setCompleting] = useState(false);
 
   /**
@@ -308,6 +381,7 @@ export default function ChecklistRunnerScreen() {
       await new Promise((resolve) => setTimeout(resolve, 100));
       const itemIds = data.items.map((item) => item.id);
       let waiting = 0;
+      let waitingPhotos = 0;
       for (let attempt = 0; attempt < 20; attempt += 1) {
         requestSync();
         const rows = await listRows(500);
@@ -315,7 +389,11 @@ export default function ChecklistRunnerScreen() {
           rows.map((row) => row.id),
           itemIds,
         );
-        if (waiting === 0) break;
+        // A photo-required item is only satisfied once its photo is attached,
+        // which happens when the upload lands, so those wait here too.
+        const queuedPhotos = queuedItemPhotoCounts(rows);
+        waitingPhotos = itemIds.reduce((sum, itemId) => sum + (queuedPhotos.get(itemId) ?? 0), 0);
+        if (waiting === 0 && waitingPhotos === 0) break;
         await new Promise((resolve) => setTimeout(resolve, 400));
       }
       if (waiting > 0) {
@@ -324,15 +402,23 @@ export default function ChecklistRunnerScreen() {
         );
         return;
       }
+      if (waitingPhotos > 0) {
+        setEditError(
+          `${waitingPhotos} photo${waitingPhotos === 1 ? " is" : "s are"} still uploading. Complete the checklist once ${waitingPhotos === 1 ? "it has" : "they have"} synced.`,
+        );
+        return;
+      }
 
       const fresh = (await refetch()).data ?? data;
-      const block = checklistCompletionBlock(fresh.items);
+      // Photos read from the server, not the screen's count: only an attached
+      // photo satisfies a photo-required item on the sealed record.
+      const photos = await listItemPhotoIds(fresh.items.map((item) => item.id));
+      const block = checklistCompletionBlock(fresh.items, photoCountsOf(photos));
       if (block) {
         setEditError(block);
         return;
       }
       const now = new Date().toISOString();
-      const photos = await listItemPhotoIds(fresh.items.map((item) => item.id));
       await completeChecklist(fresh.id, {
         completedAt: now,
         userId,
@@ -420,10 +506,10 @@ export default function ChecklistRunnerScreen() {
   }, [data, refetch]);
 
   const addItems = useCallback(
-    (labels: string[], itemType: string) =>
+    (labels: string[], itemType: string, options?: NewItemOptions) =>
       runEdit(async () => {
         if (!data) return;
-        await addChecklistItems(data.id, labels, itemType, nextPosition(data.items));
+        await addChecklistItems(data.id, labels, itemType, nextPosition(data.items), options);
       }, "Could not add those items"),
     [data, runEdit],
   );
@@ -444,6 +530,26 @@ export default function ChecklistRunnerScreen() {
       void runEdit(
         () => applyItemPatch(item.id, { required: !item.required }),
         "Could not change that item",
+      ),
+    [runEdit],
+  );
+
+  // Same right as "Required": both are checklist structure, and the authoring
+  // trigger checks `photo_required` and `unit` with the other structure columns.
+  const togglePhotoRequired = useCallback(
+    (item: ChecklistItem) =>
+      void runEdit(
+        () => applyItemPatch(item.id, { photo_required: !item.photo_required }),
+        "Could not change that item",
+      ),
+    [runEdit],
+  );
+
+  const setUnit = useCallback(
+    (item: ChecklistItem, unit: string | null) =>
+      runEdit(
+        () => applyItemPatch(item.id, { unit: normalizeUnit(unit) }),
+        "Could not change the unit",
       ),
     [runEdit],
   );
@@ -564,6 +670,7 @@ export default function ChecklistRunnerScreen() {
   const items = data?.items ?? [];
   const done = items.filter((item) => item.completed_at).length;
   const outstandingRequired = items.filter((item) => item.required && !item.completed_at).length;
+  const photosNeeded = photoCounts ? missingPhotoCount(items, photoCounts) : 0;
 
   return (
     <>
@@ -580,6 +687,10 @@ export default function ChecklistRunnerScreen() {
                     outstandingRequired > 0
                       ? `${outstandingRequired} required left`
                       : "all required answered"
+                  }${
+                    photosNeeded > 0
+                      ? ` · ${photosNeeded} photo${photosNeeded === 1 ? "" : "s"} needed`
+                      : ""
                   }`
           }
           progress={
@@ -587,7 +698,7 @@ export default function ChecklistRunnerScreen() {
               ? {
                   value: done,
                   total: items.length,
-                  tone: outstandingRequired === 0 ? "success" : "primary",
+                  tone: outstandingRequired === 0 && photosNeeded === 0 ? "success" : "primary",
                 }
               : null
           }
@@ -701,6 +812,8 @@ export default function ChecklistRunnerScreen() {
                 onDelete={confirmDeleteItem}
                 onMove={moveItem}
                 onToggleRequired={toggleRequired}
+                onTogglePhotoRequired={togglePhotoRequired}
+                onSetUnit={setUnit}
               />
             ) : (
               <View
@@ -714,6 +827,8 @@ export default function ChecklistRunnerScreen() {
                     key={item.id}
                     item={item}
                     projectId={data.project_id}
+                    photoCount={photoCounts?.get(item.id) ?? null}
+                    onAddPhoto={addPhoto}
                     onSetResponse={setResponse}
                     onToggleDone={toggleDone}
                     onSetNote={setNote}
@@ -786,12 +901,17 @@ export default function ChecklistRunnerScreen() {
 function ChecklistRow({
   item,
   projectId,
+  photoCount,
+  onAddPhoto,
   onSetResponse,
   onToggleDone,
   onSetNote,
 }: {
   item: ChecklistItem;
   projectId: string | undefined;
+  /** Attached plus queued photos, or null while not yet known. */
+  photoCount: number | null;
+  onAddPhoto: (item: ChecklistItem) => void;
   onSetResponse: (item: ChecklistItem, value: unknown) => void;
   onToggleDone: (item: ChecklistItem) => void;
   onSetNote: (item: ChecklistItem, text: string) => void;
@@ -799,6 +919,9 @@ function ChecklistRow({
   const theme = useTheme();
   const answered = Boolean(item.completed_at);
   const choices = choicesFor(item.item_type);
+  // Unknown counts draw no badge: a "Photo needed" that flashes on every open
+  // and then disappears is a badge people learn to ignore.
+  const photoNeeded = photoCount !== null && isMissingRequiredPhoto(item, photoCount);
 
   return (
     <Card
@@ -813,9 +936,27 @@ function ChecklistRow({
         <Text variant="bodyStrong" style={{ flex: 1 }}>
           {item.label}
         </Text>
-        {item.required ? <Badge label="Required" tone="warning" /> : null}
         {answered ? <Icon icon={CircleCheck} size="md" tone="success" /> : null}
       </View>
+
+      {/*
+        The states sit under the label rather than beside it: two badges beside
+        a label on a phone squeeze it to a word a line.
+      */}
+      {item.required || item.photo_required ? (
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.xs }}>
+          {item.required ? <Badge label="Required" tone="warning" /> : null}
+          {photoNeeded ? (
+            <Badge label="Photo needed" tone="danger" variant="solid" icon={Camera} />
+          ) : item.photo_required ? (
+            <Badge
+              label={photoCount ? "Photo added" : "Photo required"}
+              tone={photoCount ? "success" : "neutral"}
+              icon={Camera}
+            />
+          ) : null}
+        </View>
+      ) : null}
 
       {item.description ? (
         <Text variant="caption" tone="muted">
@@ -839,7 +980,11 @@ function ChecklistRow({
         />
       ) : null}
 
-      {choices ? (
+      {item.item_type === "condition" ? (
+        <ConditionChoices item={item} onSetResponse={onSetResponse} />
+      ) : null}
+
+      {choices && item.item_type !== "condition" ? (
         <View style={{ flexDirection: "row", gap: spacing.sm, flexWrap: "wrap" }}>
           {choices.map((choice) => {
             const selected = item.response_value === choice;
@@ -865,6 +1010,10 @@ function ChecklistRow({
 
       {item.item_type === "rating" ? <Rating item={item} onSetResponse={onSetResponse} /> : null}
 
+      {item.item_type === "severity" ? (
+        <Severity item={item} onSetResponse={onSetResponse} />
+      ) : null}
+
       {item.item_type === "text" || item.item_type === "numeric" ? (
         <FreeTextAnswer item={item} onSetResponse={onSetResponse} />
       ) : null}
@@ -873,12 +1022,14 @@ function ChecklistRow({
 
       {projectId ? (
         <Button
-          label="Add photo evidence"
+          label={photoCount ? `Add photo evidence (${photoCount} added)` : "Add photo evidence"}
           icon={Camera}
-          variant="ghost"
+          // Promoted from ghost while the item owes a photo, so the fix for the
+          // red badge is the most visible thing in the card.
+          variant={photoNeeded ? "outline" : "ghost"}
           size="sm"
           fullWidth
-          onPress={() => router.push(`/project/${projectId}/capture?checklistItemId=${item.id}`)}
+          onPress={() => onAddPhoto(item)}
         />
       ) : null}
     </Card>
@@ -943,6 +1094,159 @@ function Rating({
 }
 
 /**
+ * The colour of each severity step, green for Minor through to red for
+ * Critical, with the label colour that reads on it.
+ *
+ * From the palette where it has the colour: success, safety amber, the primary
+ * orange and destructive red. Low has no token, so it is the one mixed here,
+ * a yellow-green between success and safety.
+ */
+function severityTone(level: number, theme: Theme): { fill: string; label: string } {
+  const { colors } = theme;
+  switch (level) {
+    case 1:
+      return { fill: colors.success, label: colors.successForeground };
+    case 2:
+      return {
+        fill: theme.scheme === "dark" ? "#a8c45a" : "#8fb03a",
+        label: colors.safetyForeground,
+      };
+    case 3:
+      return { fill: colors.safety, label: colors.safetyForeground };
+    case 4:
+      return { fill: colors.primary, label: colors.primaryForeground };
+    default:
+      return { fill: colors.destructive, label: colors.destructiveForeground };
+  }
+}
+
+/**
+ * How bad an issue is, 1 (Minor) to 5 (Critical).
+ *
+ * Five buttons each carrying its number and its word, not stars: a rating is
+ * "how good", and a row of stars here would read as a five-star Critical. Only
+ * the selected one is filled, in its own colour, so a 5 reads as urgent from
+ * across a room. The thin bar under each unselected step keeps the scale's
+ * direction visible before anything is picked.
+ */
+function Severity({
+  item,
+  onSetResponse,
+}: {
+  item: ChecklistItem;
+  onSetResponse: (item: ChecklistItem, value: unknown) => void;
+}) {
+  const theme = useTheme();
+  const current =
+    typeof item.response_value === "number" ? item.response_value : Number(item.response_value);
+
+  return (
+    <View style={{ flexDirection: "row", gap: spacing.sm }}>
+      {SEVERITY_LEVELS.map((level) => {
+        const selected = current === level.value;
+        const tone = severityTone(level.value, theme);
+        return (
+          <Pressable
+            key={level.value}
+            accessibilityRole="button"
+            accessibilityLabel={`Severity ${level.value}, ${level.label}`}
+            accessibilityState={{ selected }}
+            onPress={() =>
+              onSetResponse(item, toggledResponse("severity", item.response_value, level.value))
+            }
+            style={({ pressed }) => ({
+              flex: 1,
+              minHeight: 64,
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 2,
+              paddingHorizontal: 2,
+              borderRadius: radius.md,
+              borderWidth: selected ? 2 : 1,
+              borderColor: selected ? tone.fill : theme.colors.border,
+              borderBottomWidth: selected ? 2 : 4,
+              borderBottomColor: tone.fill,
+              backgroundColor: selected ? tone.fill : theme.colors.card,
+              opacity: pressed ? 0.7 : 1,
+            })}
+          >
+            <Text variant="heading" style={selected ? { color: tone.label } : undefined}>
+              {level.value}
+            </Text>
+            <Text
+              variant="caption"
+              tone={selected ? "default" : "muted"}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.75}
+              style={selected ? { color: tone.label, fontWeight: "600" } : undefined}
+            >
+              {level.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/**
+ * Good / Fair / Poor, laid out like the Pass / Fail buttons but each in its
+ * own colour once chosen, so a column of conditions can be scanned for the
+ * red ones.
+ */
+function ConditionChoices({
+  item,
+  onSetResponse,
+}: {
+  item: ChecklistItem;
+  onSetResponse: (item: ChecklistItem, value: unknown) => void;
+}) {
+  const theme = useTheme();
+  const tones: Record<string, { fill: string; label: string }> = {
+    Good: { fill: theme.colors.success, label: theme.colors.successForeground },
+    Fair: { fill: theme.colors.safety, label: theme.colors.safetyForeground },
+    Poor: { fill: theme.colors.destructive, label: theme.colors.destructiveForeground },
+  };
+
+  return (
+    <View style={{ flexDirection: "row", gap: spacing.sm, flexWrap: "wrap" }}>
+      {(choicesFor("condition") ?? []).map((choice) => {
+        const selected = item.response_value === choice;
+        const tone = tones[choice];
+        return (
+          <Pressable
+            key={choice}
+            accessibilityRole="button"
+            accessibilityLabel={choice}
+            accessibilityState={{ selected }}
+            onPress={() =>
+              onSetResponse(item, toggledResponse("condition", item.response_value, choice))
+            }
+            style={({ pressed }) => ({
+              flex: 1,
+              minWidth: 96,
+              height: HIT_TARGET,
+              alignItems: "center",
+              justifyContent: "center",
+              borderRadius: radius.md,
+              borderWidth: 1,
+              borderColor: selected ? tone.fill : theme.colors.border,
+              backgroundColor: selected ? tone.fill : "transparent",
+              opacity: pressed ? 0.7 : 1,
+            })}
+          >
+            <Text variant="bodyStrong" style={selected ? { color: tone.label } : undefined}>
+              {choice}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/**
  * The note field carried by every item, whatever its answer type.
  *
  * Held locally and committed on blur, and skipped entirely when nothing
@@ -985,6 +1289,7 @@ function FreeTextAnswer({
   onSetResponse: (item: ChecklistItem, value: unknown) => void;
 }) {
   const numeric = item.item_type === "numeric";
+  const unit = numeric ? normalizeUnit(item.unit) : null;
   const [draft, setDraft] = useState(
     hasResponse(item.response_value) ? String(item.response_value) : "",
   );
@@ -1015,6 +1320,7 @@ function FreeTextAnswer({
       multiline={!numeric}
       rows={2}
       placeholder={numeric ? "Enter a number" : "Enter a note"}
+      suffix={unit}
       autoCapitalize={numeric ? "none" : "sentences"}
     />
   );

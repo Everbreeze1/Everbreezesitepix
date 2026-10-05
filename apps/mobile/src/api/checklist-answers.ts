@@ -20,17 +20,26 @@ export function hasResponse(value: unknown): boolean {
  * runner behaves and the only way to undo an answer on a required item.
  */
 export function toggledResponse(itemType: string, current: unknown, choice: unknown): unknown {
-  if (itemType === "rating") {
+  // Severity is stored the same way as a rating (a number in a jsonb column),
+  // so it gets the same numeric comparison.
+  if (itemType === "rating" || itemType === "severity") {
     const currentNumber = typeof current === "number" ? current : Number(current);
     return currentNumber === choice ? null : choice;
   }
   return current === choice ? null : choice;
 }
 
-/** Option labels for a two-way item, in the order web renders them. */
+/**
+ * Option labels for a pick-one item, in the order web renders them.
+ *
+ * Condition is written out here rather than read from `CONDITION_OPTIONS` in
+ * `@everlumen/shared` to keep this file import-free; the test pins the two to
+ * the same list.
+ */
 export function choicesFor(itemType: string): string[] | null {
   if (itemType === "pass_fail") return ["Pass", "Fail"];
   if (itemType === "yes_no") return ["Yes", "No"];
+  if (itemType === "condition") return ["Good", "Fair", "Poor"];
   return null;
 }
 

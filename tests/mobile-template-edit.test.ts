@@ -194,8 +194,15 @@ describe("templateNameError", () => {
 });
 
 describe("normaliseItemType", () => {
-  it("passes through the six the runner understands", () => {
+  it("passes through the eight the runner understands", () => {
     for (const type of ITEM_TYPES) expect(normaliseItemType(type)).toBe(type);
+  });
+
+  it("offers Severity and Condition, so a template using them keeps its type", () => {
+    expect(ITEM_TYPES).toContain("severity");
+    expect(ITEM_TYPES).toContain("condition");
+    expect(normaliseItemType("severity")).toBe("severity");
+    expect(normaliseItemType("condition")).toBe("condition");
   });
 
   it("falls back rather than leaving the picker with nothing selected", () => {

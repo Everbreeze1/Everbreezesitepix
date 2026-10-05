@@ -28,7 +28,7 @@ export type ChecklistTemplate = {
 };
 
 const TEMPLATE_FIELDS = "id, name, description, category, archived";
-const ITEM_FIELDS = "id, position, label, description, required, item_type";
+const ITEM_FIELDS = "id, position, label, description, required, item_type, unit, photo_required";
 
 /** Every checklist template, archived ones included: this screen manages them. */
 export async function listAllChecklistTemplates(): Promise<ChecklistTemplate[]> {
@@ -97,6 +97,8 @@ export async function addTemplateItem(
       description: item.description,
       required: item.required,
       item_type: item.item_type,
+      unit: item.unit ?? null,
+      photo_required: item.photo_required ?? false,
     } as never)
     .select(ITEM_FIELDS)
     .single();
@@ -106,7 +108,12 @@ export async function addTemplateItem(
 
 export async function updateTemplateItem(
   id: string,
-  patch: Partial<Pick<TemplateItem, "label" | "description" | "required" | "item_type">>,
+  patch: Partial<
+    Pick<
+      TemplateItem,
+      "label" | "description" | "required" | "item_type" | "unit" | "photo_required"
+    >
+  >,
 ): Promise<void> {
   const { error } = await supabase
     .from("checklist_template_items")
