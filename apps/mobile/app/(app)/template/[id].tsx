@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, View } from "react-native";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CHECKLIST_TYPE_LABELS, type ChecklistItemType } from "@everlumen/shared";
+import { CHECKLIST_TYPE_LABELS, normalizeUnit, type ChecklistItemType } from "@everlumen/shared";
 import { can } from "@everlumen/shared/team-permissions";
 import {
   addTemplateItem,
@@ -26,6 +26,7 @@ import {
   type TemplateItem,
 } from "@/api/template-edit";
 import { getMyTeam } from "@/api/team";
+import { itemTypeLine, UnitPicker } from "@/components/ChecklistEditor";
 import { spacing } from "@/theme";
 import { Archive, ChevronDown, ChevronUp, Plus, Trash2 } from "@/ui/icons";
 import {
@@ -70,6 +71,8 @@ export default function TemplateEditorScreen() {
   const [draftDescription, setDraftDescription] = useState("");
   const [draftType, setDraftType] = useState<ChecklistItemType>("checkbox");
   const [draftRequired, setDraftRequired] = useState(false);
+  const [draftUnit, setDraftUnit] = useState<string | null>(null);
+  const [draftPhotoRequired, setDraftPhotoRequired] = useState(false);
   const [itemError, setItemError] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [name, setName] = useState("");
@@ -160,6 +163,8 @@ export default function TemplateEditorScreen() {
     setDraftDescription("");
     setDraftType("checkbox");
     setDraftRequired(false);
+    setDraftUnit(null);
+    setDraftPhotoRequired(false);
     setItemError(null);
     setEditing("new");
   }, []);
@@ -169,6 +174,8 @@ export default function TemplateEditorScreen() {
     setDraftDescription(item.description ?? "");
     setDraftType(normaliseItemType(item.item_type));
     setDraftRequired(item.required);
+    setDraftUnit(item.unit ?? null);
+    setDraftPhotoRequired(item.photo_required ?? false);
     setItemError(null);
     setEditing(item);
   }, []);
@@ -185,6 +192,10 @@ export default function TemplateEditorScreen() {
       description: draftDescription.trim() || null,
       item_type: draftType,
       required: draftRequired,
+      // Kept only on a Number item: a unit left behind after switching the
+      // type to Pass / Fail would print next to an answer it does not describe.
+      unit: draftType === "numeric" ? normalizeUnit(draftUnit) : null,
+      photo_required: draftPhotoRequired,
     };
     setEditing(null);
 
@@ -193,7 +204,18 @@ export default function TemplateEditorScreen() {
     } else if (target) {
       run.mutate(() => updateTemplateItem(target.id, patch));
     }
-  }, [editing, draftLabel, draftDescription, draftType, draftRequired, items, id, run]);
+  }, [
+    editing,
+    draftLabel,
+    draftDescription,
+    draftType,
+    draftRequired,
+    draftUnit,
+    draftPhotoRequired,
+    items,
+    id,
+    run,
+  ]);
 
   if (itemsQuery.isLoading || templatesQuery.isLoading) {
     return (
@@ -314,8 +336,10 @@ export default function TemplateEditorScreen() {
                      * separator is the pattern the inbox uses.
                      */
                     subtitle={[
-                      item.description ?? CHECKLIST_TYPE_LABELS[normaliseItemType(item.item_type)],
+                      item.description ??
+                        itemTypeLine({ ...item, item_type: normaliseItemType(item.item_type) }),
                       item.required ? "Required" : null,
+                      item.photo_required ? "Photo required" : null,
                     ]
                       .filter(Boolean)
                       .join(" · ")}
@@ -444,6 +468,16 @@ export default function TemplateEditorScreen() {
             </View>
           </View>
 
+          {draftType === "numeric" ? (
+            // Keyed by what is being edited, so the custom field starts from
+            // this item's unit rather than the last one opened.
+            <UnitPicker
+              key={editing === "new" ? "new" : (editing?.id ?? "none")}
+              value={draftUnit}
+              onChange={setDraftUnit}
+            />
+          ) : null}
+
           <ListGroup>
             <ListRow
               title="Required"
@@ -456,6 +490,19 @@ export default function TemplateEditorScreen() {
                 />
               }
               onPress={() => setDraftRequired((current) => !current)}
+            />
+            <RowDivider inset={false} />
+            <ListRow
+              title="Photo required"
+              subtitle="The checklist cannot be completed until a photo is attached to this item"
+              right={
+                <Badge
+                  label={draftPhotoRequired ? "Yes" : "No"}
+                  tone={draftPhotoRequired ? "primary" : "neutral"}
+                  variant={draftPhotoRequired ? "soft" : "outline"}
+                />
+              }
+              onPress={() => setDraftPhotoRequired((current) => !current)}
             />
           </ListGroup>
 

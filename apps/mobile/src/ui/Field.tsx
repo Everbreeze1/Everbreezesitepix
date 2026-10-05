@@ -30,6 +30,12 @@ export type FieldProps = {
   /** Shown under the field in the muted tone when there is no error. */
   hint?: string;
   icon?: LucideIcon;
+  /**
+   * Fixed text after the input, inside the box: the unit of a measurement
+   * ("ft", "psi"). Part of the field rather than a caption beside it, so the
+   * number and what it counts are read together.
+   */
+  suffix?: string | null;
   multiline?: boolean;
   /** Rows of visible height when `multiline`. */
   rows?: number;
@@ -67,6 +73,7 @@ export function Field({
   error,
   hint,
   icon,
+  suffix,
   multiline = false,
   rows = 4,
   keyboardType,
@@ -141,7 +148,7 @@ export function Field({
             setFocused(false);
             onBlur?.();
           }}
-          accessibilityLabel={label}
+          accessibilityLabel={label ?? (suffix ? `Value in ${suffix}` : undefined)}
           accessibilityState={{ disabled: !editable }}
           style={[
             typography.body,
@@ -156,6 +163,11 @@ export function Field({
             },
           ]}
         />
+        {suffix ? (
+          <Text variant="bodyStrong" tone="muted" numberOfLines={1}>
+            {suffix}
+          </Text>
+        ) : null}
       </View>
       {error ? (
         <Text variant="caption" tone="destructive">

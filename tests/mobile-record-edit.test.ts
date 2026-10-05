@@ -14,8 +14,12 @@ import {
   checklistCompletionBlock,
   checklistSnapshot,
   completionRights,
+  addCounts,
+  missingPhotoCount,
   overrideConfirm,
   pendingAnswerWrites,
+  photoCountsOf,
+  queuedItemPhotoCounts,
   recordPrintLinks,
   requiredOpenCount,
   workflowCompletedMessage,
@@ -270,9 +274,97 @@ describe("checklist completion", () => {
       completed_at: "2026-01-01T00:00:00Z",
       response_value: "Pass",
       notes: "ok",
+      unit: null,
       photo_ids: ["p1", "p2"],
     });
     expect(snapshot.items[1].photo_ids).toEqual([]);
+  });
+
+  it("seals a Number item's unit, so the printed record says what it measured", () => {
+    const snapshot = checklistSnapshot(
+      "Rough-in",
+      "2026-02-02T00:00:00Z",
+      [item({ item_type: "numeric", response_value: 42, unit: "psi" })],
+      new Map(),
+    );
+    expect(snapshot.items[0].unit).toBe("psi");
+  });
+
+  it("blocks completion while a photo-required item has no photo", () => {
+    const items = [
+      item({ id: "a", photo_required: true }),
+      item({ id: "b", photo_required: true }),
+      item({ id: "c", photo_required: false }),
+    ];
+    expect(missingPhotoCount(items, new Map())).toBe(2);
+    expect(checklistCompletionBlock(items, new Map())).toBe("2 photos still needed");
+    expect(checklistCompletionBlock(items, new Map([["a", 1]]))).toBe("1 photo still needed");
+    expect(
+      checklistCompletionBlock(
+        items,
+        new Map([
+          ["a", 1],
+          ["b", 3],
+        ]),
+      ),
+    ).toBeNull();
+    // Without counts (not loaded yet) only the answer rule applies.
+    expect(checklistCompletionBlock(items)).toBeNull();
+  });
+
+  it("names both reasons when required answers and photos are outstanding", () => {
+    const items = [item({ id: "a", required: true, completed_at: null, photo_required: true })];
+    expect(checklistCompletionBlock(items, new Map())).toBe(
+      "1 required item still open, 1 photo still needed",
+    );
+  });
+
+  it("counts attached photos per item", () => {
+    expect(
+      photoCountsOf(
+        new Map([
+          ["a", ["p1", "p2"]],
+          ["b", []],
+        ]),
+      ),
+    ).toEqual(
+      new Map([
+        ["a", 2],
+        ["b", 0],
+      ]),
+    );
+    expect(
+      addCounts(
+        new Map([["a", 1]]),
+        new Map([
+          ["a", 2],
+          ["b", 1],
+        ]),
+      ),
+    ).toEqual(
+      new Map([
+        ["a", 3],
+        ["b", 1],
+      ]),
+    );
+  });
+
+  it("counts queued photos bound for an item, but not failed or unrelated rows", () => {
+    const row = (over: Record<string, unknown>) => ({
+      kind: "photo_upload",
+      state: "pending",
+      payload: JSON.stringify({ attachToChecklistItemId: "a" }),
+      ...over,
+    });
+    const counts = queuedItemPhotoCounts([
+      row({}),
+      row({ state: "sending" }),
+      row({ state: "failed" }),
+      row({ payload: JSON.stringify({ attachToChecklistItemId: null }) }),
+      row({ payload: "not json" }),
+      row({ kind: "checklist_item_patch" }),
+    ]);
+    expect(counts).toEqual(new Map([["a", 2]]));
   });
 
   it("waits for queued answers on these items only", () => {

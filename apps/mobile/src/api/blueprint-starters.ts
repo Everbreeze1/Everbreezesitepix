@@ -74,7 +74,15 @@ export type ChecklistStarter = {
   name: string;
   description: string;
   category?: string;
-  items: { label: string; item_type: string; required?: boolean; description?: string }[];
+  items: {
+    label: string;
+    item_type: string;
+    required?: boolean;
+    description?: string;
+    /** A Number item's unit, from `MEASUREMENT_UNITS` or the author's own. */
+    unit?: string;
+    photo_required?: boolean;
+  }[];
 };
 
 export const CHECKLIST_STARTER_PIECES: ChecklistStarter[] = [
@@ -86,8 +94,9 @@ export const CHECKLIST_STARTER_PIECES: ChecklistStarter[] = [
       { label: "Water isolated at stop tap", item_type: "checkbox", required: true },
       { label: "Leak located", item_type: "yes_no", required: true },
       { label: "Leak source and location", item_type: "text", required: true },
-      { label: "Static water pressure (PSI / bar)", item_type: "numeric" },
-      { label: "Hot water temperature", item_type: "numeric" },
+      { label: "Leak severity", item_type: "severity", photo_required: true },
+      { label: "Static water pressure", item_type: "numeric", unit: "psi" },
+      { label: "Hot water temperature", item_type: "numeric", unit: "°F" },
       { label: "Shut-off valves operate", item_type: "pass_fail" },
       { label: "Repair completed", item_type: "checkbox", required: true },
       { label: "Pressure test held after repair", item_type: "pass_fail", required: true },
@@ -111,7 +120,7 @@ export const CHECKLIST_STARTER_PIECES: ChecklistStarter[] = [
       { label: "Manuals, warranties and as-builts handed over", item_type: "checkbox" },
       { label: "Open items remaining", item_type: "numeric", required: true },
       { label: "Items blocking handover", item_type: "numeric", required: true },
-      { label: "Finish quality overall", item_type: "rating" },
+      { label: "Finish quality overall", item_type: "condition" },
       { label: "Site cleaned and waste removed", item_type: "checkbox" },
       { label: "Keys, fobs and access codes transferred", item_type: "checkbox" },
       { label: "Client walked the property", item_type: "yes_no", required: true },

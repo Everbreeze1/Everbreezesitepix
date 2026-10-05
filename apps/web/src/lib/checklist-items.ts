@@ -1,5 +1,15 @@
-import { CheckCircle2, CheckSquare, Hash, Star, ToggleLeft, Type } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  CheckSquare,
+  Gauge,
+  Hash,
+  Star,
+  ToggleLeft,
+  Type,
+} from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import type { ChecklistItemType } from "@everlumen/shared";
 
 /**
  * The checklist answer-type vocabulary, in one place.
@@ -10,7 +20,7 @@ import type { LucideIcon } from "lucide-react";
  * Both now read from here, which is also what keeps a "Pass / Fail" chip the
  * same shade of green whether you are authoring it or answering it.
  */
-export type ItemType = "checkbox" | "rating" | "text" | "pass_fail" | "numeric" | "yes_no";
+export type ItemType = ChecklistItemType;
 
 export interface ItemTypeMeta {
   /** Full name, for menus. */
@@ -47,18 +57,32 @@ export const TYPE_META: Record<ItemType, ItemTypeMeta> = {
     tint: "border-rose-500/25 bg-rose-500/10 text-rose-700 dark:text-rose-300",
   },
   rating: {
-    label: "Rating (1–5)",
+    label: "Star rating (1–5)",
     short: "Rating",
     icon: Star,
-    hint: "Star scale for assessments",
+    hint: "Quality score, 5 stars = excellent",
     tint: "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
   },
   numeric: {
-    label: "Numeric",
+    label: "Number / Measurement",
     short: "Number",
     icon: Hash,
-    hint: "Measurement or count",
+    hint: "Measurement with a unit, or a count",
     tint: "border-cyan-500/25 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300",
+  },
+  severity: {
+    label: "Severity (1–5)",
+    short: "Severity",
+    icon: AlertTriangle,
+    hint: "How bad is the issue, 1 Minor to 5 Critical",
+    tint: "border-red-500/25 bg-red-500/10 text-red-700 dark:text-red-300",
+  },
+  condition: {
+    label: "Condition",
+    short: "Condition",
+    icon: Gauge,
+    hint: "Good, Fair or Poor",
+    tint: "border-lime-500/25 bg-lime-500/10 text-lime-700 dark:text-lime-300",
   },
   text: {
     label: "Text / Notes",
@@ -74,10 +98,31 @@ export const TYPE_ORDER: ItemType[] = [
   "checkbox",
   "pass_fail",
   "yes_no",
+  "condition",
+  "severity",
   "rating",
   "numeric",
   "text",
 ];
+
+/**
+ * Selected-state colours for the severity scale, 1 (green) to 5 (red), so a
+ * Critical reads as urgent at a glance in the runner and the builder preview.
+ */
+export const SEVERITY_TINTS: Record<number, string> = {
+  1: "bg-emerald-500/15 border-emerald-500/50 text-emerald-700 dark:text-emerald-300",
+  2: "bg-lime-500/15 border-lime-500/50 text-lime-700 dark:text-lime-300",
+  3: "bg-amber-500/15 border-amber-500/50 text-amber-700 dark:text-amber-300",
+  4: "bg-orange-500/15 border-orange-500/50 text-orange-700 dark:text-orange-300",
+  5: "bg-red-500/15 border-red-500/50 text-red-700 dark:text-red-300",
+};
+
+/** Selected-state colours for Good / Fair / Poor. */
+export const CONDITION_TINTS: Record<string, string> = {
+  Good: "bg-emerald-500/15 border-emerald-500/40 text-emerald-700 dark:text-emerald-400",
+  Fair: "bg-amber-500/15 border-amber-500/40 text-amber-700 dark:text-amber-400",
+  Poor: "bg-red-500/15 border-red-500/40 text-red-700 dark:text-red-400",
+};
 
 /**
  * Whether a recorded answer counts as given.

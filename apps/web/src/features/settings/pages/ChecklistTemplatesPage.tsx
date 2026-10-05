@@ -18,6 +18,8 @@ import {
   ListPlus,
   Lock,
   Search,
+  Camera,
+  Ruler,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -61,6 +63,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { supabase } from "@/integrations/everlumen/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useConfirm } from "@/hooks/use-confirm";
+import { usePrompt } from "@/hooks/use-prompt";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
@@ -84,12 +87,24 @@ import {
 import { restrictToVerticalAxis } from "@/components/builder/builder-tokens";
 import { useAutosave } from "@/components/builder/use-autosave";
 import { STARTER_TEMPLATES } from "@/features/settings/components/checklist-starters";
-import { TYPE_META, TYPE_ORDER, type ItemType } from "@/lib/checklist-items";
+import {
+  CONDITION_TINTS,
+  SEVERITY_TINTS,
+  TYPE_META,
+  TYPE_ORDER,
+  type ItemType,
+} from "@/lib/checklist-items";
 import { GENERAL_CATEGORY, categoryIcon, makeCategoryRank } from "@/lib/template-categories";
 import { TradeSelect } from "@/components/builder/TradeSelect";
 import { useCompanySetup } from "@/hooks/use-company-setup";
 import { useTemplateAuthoringAccess } from "@/hooks/use-template-authoring-access";
-import { tradeCategoryFor } from "@everlumen/shared";
+import {
+  CONDITION_OPTIONS,
+  MEASUREMENT_UNITS,
+  SEVERITY_LEVELS,
+  normalizeUnit,
+  tradeCategoryFor,
+} from "@everlumen/shared";
 
 interface Template {
   id: string;
@@ -115,7 +130,15 @@ interface TemplateItem {
   required: boolean;
   item_type: ItemType;
   description: string | null;
+  /** What a Number item measures in; null for every other type. */
+  unit: string | null;
+  /** The crew must attach a photo to this item before completing. */
+  photo_required: boolean;
 }
+
+/** Every column a `TemplateItem` needs, so each select returns the same shape. */
+const TEMPLATE_ITEM_COLUMNS =
+  "id, template_id, position, label, required, item_type, description, unit, photo_required";
 
 const TABLES = {
   templates: "checklist_templates",
@@ -268,7 +291,7 @@ function ChecklistTemplatesBuilder({
       const ids = list.map((t) => t.id);
       const { data: its } = await supabase
         .from(TABLES.items as any)
-        .select("id, template_id, position, label, required, item_type, description")
+        .select(TEMPLATE_ITEM_COLUMNS)
         .in("template_id", ids)
         .order("position", { ascending: true });
       setItems(((its as any[]) ?? []) as TemplateItem[]);
@@ -470,6 +493,8 @@ function ChecklistTemplatesBuilder({
           required: !!it.required,
           item_type: it.item_type,
           description: it.description ?? null,
+          unit: normalizeUnit(it.unit),
+          photo_required: !!it.photo_required,
         })),
       );
       if (error) toast.error(error.message);
@@ -496,6 +521,8 @@ function ChecklistTemplatesBuilder({
           required: it.required,
           item_type: it.item_type,
           description: it.description,
+          unit: it.unit,
+          photo_required: it.photo_required,
         })),
       );
       if (error) toast.error(error.message);
@@ -649,7 +676,7 @@ function ChecklistTemplatesBuilder({
           position,
           item_type: type,
         })
-        .select("id, template_id, label, description, required, position, item_type")
+        .select(TEMPLATE_ITEM_COLUMNS)
         .single();
       if (error || !data) {
         toast.error("Couldn't add that item");
@@ -681,7 +708,7 @@ function ChecklistTemplatesBuilder({
           item_type: type,
         })),
       )
-      .select("id, template_id, position, label, required, item_type, description");
+      .select(TEMPLATE_ITEM_COLUMNS);
     if (error) {
       toast.error(error.message ?? "Couldn't add those items");
       return;
@@ -719,8 +746,10 @@ function ChecklistTemplatesBuilder({
         required: source.required,
         item_type: source.item_type,
         description: source.description,
+        unit: source.unit,
+        photo_required: source.photo_required,
       })
-      .select("id, template_id, label, description, required, position, item_type")
+      .select(TEMPLATE_ITEM_COLUMNS)
       .single();
     if (error || !data) {
       toast.error("Couldn't duplicate that item");
@@ -1366,6 +1395,7 @@ function ItemRow({
   });
   const inputRef = useRef<HTMLInputElement>(null);
   const removed = useRef(false);
+  const promptFor = usePrompt();
   // Helper text is opt-in per item - an always-present empty textarea under
   // every row was most of what made this list feel like a form to survive.
   const [showHelp, setShowHelp] = useState(!!item.description);
@@ -1484,6 +1514,61 @@ function ItemRow({
             permanently invisible, and it is the only way to set this flag. */}
         {item.required && <RequiredToggle required onToggle={(v) => onChange({ required: v })} />}
 
+        {item.photo_required && (
+          <button
+            type="button"
+            onClick={() => onChange({ photo_required: false })}
+            title="Photo required - click to make it optional"
+            className="inline-flex shrink-0 items-center gap-1 rounded-full border border-orange-500/40 bg-orange-500/12 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-orange-700 dark:text-orange-300"
+          >
+            <Camera className="h-3 w-3" />
+            <span className="hidden sm:inline">Photo</span>
+          </button>
+        )}
+
+        {item.item_type === "numeric" && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                title="Measurement unit"
+                className="inline-flex min-h-7 shrink-0 items-center gap-1 rounded-lg border border-border px-2 py-0.5 text-[11px] font-semibold text-muted-foreground hover:bg-muted/60"
+              >
+                <Ruler className="h-3 w-3" />
+                {item.unit ?? "Unit"}
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="max-h-72 w-44 overflow-y-auto">
+              <DropdownMenuLabel className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+                Measured in
+              </DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => onChange({ unit: null })}>No unit</DropdownMenuItem>
+              {MEASUREMENT_UNITS.map((u) => (
+                <DropdownMenuItem key={u} onClick={() => onChange({ unit: u })}>
+                  <span className="flex-1">{u}</span>
+                  {item.unit === u && <CheckSquare className="ml-2 h-3.5 w-3.5 text-primary" />}
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() =>
+                  void promptFor({
+                    title: "Measurement unit",
+                    description: "Shown next to the number, for example ft, sq ft or psi.",
+                    label: "Unit",
+                    defaultValue: item.unit ?? "",
+                    confirmText: "Save unit",
+                  }).then((raw) => {
+                    if (raw !== null) onChange({ unit: normalizeUnit(raw) });
+                  })
+                }
+              >
+                Other…
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -1500,6 +1585,10 @@ function ItemRow({
             <DropdownMenuItem onClick={() => onChange({ required: !item.required })}>
               <AlertCircle className="mr-2 h-4 w-4" />
               {item.required ? "Make optional" : "Mark required"}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onChange({ photo_required: !item.photo_required })}>
+              <Camera className="mr-2 h-4 w-4" />
+              {item.photo_required ? "Photo optional" : "Require a photo"}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setShowHelp((s) => !s)}>
               <MessageSquareText className="mr-2 h-4 w-4" />
@@ -1545,6 +1634,12 @@ function PreviewRow({ item }: { item: TemplateItem }) {
           Required
         </span>
       )}
+      {item.photo_required && (
+        <span className="inline-flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wide text-orange-600 dark:text-orange-400">
+          <Camera className="h-3 w-3" />
+          Photo
+        </span>
+      )}
     </div>
   );
 
@@ -1581,9 +1676,45 @@ function PreviewRow({ item }: { item: TemplateItem }) {
           ))}
         </div>
       )}
+      {item.item_type === "severity" && (
+        <div className="mt-2 flex flex-wrap gap-1">
+          {SEVERITY_LEVELS.map((l) => (
+            <span
+              key={l.value}
+              className={cn(
+                "flex min-w-[52px] flex-col items-center rounded-lg border px-1.5 py-0.5",
+                SEVERITY_TINTS[l.value],
+              )}
+            >
+              <span className="text-xs font-bold leading-none">{l.value}</span>
+              <span className="text-[9px] font-semibold uppercase">{l.label}</span>
+            </span>
+          ))}
+        </div>
+      )}
+      {item.item_type === "condition" && (
+        <div className="mt-2 flex gap-1.5">
+          {CONDITION_OPTIONS.map((v) => (
+            <span
+              key={v}
+              className={cn(
+                "rounded-lg border px-3 py-1 text-xs font-semibold",
+                CONDITION_TINTS[v],
+              )}
+            >
+              {v}
+            </span>
+          ))}
+        </div>
+      )}
       {item.item_type === "numeric" && (
-        <div className="mt-2 w-32 rounded-lg border border-dashed border-border px-3 py-1.5 text-xs text-muted-foreground">
-          0.00
+        <div className="mt-2 flex items-center gap-2">
+          <div className="w-32 rounded-lg border border-dashed border-border px-3 py-1.5 text-xs text-muted-foreground">
+            0.00
+          </div>
+          {item.unit && (
+            <span className="text-xs font-medium text-muted-foreground">{item.unit}</span>
+          )}
         </div>
       )}
       {item.item_type === "text" && (

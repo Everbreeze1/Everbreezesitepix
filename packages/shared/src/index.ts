@@ -56,8 +56,16 @@ export {
 } from "./photo-thumbnails";
 export {
   CHECKLIST_TYPE_LABELS,
+  CONDITION_OPTIONS,
+  MAX_UNIT_LENGTH,
+  MEASUREMENT_UNITS,
+  SEVERITY_LEVELS,
   WORKFLOW_KIND_LABELS,
+  answerWantsPhoto,
   hasFieldResponse,
+  isMissingRequiredPhoto,
+  normalizeUnit,
+  severityLabel,
   formatChecklistAnswer,
   formatProjectAddress,
   type ChecklistItemType,

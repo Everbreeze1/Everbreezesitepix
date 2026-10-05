@@ -33,6 +33,10 @@ export type ChecklistItem = {
   notes: string | null;
   response_value: unknown;
   completed_at: string | null;
+  /** What a Number item measures in ("ft", "psi"). Null for every other type. */
+  unit: string | null;
+  /** The item is not done, and the checklist cannot close, without a photo. */
+  photo_required: boolean;
 };
 
 export type ChecklistDetail = {
@@ -57,7 +61,7 @@ export type ChecklistDetail = {
 };
 
 const ITEM_FIELDS =
-  "id, checklist_id, label, description, item_type, required, position, notes, response_value, completed_at";
+  "id, checklist_id, label, description, item_type, required, position, notes, response_value, completed_at, unit, photo_required";
 
 /** Checklists on a project, each with its progress counts. */
 export async function listProjectChecklists(projectId: string): Promise<ChecklistSummary[]> {
@@ -172,12 +176,19 @@ export async function attachPhotoToItem(
  * sentence is passed through.
  */
 
+/** What a new item carries besides its label and type. */
+export type NewItemOptions = {
+  unit?: string | null;
+  photoRequired?: boolean;
+};
+
 /** Append items, in order, after `startPosition`. Returns the new rows. */
 export async function addChecklistItems(
   checklistId: string,
   labels: string[],
   itemType: string,
   startPosition: number,
+  options: NewItemOptions = {},
 ): Promise<ChecklistItem[]> {
   if (labels.length === 0) return [];
   const { data, error } = await supabase
@@ -188,6 +199,9 @@ export async function addChecklistItems(
         label,
         position: startPosition + index,
         item_type: itemType,
+        // A unit only means something on a Number item.
+        unit: itemType === "numeric" ? (options.unit ?? null) : null,
+        photo_required: options.photoRequired ?? false,
       })) as never,
     )
     .select(ITEM_FIELDS);
@@ -290,6 +304,8 @@ export async function saveChecklistAsTemplate(args: {
       required: item.required,
       item_type: item.item_type ?? "checkbox",
       description: item.description,
+      unit: item.unit ?? null,
+      photo_required: item.photo_required ?? false,
     })) as never,
   );
   if (itemsError) {
@@ -298,7 +314,10 @@ export async function saveChecklistAsTemplate(args: {
   }
 }
 
-/** Photo ids attached to each item, for the sealed copy written on completion. */
+/**
+ * Photo ids attached to each item: for the sealed copy written on completion,
+ * and for the runner's "Photo needed" badges.
+ */
 export async function listItemPhotoIds(itemIds: string[]): Promise<Map<string, string[]>> {
   const map = new Map<string, string[]>();
   if (itemIds.length === 0) return map;

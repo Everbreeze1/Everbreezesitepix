@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatChecklistAnswer } from "@everlumen/shared";
+import { CONDITION_OPTIONS, answerWantsPhoto, formatChecklistAnswer } from "@everlumen/shared";
 import {
   choicesFor,
   hasResponse,
@@ -53,6 +53,20 @@ describe("toggledResponse", () => {
     // the star look selected and refuse to clear.
     expect(toggledResponse("rating", "3", 3)).toBeNull();
   });
+
+  it("treats severity like rating: numeric, and tapping the selected step clears it", () => {
+    expect(toggledResponse("severity", null, 4)).toBe(4);
+    expect(toggledResponse("severity", 4, 5)).toBe(5);
+    expect(toggledResponse("severity", 5, 5)).toBeNull();
+    // Stored as jsonb, so a "5" written by another client must still clear.
+    expect(toggledResponse("severity", "5", 5)).toBeNull();
+  });
+
+  it("toggles condition like the other pick-one types", () => {
+    expect(toggledResponse("condition", null, "Fair")).toBe("Fair");
+    expect(toggledResponse("condition", "Fair", "Poor")).toBe("Poor");
+    expect(toggledResponse("condition", "Poor", "Poor")).toBeNull();
+  });
 });
 
 describe("choicesFor", () => {
@@ -61,11 +75,18 @@ describe("choicesFor", () => {
     expect(choicesFor("yes_no")).toEqual(["Yes", "No"]);
   });
 
-  it("returns null for types that are not two-way", () => {
+  it("offers Good, Fair and Poor for condition, in the shared order", () => {
+    // Written out in the import-free module, so pinned to the shared list here.
+    expect(choicesFor("condition")).toEqual(["Good", "Fair", "Poor"]);
+    expect(choicesFor("condition")).toEqual([...CONDITION_OPTIONS]);
+  });
+
+  it("returns null for types that are not pick-one", () => {
     expect(choicesFor("rating")).toBeNull();
     expect(choicesFor("text")).toBeNull();
     expect(choicesFor("numeric")).toBeNull();
     expect(choicesFor("checkbox")).toBeNull();
+    expect(choicesFor("severity")).toBeNull();
   });
 });
 
@@ -125,9 +146,24 @@ describe("what mobile stores prints correctly", () => {
     ["rating", 4, "4 / 5"],
     ["numeric", 12.5, "12.5"],
     ["text", "Sealed and signed off", "Sealed and signed off"],
+    ["severity", 5, "5 / 5 Critical"],
+    ["condition", "Poor", "Poor"],
   ])("%s answers render as %s", (itemType, stored, expected) => {
     const patch = responsePatch(stored, "user-1");
     expect(formatChecklistAnswer(itemType, patch.response_value)).toBe(expected);
+  });
+
+  it("a numeric answer prints with its unit", () => {
+    const patch = responsePatch(parseNumericAnswer("42"), "user-1");
+    expect(formatChecklistAnswer("numeric", patch.response_value, "psi")).toBe("42 psi");
+    expect(formatChecklistAnswer("numeric", patch.response_value, "  ")).toBe("42");
+  });
+
+  it("a severity picked through a toggle prints its label", () => {
+    const value = toggledResponse("severity", null, 3);
+    expect(formatChecklistAnswer("severity", responsePatch(value, "u").response_value)).toBe(
+      "3 / 5 Moderate",
+    );
   });
 
   it("a cleared answer prints as nothing rather than the word null", () => {
@@ -138,5 +174,25 @@ describe("what mobile stores prints correctly", () => {
   it("a zero reading prints as 0, not as blank", () => {
     const patch = responsePatch(0, "user-1");
     expect(formatChecklistAnswer("numeric", patch.response_value)).toBe("0");
+  });
+});
+
+describe("which answers prompt for a photo", () => {
+  /*
+   * The runner offers the camera right after one of these is chosen. Fed the
+   * values this module stores, so a change to either side shows up here.
+   */
+  it("prompts on Fail, Poor and a High or Critical severity", () => {
+    expect(answerWantsPhoto("pass_fail", toggledResponse("pass_fail", null, "Fail"))).toBe(true);
+    expect(answerWantsPhoto("condition", toggledResponse("condition", null, "Poor"))).toBe(true);
+    expect(answerWantsPhoto("severity", toggledResponse("severity", null, 4))).toBe(true);
+    expect(answerWantsPhoto("severity", toggledResponse("severity", null, 5))).toBe(true);
+  });
+
+  it("does not prompt on a good answer, a low severity, or a cleared one", () => {
+    expect(answerWantsPhoto("pass_fail", "Pass")).toBe(false);
+    expect(answerWantsPhoto("condition", "Fair")).toBe(false);
+    expect(answerWantsPhoto("severity", 3)).toBe(false);
+    expect(answerWantsPhoto("severity", toggledResponse("severity", 4, 4))).toBe(false);
   });
 });

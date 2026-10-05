@@ -89,6 +89,8 @@ async function resolveChecklist(name: string, userId: string): Promise<string | 
       required: !!it.required,
       item_type: it.item_type,
       description: it.description ?? null,
+      unit: it.unit ?? null,
+      photo_required: !!it.photo_required,
     })),
   );
   // A checklist that exists but has no items is worse than one that was never

@@ -176,7 +176,7 @@ export function ApplyTemplateDialog({
     try {
       const { data: items, error: readErr } = await supabase
         .from("checklist_template_items" as any)
-        .select("position, label, required, item_type, description")
+        .select("position, label, required, item_type, description, unit, photo_required")
         .eq("template_id", t.id)
         .order("position", { ascending: true });
       // Without this a failed read looked like an empty template, and the crew
@@ -205,6 +205,8 @@ export function ApplyTemplateDialog({
         required: it.required ?? false,
         item_type: it.item_type ?? "checkbox",
         description: it.description ?? null,
+        unit: it.unit ?? null,
+        photo_required: !!it.photo_required,
       }));
       if (rows.length) {
         // Throws into the catch below. Discarding this told the crew the

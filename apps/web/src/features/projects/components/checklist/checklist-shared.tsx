@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Camera, CheckCircle2, Loader2, Star, Upload } from "lucide-react";
-import { photoObjectPaths } from "@everlumen/shared";
+import {
+  CONDITION_OPTIONS,
+  SEVERITY_LEVELS,
+  normalizeUnit,
+  photoObjectPaths,
+} from "@everlumen/shared";
 import { toast } from "sonner";
 import { uploadPhotoThumbnail } from "@/lib/photo-thumbnails";
 import { compressImageFile } from "@/features/photos/components/CameraCapture";
@@ -16,7 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/everlumen/client";
 import { useAuth } from "@/hooks/use-auth";
-import type { ItemType } from "@/lib/checklist-items";
+import { CONDITION_TINTS, SEVERITY_TINTS, type ItemType } from "@/lib/checklist-items";
 
 /**
  * The pieces a single checklist is filled in with, shared by the panel that
@@ -40,6 +45,10 @@ export interface ChecklistItem {
   item_type: ItemType;
   description: string | null;
   response_value: any;
+  /** What a Number item measures in; null for every other type. */
+  unit: string | null;
+  /** The item is not done until a photo is attached. */
+  photo_required: boolean;
 }
 
 export interface ProjectPhoto {
@@ -58,7 +67,7 @@ export interface ItemPhoto {
 /** Every column a `ChecklistItem` needs - shared so the refetch and the
  *  optimistic inserts can never select different shapes. */
 export const ITEM_COLUMNS =
-  "id, checklist_id, position, label, required, completed_at, notes, item_type, description, response_value";
+  "id, checklist_id, position, label, required, completed_at, notes, item_type, description, response_value, unit, photo_required";
 
 /**
  * The answer widget for a non-checkbox item.
@@ -137,30 +146,86 @@ export function ChecklistItemResponse({
         </div>
       );
     }
-    case "numeric":
+    case "severity": {
+      const n = typeof value === "number" ? value : Number(value);
       return (
-        <Input
-          type="number"
-          inputMode="decimal"
-          value={value ?? ""}
-          readOnly={readOnly}
-          aria-label={item.label}
-          onChange={(e) => {
-            const raw = e.target.value;
-            if (raw === "") {
-              onChange(null, { immediate: false });
-              return;
-            }
-            // A partial entry like "1e" or "-" parses to NaN, which used to be
-            // written straight to the record.
-            const n = Number(raw);
-            if (Number.isNaN(n)) return;
-            onChange(n, { immediate: false });
-          }}
-          placeholder="Enter a value"
-          className="h-10 max-w-[180px] text-base sm:text-sm"
-        />
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Severity, 1 to 5">
+          {SEVERITY_LEVELS.map((l) => {
+            const on = n === l.value;
+            return (
+              <button
+                key={l.value}
+                type="button"
+                disabled={readOnly}
+                onClick={() => onChange(on ? null : l.value)}
+                aria-pressed={on}
+                aria-label={`Severity ${l.value} ${l.label}`}
+                className={`flex min-h-11 min-w-[64px] flex-col items-center justify-center rounded-lg border px-2.5 py-1 transition-colors disabled:cursor-default ${
+                  on
+                    ? SEVERITY_TINTS[l.value]
+                    : "border-border text-muted-foreground hover:bg-muted/60"
+                }`}
+              >
+                <span className="text-sm font-bold leading-none">{l.value}</span>
+                <span className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide">
+                  {l.label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       );
+    }
+    case "condition":
+      return (
+        <div className="flex gap-2" role="group" aria-label={item.label}>
+          {CONDITION_OPTIONS.map((o) => (
+            <button
+              key={o}
+              type="button"
+              disabled={readOnly}
+              onClick={() => onChange(value === o ? null : o)}
+              aria-pressed={value === o}
+              className={`min-h-11 min-w-[76px] rounded-lg border px-4 py-2 text-sm font-bold transition-colors disabled:cursor-default ${
+                value === o
+                  ? CONDITION_TINTS[o]
+                  : "border-border text-muted-foreground hover:bg-muted/60"
+              }`}
+            >
+              {o}
+            </button>
+          ))}
+        </div>
+      );
+    case "numeric": {
+      const unit = normalizeUnit(item.unit);
+      return (
+        <div className="flex items-center gap-2">
+          <Input
+            type="number"
+            inputMode="decimal"
+            value={value ?? ""}
+            readOnly={readOnly}
+            aria-label={item.label}
+            onChange={(e) => {
+              const raw = e.target.value;
+              if (raw === "") {
+                onChange(null, { immediate: false });
+                return;
+              }
+              // A partial entry like "1e" or "-" parses to NaN, which used to be
+              // written straight to the record.
+              const n = Number(raw);
+              if (Number.isNaN(n)) return;
+              onChange(n, { immediate: false });
+            }}
+            placeholder="Enter a value"
+            className="h-10 max-w-[180px] text-base sm:text-sm"
+          />
+          {unit && <span className="text-sm font-medium text-muted-foreground">{unit}</span>}
+        </div>
+      );
+    }
     case "text":
       return (
         <Textarea

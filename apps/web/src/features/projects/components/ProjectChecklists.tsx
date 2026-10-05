@@ -300,7 +300,7 @@ export function ProjectChecklists({
 
       const { data: tplItems, error: tplErr } = await supabase
         .from("checklist_template_items" as any)
-        .select("position, label, required, item_type, description")
+        .select("position, label, required, item_type, description, unit, photo_required")
         .eq("template_id", templateId)
         .order("position", { ascending: true });
       if (tplErr) throw tplErr;
@@ -326,6 +326,8 @@ export function ProjectChecklists({
         label: it.label,
         required: it.required ?? false,
         item_type: it.item_type ?? "checkbox",
+        unit: it.unit ?? null,
+        photo_required: !!it.photo_required,
         description: it.description ?? null,
       }));
       if (rows.length) {

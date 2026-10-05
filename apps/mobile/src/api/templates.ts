@@ -78,7 +78,7 @@ export async function applyChecklistTemplate(
 ): Promise<string> {
   const { data: items, error: readError } = await supabase
     .from("checklist_template_items")
-    .select("position, label, required, item_type, description")
+    .select("position, label, required, item_type, description, unit, photo_required")
     .eq("template_id", template.id)
     .order("position", { ascending: true });
 
@@ -108,6 +108,8 @@ export async function applyChecklistTemplate(
           required: boolean | null;
           item_type: string | null;
           description: string | null;
+          unit: string | null;
+          photo_required: boolean | null;
         }[]
       | null) ?? []
   ).map((item, index) => ({
@@ -117,6 +119,10 @@ export async function applyChecklistTemplate(
     required: item.required ?? false,
     item_type: item.item_type ?? "checkbox",
     description: item.description ?? null,
+    // The unit and the photo switch are part of the item's definition, so the
+    // project copy carries them exactly as the template states them.
+    unit: item.unit ?? null,
+    photo_required: item.photo_required ?? false,
   }));
 
   if (rows.length > 0) {
