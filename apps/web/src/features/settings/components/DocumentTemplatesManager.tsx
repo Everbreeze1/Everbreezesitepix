@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/everlumen/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useConfirm } from "@/hooks/use-confirm";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useProfile } from "@/hooks/use-profile";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -61,6 +62,7 @@ import { DocumentToolbar } from "@/features/projects/components/DocumentToolbar"
 import { TemplateToken, pillsToTokens, tokensToPills } from "@/lib/tiptap-template-token";
 import { Pagination, documentHeading, refreshPagination } from "@/lib/tiptap-pagination";
 import { photoRowHtml } from "@/lib/tiptap-photo-slot";
+import { NodeSelection, TextSelection } from "@tiptap/pm/state";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   FileText,
@@ -2110,8 +2112,24 @@ function ChipStyles() {
         font-weight: 600;
         line-height: 1.5;
         white-space: nowrap;
-        cursor: default;
+        cursor: pointer;
         user-select: none;
+      }
+      /* A small sparkle: "this fills itself in", not "type here". */
+      .tiptap-template-field::before {
+        content: "";
+        display: inline-block;
+        width: 0.8em;
+        height: 0.8em;
+        margin-right: 0.3em;
+        vertical-align: -0.05em;
+        background: currentColor;
+        opacity: 0.75;
+        -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 2l2.2 6.6L21 11l-6.8 2.4L12 20l-2.2-6.6L3 11l6.8-2.4z'/></svg>") center / contain no-repeat;
+        mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 2l2.2 6.6L21 11l-6.8 2.4L12 20l-2.2-6.6L3 11l6.8-2.4z'/></svg>") center / contain no-repeat;
+      }
+      .tiptap-template-field:hover {
+        background: #cfe0ff;
       }
       .ProseMirror-selectednode.tiptap-template-field {
         outline: 2px solid #3b82f6;
@@ -2750,45 +2768,49 @@ function DocumentEditorSurface({
                 </div>
               </>
             ) : (
-              <div className="doc-page">
-                {/* Formatting toolbar - the same component the project page
+              <>
+                <FieldsHint />
+                <div className="doc-page">
+                  {/* Formatting toolbar - the same component the project page
                     editor uses, so a template can contain everything a real
                     document can. Project-only actions (insert a project photo,
                     snippets, running header/footer) are omitted: a template has
                     no project behind it and uses photo *slots* instead. */}
-                {tiptap && (
-                  /* `doc-chrome` pins the light palette for everything in here
+                  {tiptap && (
+                    /* `doc-chrome` pins the light palette for everything in here
                      - see the note beside the class in ChipStyles. The toolbar
                      sits on the white page, so in dark mode its icons were
                      near-white on white and its two menu buttons were the app's
                      dark navy on white. */
-                  <div className="doc-chrome sticky top-0 z-20 -mx-px rounded-t-lg border-b border-gray-200 bg-white/95 shadow-sm backdrop-blur">
-                    <DocumentToolbar editor={tiptap}>
-                      <PlaceholderMenu onInsert={insertPlaceholder} />
-                      <SectionPicker onInsert={insertSection} nextPhotoIndex={nextPhotoIndex} />
-                    </DocumentToolbar>
-                  </div>
-                )}
-                {/*
+                    <div className="doc-chrome sticky top-0 z-20 -mx-px rounded-t-lg border-b border-gray-200 bg-white/95 shadow-sm backdrop-blur">
+                      <DocumentToolbar editor={tiptap}>
+                        <PlaceholderMenu onInsert={insertPlaceholder} />
+                        <SectionPicker onInsert={insertSection} nextPhotoIndex={nextPhotoIndex} />
+                      </DocumentToolbar>
+                    </div>
+                  )}
+                  {/*
                   The printable box, at the size it prints at. Page breaks are
                   drawn inside it by the Pagination extension: a grey gap
                   between sheets, then a header on the new page.
                 */}
-                <div
-                  ref={pageBoxRef}
-                  className="relative flow-root"
-                  style={{ padding: `${PAGE_IN.margin}in` }}
-                >
-                  {tiptap && (
-                    <BlockInserter
-                      editor={tiptap}
-                      containerRef={pageBoxRef}
-                      nextPhotoIndex={nextPhotoIndex}
-                    />
-                  )}
-                  <EditorContent editor={tiptap} />
+                  <div
+                    ref={pageBoxRef}
+                    className="relative flow-root"
+                    style={{ padding: `${PAGE_IN.margin}in` }}
+                  >
+                    {tiptap && (
+                      <BlockInserter
+                        editor={tiptap}
+                        containerRef={pageBoxRef}
+                        nextPhotoIndex={nextPhotoIndex}
+                      />
+                    )}
+                    {tiptap && <FieldCard editor={tiptap} containerRef={pageBoxRef} />}
+                    <EditorContent editor={tiptap} />
+                  </div>
                 </div>
-              </div>
+              </>
             )}
           </div>
         </div>
@@ -3245,6 +3267,195 @@ function BlockInserter({
           <SectionGrid onInsert={(html) => insert(html)} nextPhotoIndex={nextPhotoIndex} />
         </PopoverContent>
       </Popover>
+    </div>
+  );
+}
+
+/**
+ * Where a blue field's value comes from, in words, and what it would be right
+ * now when we already know (the company details are the author's own).
+ * Mirrors the resolver in apps/api/.../pages.ts.
+ */
+function fieldSource(
+  token: string,
+  profile: ReturnType<typeof useProfile>["profile"],
+): { from: string; now?: string | null } {
+  switch (token) {
+    case "company":
+    case "company_name":
+      return { from: "your company name in Settings › Company", now: profile?.company };
+    case "company_address":
+      return { from: "your company address in Settings › Company", now: profile?.company_address };
+    case "company_phone":
+      return { from: "your company phone in Settings › Company", now: profile?.company_phone };
+    case "prepared_by":
+      return { from: "the name of whoever makes the document" };
+    case "job_title":
+    case "prepared_by_title":
+      return { from: "the job title of whoever makes the document" };
+    case "date":
+      return { from: "the date the document is made" };
+    case "project_address":
+      return { from: "the project's address" };
+    case "weather":
+      return { from: "what is typed in when the document is made" };
+    default:
+      if (token.startsWith("project_") || token.startsWith("client_")) {
+        return { from: `the project's ${tokenLabel(token).toLowerCase()}` };
+      }
+      return { from: "the project when the document is made" };
+  }
+}
+
+/**
+ * What a blue field is, shown when one is clicked.
+ *
+ * "The blue tablets are not very intuitive for entering company name etc. ...
+ * I didn't know I could delete that and write company name."
+ *
+ * A pill on its own gave no hint that it fills itself in, so it read as a box
+ * to type over, and typing "Everbreeze" over Company name hard-codes one
+ * company into a template meant for every job. Clicking a field now says where
+ * its value comes from, shows that value when it is already known, and offers
+ * the two real choices: keep it, or swap it for fixed text.
+ */
+function FieldCard({
+  editor,
+  containerRef,
+}: {
+  editor: Editor;
+  containerRef: RefObject<HTMLDivElement | null>;
+}) {
+  const { profile } = useProfile();
+  const [field, setField] = useState<{
+    pos: number;
+    token: string;
+    label: string;
+    top: number;
+    left: number;
+  } | null>(null);
+
+  useEffect(() => {
+    const read = () => {
+      const sel = editor.state.selection;
+      const box = containerRef.current;
+      if (!(sel instanceof NodeSelection) || sel.node.type.name !== "templateToken" || !box) {
+        setField(null);
+        return;
+      }
+      const dom = editor.view.nodeDOM(sel.from);
+      if (!(dom instanceof HTMLElement)) return setField(null);
+      const r = dom.getBoundingClientRect();
+      const b = box.getBoundingClientRect();
+      setField({
+        pos: sel.from,
+        token: String(sel.node.attrs.token),
+        label: String(sel.node.attrs.label || tokenLabel(String(sel.node.attrs.token))),
+        top: r.bottom - b.top + 6,
+        left: Math.max(0, Math.min(r.left - b.left, b.width - 300)),
+      });
+    };
+    editor.on("selectionUpdate", read);
+    editor.on("transaction", read);
+    return () => {
+      editor.off("selectionUpdate", read);
+      editor.off("transaction", read);
+    };
+  }, [editor, containerRef]);
+
+  if (!field) return null;
+  const source = fieldSource(field.token, profile);
+
+  function replaceWithText() {
+    if (!field) return;
+    const { state, view } = editor;
+    const node = state.doc.nodeAt(field.pos);
+    if (!node) return;
+    const text = field.label;
+    const tr = state.tr.replaceWith(field.pos, field.pos + node.nodeSize, state.schema.text(text));
+    // Select the words, so whatever is typed next replaces them.
+    tr.setSelection(TextSelection.create(tr.doc, field.pos, field.pos + text.length));
+    view.dispatch(tr);
+    view.focus();
+  }
+
+  return (
+    <div
+      className="doc-chrome absolute z-30 w-[300px] rounded-lg border border-blue-200 bg-white p-3 text-left font-sans shadow-lg"
+      style={{ top: field.top, left: field.left }}
+      // Keep the field selected while the card is used.
+      onMouseDown={(e) => e.preventDefault()}
+    >
+      <div className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-blue-900">
+        <Sparkles className="h-4 w-4 text-blue-600" /> {field.label} fills in by itself
+      </div>
+      <p className="text-xs leading-relaxed text-slate-600">
+        When this template is used on a project, this is replaced with {source.from}. Leave it here
+        and there's nothing to type.
+      </p>
+      {source.now ? (
+        <p className="mt-1.5 text-xs text-slate-600">
+          Right now that's <span className="font-semibold text-slate-900">{source.now}</span>.
+        </p>
+      ) : null}
+      <div className="mt-3 flex gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 flex-1 text-xs"
+          onClick={replaceWithText}
+          title="Replace this field with ordinary text you type yourself"
+        >
+          <Pencil className="mr-1 h-3.5 w-3.5" /> Type my own text
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-7 text-xs text-slate-600"
+          onClick={() => editor.chain().focus().deleteSelection().run()}
+        >
+          <Trash2 className="mr-1 h-3.5 w-3.5" /> Remove
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+const FIELDS_HINT_KEY = "everlumen:template-fields-hint-dismissed";
+
+/** One line above the page saying what the blue fields are, until dismissed. */
+function FieldsHint() {
+  const [hidden, setHidden] = useState(() => {
+    try {
+      return window.localStorage.getItem(FIELDS_HINT_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  if (hidden) return null;
+  return (
+    <div className="mb-3 flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100">
+      <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+      <span className="flex-1">
+        <span className="font-semibold">Blue fields fill in by themselves</span> with the project
+        and your company details when this template is used. You don't need to type over them. Click
+        one to see where it comes from, or to swap it for your own text.
+      </span>
+      <button
+        type="button"
+        aria-label="Hide this tip"
+        className="opacity-70 hover:opacity-100"
+        onClick={() => {
+          setHidden(true);
+          try {
+            window.localStorage.setItem(FIELDS_HINT_KEY, "1");
+          } catch {
+            // Private mode: the tip just comes back next time.
+          }
+        }}
+      >
+        <X className="h-3.5 w-3.5" />
+      </button>
     </div>
   );
 }
