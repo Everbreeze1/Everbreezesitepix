@@ -1,7 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
-import { layoutPages, type Block } from "../apps/web/src/lib/tiptap-pagination";
+import { getSchema } from "@tiptap/core";
+import StarterKit from "@tiptap/starter-kit";
+import { documentHeading, layoutPages, type Block } from "../apps/web/src/lib/tiptap-pagination";
+import { TemplateToken } from "../apps/web/src/lib/tiptap-template-token";
 
 /*
  * "the page break should be there nicely formatted and not distort document and
@@ -58,6 +61,47 @@ describe("automatic page breaks in the template editor", () => {
     expect(r.pages).toBe(3);
   });
 
+  it("heads each new page with the document's own title", () => {
+    const schema = getSchema([StarterKit, TemplateToken]);
+    const doc = (content: unknown[]) => schema.nodeFromJSON({ type: "doc", content });
+    const text = (t: string) => ({ type: "text", text: t });
+    const heading = (level: number, ...content: unknown[]) => ({
+      type: "heading",
+      attrs: { level },
+      content,
+    });
+    const para = { type: "paragraph", content: [text("Intro")] };
+
+    expect(
+      documentHeading(doc([para, heading(2, text("Scope")), heading(1, text("Survey"))])),
+    ).toBe("Survey");
+    expect(documentHeading(doc([para, heading(2, text("Scope"))]))).toBe("Scope");
+    expect(documentHeading(doc([para]))).toBe("");
+    // A placeholder in the title reads by its label.
+    expect(
+      documentHeading(
+        doc([
+          heading(
+            1,
+            { type: "templateToken", attrs: { token: "project_name", label: "Project name" } },
+            text(" survey"),
+          ),
+        ]),
+      ),
+    ).toBe("Project name survey");
+  });
+
+  it("adds sections between blocks, never inside one", () => {
+    const src = readFileSync(
+      "apps/web/src/features/settings/components/DocumentTemplatesManager.tsx",
+      "utf8",
+    );
+    const inserter = src.slice(src.indexOf("function BlockInserter("));
+    expect(inserter).toContain("insertContentAt(at,");
+    expect(inserter).toContain("after: offset + node.nodeSize");
+    expect(src).toContain("<BlockInserter");
+  });
+
   it("is wired into the template editor in place of the old dashed guides", () => {
     const src = readFileSync(
       "apps/web/src/features/settings/components/DocumentTemplatesManager.tsx",
@@ -65,6 +109,7 @@ describe("automatic page breaks in the template editor", () => {
     );
     expect(src).toContain("Pagination.configure(");
     expect(src).toContain("refreshPagination(tiptap.view)");
+    expect(src).toContain("documentHeading(doc) || nameRef.current");
     expect(src).not.toContain("paperRef");
     expect(src).toContain("sidePanelTokens(relevantPlaceholders, detected)");
   });

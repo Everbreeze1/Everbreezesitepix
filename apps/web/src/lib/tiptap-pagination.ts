@@ -32,8 +32,8 @@ export interface PaginationOptions {
   marginPx: number;
   /** The grey gap between two sheets. */
   gapPx: number;
-  /** The running header's text (the document's name). */
-  headerText: () => string;
+  /** The running header's text, read off the document as it stands. */
+  headerText: (doc: ProseMirrorNode) => string;
   /** Told the page count whenever it changes. */
   onPageCount?: (pages: number) => void;
 }
@@ -64,6 +64,28 @@ export const paginationKey = new PluginKey<DecorationSet>("pagination");
 const REFRESH = "paginationRefresh";
 
 const GAP_CLASS = "doc-page-gap";
+
+/**
+ * The document's own title: the text of its first top-level heading, level 1
+ * if there is one. Placeholder pills count by their label, so a heading of
+ * "{{project_name}} survey" reads "Project name survey".
+ */
+export function documentHeading(doc: ProseMirrorNode): string {
+  let first: ProseMirrorNode | null = null;
+  let h1: ProseMirrorNode | null = null;
+  for (let i = 0; i < doc.childCount; i++) {
+    const node = doc.child(i);
+    if (node.type.name !== "heading") continue;
+    first ??= node;
+    if (!h1 && node.attrs.level === 1) h1 = node;
+  }
+  const pick = h1 ?? first;
+  if (!pick) return "";
+  return pick
+    .textBetween(0, pick.content.size, " ", (leaf) => String(leaf.attrs?.label ?? ""))
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 /** Ask the plugin to lay the pages out again, e.g. after the header text changed. */
 export function refreshPagination(view: EditorView) {
@@ -253,7 +275,7 @@ export const Pagination = Extension.create<PaginationOptions>({
               lastPages = pages;
               opts.onPageCount?.(pages);
             }
-            const header = opts.headerText();
+            const header = opts.headerText(view.state.doc);
             const signature = JSON.stringify([
               breaks.map((b) => [b.pos, Math.round(b.fill), b.page]),
               cuts.map((c) => [c.pos, Math.round(c.offset), c.page]),

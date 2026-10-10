@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type RefObject,
+  type SetStateAction,
+} from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { supabase } from "@/integrations/everlumen/client";
 import { useAuth } from "@/hooks/use-auth";
@@ -51,7 +59,7 @@ import { Spacer } from "@/lib/tiptap-spacer";
 import { FillField, MergeToken } from "@/lib/tiptap-fill-field";
 import { DocumentToolbar } from "@/features/projects/components/DocumentToolbar";
 import { TemplateToken, pillsToTokens, tokensToPills } from "@/lib/tiptap-template-token";
-import { Pagination, refreshPagination } from "@/lib/tiptap-pagination";
+import { Pagination, documentHeading, refreshPagination } from "@/lib/tiptap-pagination";
 import { photoRowHtml } from "@/lib/tiptap-photo-slot";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -2484,7 +2492,10 @@ function DocumentEditorSurface({
         headerPx: PAGE_HEADER_PX,
         marginPx: PAGE_IN.margin * PX_PER_IN,
         gapPx: 28,
-        headerText: () => nameRef.current.trim() || "Untitled document",
+        // The running header repeats the document's own title (its first
+        // heading), so editing that title changes every page. The template's
+        // name is only the fallback for a document with no heading.
+        headerText: (doc) => documentHeading(doc) || nameRef.current.trim() || "Untitled document",
         onPageCount: (n) => setPageCount(n),
       }),
     ],
@@ -2521,7 +2532,9 @@ function DocumentEditorSurface({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // The running header shows the name, so redraw it when the name changes.
+  const pageBoxRef = useRef<HTMLDivElement | null>(null);
+
+  // The running header falls back to the name, so redraw it when that changes.
   useEffect(() => {
     if (tiptap && !tiptap.isDestroyed) refreshPagination(tiptap.view);
   }, [tiptap, editor.name]);
@@ -2761,7 +2774,18 @@ function DocumentEditorSurface({
                   drawn inside it by the Pagination extension: a grey gap
                   between sheets, then a header on the new page.
                 */}
-                <div className="flow-root" style={{ padding: `${PAGE_IN.margin}in` }}>
+                <div
+                  ref={pageBoxRef}
+                  className="relative flow-root"
+                  style={{ padding: `${PAGE_IN.margin}in` }}
+                >
+                  {tiptap && (
+                    <BlockInserter
+                      editor={tiptap}
+                      containerRef={pageBoxRef}
+                      nextPhotoIndex={nextPhotoIndex}
+                    />
+                  )}
                   <EditorContent editor={tiptap} />
                 </div>
               </div>
@@ -3061,29 +3085,167 @@ function SectionPicker({
         </Button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-[23rem] p-3">
-        <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-          Add a section
-        </div>
-        <div className="grid grid-cols-3 gap-2">
-          {SECTION_PRESETS.map((p) => (
-            <button
-              key={p.label}
-              type="button"
-              onClick={() => {
-                onInsert(typeof p.html === "function" ? p.html(nextPhotoIndex()) : p.html);
-                setOpen(false);
-              }}
-              className="group flex flex-col gap-1.5 rounded-lg border border-border bg-background p-2 text-left transition hover:border-primary hover:bg-primary/5"
-            >
-              <div className="h-12 rounded-md border border-slate-200 bg-white p-1.5">
-                <SectionSketch kind={p.thumb} />
-              </div>
-              <span className="text-[11.5px] font-semibold text-foreground">{p.label}</span>
-            </button>
-          ))}
-        </div>
+        <SectionGrid
+          onInsert={(html) => {
+            onInsert(html);
+            setOpen(false);
+          }}
+          nextPhotoIndex={nextPhotoIndex}
+        />
       </PopoverContent>
     </Popover>
+  );
+}
+
+/** The sketched section grid both "Add section" menus share. */
+function SectionGrid({
+  onInsert,
+  nextPhotoIndex,
+}: {
+  onInsert: (html: string) => void;
+  nextPhotoIndex: () => number;
+}) {
+  return (
+    <>
+      <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        Add a section
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        {SECTION_PRESETS.map((p) => (
+          <button
+            key={p.label}
+            type="button"
+            onClick={() =>
+              onInsert(typeof p.html === "function" ? p.html(nextPhotoIndex()) : p.html)
+            }
+            className="group flex flex-col gap-1.5 rounded-lg border border-border bg-background p-2 text-left transition hover:border-primary hover:bg-primary/5"
+          >
+            <div className="h-12 rounded-md border border-slate-200 bg-white p-1.5">
+              <SectionSketch kind={p.thumb} />
+            </div>
+            <span className="text-[11.5px] font-semibold text-foreground">{p.label}</span>
+          </button>
+        ))}
+      </div>
+    </>
+  );
+}
+
+/**
+ * The "+" in the left margin beside whichever block the pointer is over.
+ *
+ * "it would be nice to add a section to a location on a page as we scroll,
+ * currently we have to locate where the cursor is then add a section ...
+ * doing this distorts the whole document"
+ *
+ * Inserting at the cursor put a section wherever the caret happened to be,
+ * often inside a table cell or halfway through a paragraph, which split it.
+ * This button always adds between blocks: directly below the one beside it,
+ * never inside it, so nothing around it moves except down.
+ */
+function BlockInserter({
+  editor,
+  containerRef,
+  nextPhotoIndex,
+}: {
+  editor: Editor;
+  containerRef: RefObject<HTMLDivElement | null>;
+  nextPhotoIndex: () => number;
+}) {
+  const [target, setTarget] = useState<{ top: number; after: number } | null>(null);
+  const [open, setOpen] = useState(false);
+  const openRef = useRef(open);
+  openRef.current = open;
+
+  useEffect(() => {
+    const box = containerRef.current;
+    if (!box) return;
+    let frame = 0;
+    let y = 0;
+    const locate = () => {
+      frame = 0;
+      if (openRef.current || editor.isDestroyed) return;
+      const view = editor.view;
+      const boxTop = box.getBoundingClientRect().top;
+      const doc = view.state.doc;
+      let offset = 0;
+      for (let i = 0; i < doc.childCount; i++) {
+        const node = doc.child(i);
+        const dom = view.nodeDOM(offset);
+        if (dom instanceof HTMLElement) {
+          const r = dom.getBoundingClientRect();
+          // A little slack above and below, so the gap between two blocks
+          // still belongs to one of them and the button does not flicker.
+          if (y >= r.top - 8 && y <= r.bottom + 8) {
+            setTarget({ top: r.top - boxTop, after: offset + node.nodeSize });
+            return;
+          }
+        }
+        offset += node.nodeSize;
+      }
+    };
+    const onMove = (e: PointerEvent) => {
+      y = e.clientY;
+      if (!frame) frame = requestAnimationFrame(locate);
+    };
+    const onLeave = () => {
+      if (!openRef.current) setTarget(null);
+    };
+    box.addEventListener("pointermove", onMove);
+    // A tap on a tablet has no hover, so the touch itself places the button.
+    box.addEventListener("pointerdown", onMove);
+    box.addEventListener("pointerleave", onLeave);
+    return () => {
+      if (frame) cancelAnimationFrame(frame);
+      box.removeEventListener("pointermove", onMove);
+      box.removeEventListener("pointerdown", onMove);
+      box.removeEventListener("pointerleave", onLeave);
+    };
+  }, [editor, containerRef]);
+
+  if (!target) return null;
+
+  function insert(html: string) {
+    if (!target) return;
+    const at = Math.min(target.after, editor.state.doc.content.size);
+    editor.chain().insertContentAt(at, tokensToPills(html, tokenLabel)).run();
+    // A new heading or paragraph has its sample words selected, so typing
+    // replaces them; anything else just gets the caret beside it.
+    const first = editor.state.doc.nodeAt(at);
+    if (first?.isTextblock) {
+      editor
+        .chain()
+        .setTextSelection({ from: at + 1, to: at + 1 + first.content.size })
+        .focus()
+        .run();
+    } else {
+      editor.commands.focus();
+    }
+    setOpen(false);
+    setTarget(null);
+  }
+
+  return (
+    <div
+      className="doc-chrome absolute z-10"
+      style={{ top: target.top, left: `calc(-${PAGE_IN.margin}in + 0.3in)` }}
+    >
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            aria-label="Add a section below"
+            title="Add a section below"
+            className="flex h-6 w-6 items-center justify-center rounded-full border border-primary/40 bg-white text-primary shadow-sm transition hover:bg-primary hover:text-white"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent side="right" align="start" className="w-[23rem] p-3">
+          <SectionGrid onInsert={(html) => insert(html)} nextPhotoIndex={nextPhotoIndex} />
+        </PopoverContent>
+      </Popover>
+    </div>
   );
 }
 
