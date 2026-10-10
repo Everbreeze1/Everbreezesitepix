@@ -1,3 +1,4 @@
+import { pillsToTokens, tokensToPills } from "../apps/web/src/lib/tiptap-template-token";
 import { describe, it, expect } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -762,21 +763,23 @@ describe("nextCopyName", () => {
  * They are now split across the `md` breakpoint so only one can ever render.
  */
 describe("the template editor shows each field in one place", () => {
-  it("the quick-fields strip and the Fields panel never render together", () => {
-    const strip = /quickFields\.length > 0 && \(\s*\n\s*<div className="([^"]+)"/.exec(MANAGER);
-    expect(strip, "quick fields strip not found").not.toBeNull();
-    expect(strip![1]).toContain("md:hidden");
+  it("has no sample-value boxes, in the paper or in the Fields panel", () => {
+    // The boxes looked like the template being filled in, but were only preview
+    // data and never saved. Preview now shows example values on its own.
+    expect(MANAGER).not.toContain("quickFields");
+    expect(MANAGER).not.toContain("sampleOverrides");
+    expect(MANAGER).toContain('fillPreview(editor.body.html, "sample")');
 
     const panel = /<aside className="([^"]+)"/.exec(MANAGER);
     expect(panel, "fields panel not found").not.toBeNull();
     expect(panel![1]).toContain("hidden");
     expect(panel![1]).toContain("md:block");
   });
-
-  it("the Fields panel lists its inputs in one column", () => {
-    // Two columns inside a 320px panel truncates both the labels and the values.
-    const body = MANAGER.slice(MANAGER.indexOf("Editable fields"));
-    expect(body.slice(0, 1400)).not.toContain("grid-cols-2");
+  it("the Fields panel is one list that inserts, with a tick for fields in use", () => {
+    const aside = MANAGER.slice(MANAGER.indexOf("<aside"), MANAGER.indexOf("</aside>"));
+    expect(aside).toContain("onClick={() => insertPlaceholder(token)}");
+    expect(aside).toContain("In use");
+    expect(aside).not.toContain("All placeholders");
   });
 });
 
@@ -996,16 +999,10 @@ describe("copying is not how a template gets used", () => {
       MANAGER.indexOf("const dialogs = ("),
     );
     expect(block.length).toBeGreaterThan(200);
-    // Only ever a row this session created and never saved.
-    expect(block).toMatch(/if \(!open\.fresh \|\| !open\.template\)/);
+    // Only ever a row this session created and never changed.
+    expect(block).toMatch(/if \(open\.fresh && open\.template && !isEdited\(open\)\)/);
     expect(block).toMatch(/\.delete\(\)/);
-    // Edits that were never saved are still edits: they are confirmed away,
-    // not dropped on a stray Escape. That guard covers an ordinary edit too
-    // now, so the flag it reads is `edited` rather than `untouched`.
-    expect(block).toMatch(/const edited =/);
-    expect(block).toMatch(/await confirm\(/);
   });
-
   it("both ways out of the editor run that cleanup", () => {
     // The X inside the surface, and Escape / the overlay via the Dialog.
     expect(MANAGER).toContain("onClose={() => void closeEditor()}");
@@ -1127,12 +1124,11 @@ describe("unsaved work survives a stray click", () => {
     expect(src).toMatch(/onClick=\{\(\) => void requestClose\(\)\}/);
   });
 
-  it("the template editor asks before discarding an ordinary edit", () => {
+  it("the template editor saves edits on the way out instead of dropping them", () => {
     /*
-     * The editor is w-screen/h-screen so there is no overlay to click, but
-     * Escape reached the same silent `setEditor(null)`. Only the unsaved-COPY
-     * branch ever asked, so editing a template the team already owned lost
-     * every keystroke since the last Save without a word.
+     * The editor autosaves, and leaving it (Back, Escape, Save & close) writes
+     * whatever is still unsaved. Only a failed write asks, because that is the
+     * one case where closing would lose work.
      */
     const src = stripComments(MANAGER);
     const block = src.slice(
@@ -1140,18 +1136,25 @@ describe("unsaved work survives a stray click", () => {
       src.indexOf("const dialogs = ("),
     );
     expect(block.length).toBeGreaterThan(200);
+    expect(block).toMatch(/if \(isEdited\(open\)\) \{\s*const saved = await saveNow\(\)/);
+    expect(block).toContain("Close without saving?");
     // Dirtiness is measured against what was loaded, not against the stored
     // row: openForEdit returns sanitised html, so the column never matches.
-    expect(block).toMatch(/open\.body\.html !== open\.original\.html/);
-    expect(block).toMatch(/open\.name !== open\.original\.name/);
-    // Asked for an edit as well as for a copy...
-    expect(block).toMatch(/if \(edited\)/);
-    expect(block).toContain("Discard your changes?");
-    expect(block).toContain("Discard this copy?");
-    // ...and not asked at all when nothing was touched.
-    expect(block).toMatch(/if \(!open\.fresh \|\| !open\.template\) \{\s*setEditor\(null\)/);
+    const edited = src.slice(
+      src.indexOf("function isEdited"),
+      src.indexOf("function editSignature"),
+    );
+    expect(edited).toMatch(/open\.body\.html !== open\.original\.html/);
+    expect(edited).toMatch(/open\.name !== open\.original\.name/);
   });
 
+  it("autosaves after a pause, and Ctrl+S saves straight away", () => {
+    const src = stripComments(MANAGER);
+    expect(src).toMatch(/window\.setTimeout\(\(\) => void saveNow\(\), 1500\)/);
+    expect(src).toMatch(/\(e\.ctrlKey \|\| e\.metaKey\)[\s\S]{0,80}=== "s"/);
+    // A failed write is not retried on a timer until something changes.
+    expect(src).toContain("failedSnapshot.current === editSignature(editor)");
+  });
   it("every way into the editor records what it opened with", () => {
     // Edit and Duplicate are the two ways into the editor now. New template
     // goes through the wizard and saves straight to the library, so there is
@@ -1277,18 +1280,12 @@ describe("the editor shows where the printed page ends", () => {
  * 2.6:1, on a panel that follows the theme.
  */
 describe("the Fields panel is readable", () => {
-  it("uses the app's own Input rather than a hand-rolled light-mode one", () => {
-    const panel = MANAGER.slice(
-      MANAGER.indexOf("Editable fields"),
-      MANAGER.indexOf("All placeholders"),
-    );
-    expect(panel.length).toBeGreaterThan(200);
-    expect(panel).toMatch(/<Input\s/);
-    // The colours that made it unreadable, gone rather than merely darkened.
-    expect(panel).not.toContain("placeholder:text-gray-400");
-    expect(panel).not.toMatch(/className="[^"]*bg-white[^"]*"/);
+  it("has no input boxes to misread as the template's contents", () => {
+    const aside = MANAGER.slice(MANAGER.indexOf("<aside"), MANAGER.indexOf("</aside>"));
+    expect(aside.length).toBeGreaterThan(200);
+    expect(aside).not.toMatch(/<Input\s/);
+    expect(aside).not.toContain("placeholder:text-gray-400");
   });
-
   it("does not pin a light-mode panel onto a themed dialog", () => {
     const aside = MANAGER.slice(MANAGER.indexOf("<aside"), MANAGER.indexOf("</aside>"));
     expect(aside.length).toBeGreaterThan(200);
@@ -1334,5 +1331,40 @@ describe("the Documents page opens the real editors", () => {
       expect(at, `${opener} is not in the page any more`).toBeGreaterThan(0);
       expect(LIBRARY.slice(Math.max(0, at - 300), at)).toContain("editorNeedsDesktop()");
     }
+  });
+});
+
+describe("placeholders edit as pills and store as {{token}} text", () => {
+  const label = (t: string) => t.replace(/_/g, " ");
+
+  it("round-trips a template body unchanged", () => {
+    const html =
+      '<h1>{{company_name}}</h1><p>For {{ client_name }} at {{project_address}}</p><img alt="{{not_text}}" src="x">';
+    const pills = tokensToPills(html, label);
+    expect(pills).toContain('<span data-template-field="company_name">company name</span>');
+    expect(pills).not.toContain("{{client_name}}");
+    // Attribute values are left as written.
+    expect(pills).toContain('alt="{{not_text}}"');
+    expect(pillsToTokens(pills)).toBe(
+      '<h1>{{company_name}}</h1><p>For {{client_name}} at {{project_address}}</p><img alt="{{not_text}}" src="x">',
+    );
+  });
+
+  it("reads back pills however Tiptap orders the span's attributes", () => {
+    expect(
+      pillsToTokens(
+        '<p>Hi <span class="tiptap-template-field" title="x" data-template-field="date">Date</span></p>',
+      ),
+    ).toBe("<p>Hi {{date}}</p>");
+  });
+
+  it("leaves html without tokens alone", () => {
+    expect(tokensToPills("<p>No fields</p>", label)).toBe("<p>No fields</p>");
+    expect(pillsToTokens("<p>No fields</p>")).toBe("<p>No fields</p>");
+  });
+
+  it("the editor loads pills and saves tokens", () => {
+    expect(MANAGER).toContain("tokensToPills(editor.body.html");
+    expect(MANAGER).toContain("pillsToTokens(e.getHTML())");
   });
 });

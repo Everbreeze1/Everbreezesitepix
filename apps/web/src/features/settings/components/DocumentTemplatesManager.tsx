@@ -14,7 +14,12 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -45,9 +50,9 @@ import { ProjectImage } from "@/lib/tiptap-project-image";
 import { Spacer } from "@/lib/tiptap-spacer";
 import { FillField, MergeToken } from "@/lib/tiptap-fill-field";
 import { DocumentToolbar } from "@/features/projects/components/DocumentToolbar";
-import { Extension } from "@tiptap/core";
-import { Plugin, PluginKey } from "@tiptap/pm/state";
-import { Decoration, DecorationSet } from "@tiptap/pm/view";
+import { TemplateToken, pillsToTokens, tokensToPills } from "@/lib/tiptap-template-token";
+import { photoRowHtml } from "@/lib/tiptap-photo-slot";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   FileText,
   Loader2,
@@ -76,6 +81,7 @@ import {
   MoreHorizontal,
   Monitor,
   X,
+  AlertCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { getDocumentTemplate } from "@/lib/project-pages.functions";
@@ -199,7 +205,7 @@ interface EditorState {
    * the API sanitiser, so the string in hand differs from the column it came
    * from before anybody has touched anything, and every close would ask.
    */
-  original: { name: string; html: string };
+  original: { name: string; html: string; category?: string };
 }
 
 interface Props {
@@ -634,12 +640,8 @@ function templateSnippet(html: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Placeholder decoration - styles {{token}} as an editable pill in the editor.
-// The raw text stays fully selectable/deletable; we only add a class so it
-// visually reads as a chip. Placeholders remain 100% editable.
+// Placeholder labels
 // ---------------------------------------------------------------------------
-const PLACEHOLDER_RE = /\{\{\s*([a-z0-9_]+)\s*\}\}/gi;
-
 const LABEL_BY_TOKEN: Record<string, string> = PLACEHOLDERS.reduce(
   (acc, p) => {
     acc[p.token] = p.label;
@@ -648,78 +650,8 @@ const LABEL_BY_TOKEN: Record<string, string> = PLACEHOLDERS.reduce(
   { ...LEGACY_TOKEN_LABELS } as Record<string, string>,
 );
 
-export const placeholderChipsKey = new PluginKey("placeholder-chips");
-
-const PlaceholderChips = Extension.create<{ getValue: (token: string) => string | undefined }>({
-  name: "placeholderChips",
-  addOptions() {
-    return { getValue: () => undefined };
-  },
-  addProseMirrorPlugins() {
-    const opts = this.options;
-    return [
-      new Plugin({
-        key: placeholderChipsKey,
-        state: {
-          init: () => ({ tick: 0 }),
-          apply(tr, value) {
-            const meta = tr.getMeta(placeholderChipsKey);
-            if (meta !== undefined) return { tick: (value.tick ?? 0) + 1 };
-            return value;
-          },
-        },
-        props: {
-          decorations(state) {
-            const decos: Decoration[] = [];
-            state.doc.descendants((node, pos) => {
-              if (!node.isText || !node.text) return;
-              const text = node.text;
-              const re = new RegExp(PLACEHOLDER_RE.source, "gi");
-              let match: RegExpExecArray | null;
-              while ((match = re.exec(text)) !== null) {
-                const from = pos + match.index;
-                const to = from + match[0].length;
-                const token = match[1].toLowerCase();
-                const label = LABEL_BY_TOKEN[token] ?? token.replace(/_/g, " ");
-                const filled = opts.getValue(token);
-                if (filled && filled.trim()) {
-                  // Hide the raw {{token}} text and render a filled pill widget in its place.
-                  decos.push(
-                    Decoration.inline(from, to, {
-                      class: "doc-chip-hidden",
-                    }),
-                  );
-                  decos.push(
-                    Decoration.widget(
-                      from,
-                      () => {
-                        const span = document.createElement("span");
-                        span.className = "doc-chip-inline doc-chip-filled-inline";
-                        span.textContent = filled;
-                        span.setAttribute("title", `${label} - live value from Fields panel`);
-                        span.setAttribute("data-token", token);
-                        return span;
-                      },
-                      { side: -1, ignoreSelection: true },
-                    ),
-                  );
-                } else {
-                  decos.push(
-                    Decoration.inline(from, to, {
-                      class: "doc-chip-inline",
-                      title: `${label} - editable placeholder`,
-                    }),
-                  );
-                }
-              }
-            });
-            return DecorationSet.create(state.doc, decos);
-          },
-        },
-      }),
-    ];
-  },
-});
+/** A placeholder's name as a person reads it: `client_name` is "Client name". */
+const tokenLabel = snippetLabel;
 
 // ---------------------------------------------------------------------------
 // Component
@@ -1601,6 +1533,22 @@ export function DocumentTemplatesManager({ teamId, canManage, initialTab = "docu
  * unsaved-changes guard on close. Render `dialogs` once; call `edit`,
  * `copyForEditing` or `openCreate` from the cards and buttons.
  */
+/** Where the editor's working copy stands against its row. */
+type SaveState = "saved" | "dirty" | "saving" | "error";
+
+/** Has anything the editor writes changed since it opened, or last saved? */
+function isEdited(open: EditorState): boolean {
+  return (
+    open.body.html !== open.original.html ||
+    open.name !== open.original.name ||
+    (open.body.category ?? undefined) !== (open.original.category ?? undefined)
+  );
+}
+
+function editSignature(open: EditorState): string {
+  return JSON.stringify([open.name, open.body.html, open.body.category ?? null]);
+}
+
 export function useDocumentTemplateEditing({
   teamId,
   items,
@@ -1615,11 +1563,21 @@ export function useDocumentTemplateEditing({
   const { user } = useAuth();
   const confirm = useConfirm();
   const [editor, setEditor] = useState<EditorState | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [saveState, setSaveState] = useState<SaveState>("saved");
   const [createOpen, setCreateOpen] = useState(false);
+  /*
+   * The latest working copy, for the autosave timer and the close path: both
+   * run after renders they did not see, and must write what is on screen now.
+   */
+  const editorRef = useRef<EditorState | null>(null);
+  editorRef.current = editor;
+  const inFlight = useRef<Promise<boolean> | null>(null);
+  /** What the last failed write tried to save, so a failure is not retried
+      on a timer until something changes. */
+  const failedSnapshot = useRef<string | null>(null);
 
-  /** The mockup wizard's Save: write the finished template, back to the list.
-   *  The rich editor still opens from a card's Edit button. */
+  /** The New template wizard's Save: write the finished template, back to
+   *  the list. The rich editor opens from a card's Edit button. */
   const wizardSave = async (payload: DocumentWizardPayload): Promise<boolean> => {
     if (!payload.name.trim()) {
       toast.error("Give your template a name");
@@ -1683,7 +1641,7 @@ export function useDocumentTemplateEditing({
         template: t,
         name: t.name,
         body: { ...local, html },
-        original: { name: t.name, html },
+        original: { name: t.name, html, category: local.category },
       });
     } catch (e: any) {
       // Never fall back to the unsanitised local copy - that is the bug.
@@ -1708,27 +1666,77 @@ export function useDocumentTemplateEditing({
    * copy" on the built-in itself, which starts them from the good body.
    */
 
-  async function persist() {
+  /**
+   * Write the working copy to its row, without leaving the editor.
+   *
+   * The editor autosaves: a pause in typing writes, Ctrl+S writes, and leaving
+   * writes. Nothing is lost to a stray click, which is what the old confirm on
+   * close was standing in for. The saved name and body become the new
+   * "original", so edits made while a write is in flight still count as
+   * unsaved and are picked up by the next one.
+   */
+  async function saveNow(): Promise<boolean> {
+    if (inFlight.current) {
+      await inFlight.current;
+    }
+    const open = editorRef.current;
+    if (!open?.template) return true;
+    if (!isEdited(open)) {
+      setSaveState("saved");
+      return true;
+    }
+    const id = open.template.id;
+    const snapshot = {
+      name: open.name,
+      html: open.body.html,
+      category: open.body.category,
+    };
+    const run = (async () => {
+      setSaveState("saving");
+      const { error } = await supabase
+        .from("document_templates" as any)
+        .update({
+          name: open.name.trim() || "Untitled document",
+          body: open.body as any,
+          fields: extractFields(open.body.html),
+        })
+        .eq("id", id);
+      if (error) {
+        failedSnapshot.current = editSignature(open);
+        setSaveState("error");
+        toast.error("Couldn't save the template", { description: error.message });
+        return false;
+      }
+      failedSnapshot.current = null;
+      // A saved copy is a real template now, so closing it keeps it.
+      setEditor((prev) =>
+        prev && prev.template?.id === id ? { ...prev, fresh: false, original: snapshot } : prev,
+      );
+      return true;
+    })();
+    inFlight.current = run;
+    try {
+      return await run;
+    } finally {
+      inFlight.current = null;
+    }
+  }
+
+  /*
+   * Autosave: a second and a half after the last change. Also keeps the
+   * status the header shows ("Saved", "Unsaved changes", ...) in step.
+   */
+  useEffect(() => {
     if (!editor?.template) return;
-    setSaving(true);
-    const fields = extractFields(editor.body.html);
-    const { error } = await supabase
-      .from("document_templates" as any)
-      .update({
-        name: editor.name.trim() || "Untitled document",
-        body: editor.body as any,
-        fields,
-      })
-      .eq("id", editor.template.id);
-    setSaving(false);
-    if (error) {
-      toast.error(error.message);
+    if (!isEdited(editor)) {
+      setSaveState("saved");
       return;
     }
-    toast.success("Template saved");
-    await onChanged();
-    setEditor(null);
-  }
+    if (failedSnapshot.current === editSignature(editor)) return;
+    setSaveState("dirty");
+    const timer = window.setTimeout(() => void saveNow(), 1500);
+    return () => window.clearTimeout(timer);
+  }, [editor]);
 
   /**
    * Edit a template, whoever owns it.
@@ -1811,7 +1819,7 @@ export function useDocumentTemplateEditing({
       name: copy.name,
       body: copyBody,
       fresh: true,
-      original: { name: copy.name, html: copyBody.html },
+      original: { name: copy.name, html: copyBody.html, category: copyBody.category },
     });
   }
 
@@ -1834,36 +1842,45 @@ export function useDocumentTemplateEditing({
    * "I opened this to look at it" is how confirmations start being ignored.
    */
   async function closeEditor() {
-    const open = editor;
+    const open = editorRef.current;
     if (!open) return;
-    const edited = open.body.html !== open.original.html || open.name !== open.original.name;
 
-    if (edited) {
-      const isCopy = Boolean(open.fresh && open.template);
-      const ok = await confirm({
-        title: isCopy ? "Discard this copy?" : "Discard your changes?",
-        description: isCopy
-          ? `"${open.template!.name}" hasn't been saved, so nothing is added to your templates.`
-          : `Your edits to "${open.name || "this template"}" haven't been saved. Closing now loses them.`,
-        confirmText: isCopy ? "Discard copy" : "Discard changes",
-        cancelText: "Keep editing",
-        variant: "destructive",
-      });
-      if (!ok) return;
-    }
-
-    if (!open.fresh || !open.template) {
+    // A copy made for this edit and never changed is not a template anyone
+    // asked for: delete it rather than leave a twin card in the grid.
+    if (open.fresh && open.template && !isEdited(open)) {
       setEditor(null);
+      const { error } = await supabase
+        .from("document_templates" as any)
+        .delete()
+        .eq("id", open.template.id);
+      // The row survived the delete, so it is on the page whether we say so or
+      // not. Reload rather than leave the grid disagreeing with the database.
+      if (error) await onChanged();
       return;
     }
+
+    if (isEdited(open)) {
+      const saved = await saveNow();
+      if (!saved) {
+        const leave = await confirm({
+          title: "Close without saving?",
+          description: `Your latest changes to "${open.name || "this template"}" couldn't be saved. Closing now loses them.`,
+          confirmText: "Close anyway",
+          cancelText: "Keep editing",
+          variant: "destructive",
+        });
+        if (!leave) return;
+      }
+    }
     setEditor(null);
-    const { error } = await supabase
-      .from("document_templates" as any)
-      .delete()
-      .eq("id", open.template.id);
-    // The row survived the delete, so it is on the page whether we say so or
-    // not. Reload rather than leave the grid disagreeing with the database.
-    if (error) await onChanged();
+    await onChanged();
+  }
+
+  /** The header's Save & close. */
+  async function saveAndClose() {
+    if (!(await saveNow())) return;
+    toast.success("Template saved");
+    await closeEditor();
   }
 
   const dialogs = (
@@ -1877,9 +1894,9 @@ export function useDocumentTemplateEditing({
       <Dialog
         open={!!editor}
         onOpenChange={(v) => {
-          // Escape and Back close through one path, so a never-saved copy is
-          // cleaned up however the editor is left - and unsaved work is asked
-          // about however it is left, too. The overlay no longer closes at all.
+          // Escape and Back close through one path, so a never-edited copy is
+          // cleaned up and the last edits are saved however the editor is
+          // left. The overlay no longer closes at all.
           if (!v) void closeEditor();
         }}
       >
@@ -1890,10 +1907,9 @@ export function useDocumentTemplateEditing({
            * The surface is w-screen/h-screen, so "outside" is a few pixels of
            * overlay at the edge and whatever sits under a menu that is closing
            * - which is to say the only clicks that land there are accidents.
-           * Weighed against a document somebody has been typing into, with no
-           * autosave behind it, there is no version of that click worth
-           * honouring. Escape and Back still leave, and both ask first when
-           * there is unsaved work; this just stops the mouse from doing it.
+           * Weighed against a document somebody has been typing into, there is
+           * no version of that click worth honouring. Escape and Back still
+           * leave, and both save first; this just stops the mouse from doing it.
            */
           onInteractOutside={(e) => e.preventDefault()}
           className="max-w-none w-screen h-screen p-0 gap-0 rounded-none border-0 sm:rounded-none [&>button]:hidden"
@@ -1906,8 +1922,9 @@ export function useDocumentTemplateEditing({
             <DocumentEditorSurface
               editor={editor}
               setEditor={setEditor}
-              saving={saving}
-              onSave={persist}
+              saveState={saveState}
+              onSaveNow={() => void saveNow()}
+              onDone={() => void saveAndClose()}
               onClose={() => void closeEditor()}
             />
           )}
@@ -2052,6 +2069,25 @@ function FilingChip({
 function ChipStyles() {
   return (
     <style>{`
+      .tiptap-template-field {
+        display: inline-block;
+        padding: 0 8px;
+        margin: 0 1px;
+        border-radius: 9999px;
+        background: #e0ecff;
+        color: #1e3a8a;
+        border: 1px solid #a9c6fb;
+        font-size: 0.88em;
+        font-weight: 600;
+        line-height: 1.5;
+        white-space: nowrap;
+        cursor: default;
+        user-select: none;
+      }
+      .ProseMirror-selectednode.tiptap-template-field {
+        outline: 2px solid #3b82f6;
+        outline-offset: 1px;
+      }
       .doc-chip {
         display: inline-block;
         padding: 1px 8px;
@@ -2304,8 +2340,9 @@ function ChipStyles() {
 function DocumentEditorSurface({
   editor,
   setEditor,
-  saving,
-  onSave,
+  saveState,
+  onSaveNow,
+  onDone,
   onClose,
 }: {
   editor: EditorState;
@@ -2315,26 +2352,21 @@ function DocumentEditorSurface({
    * stale closure would quietly revert whatever the other one just changed.
    */
   setEditor: Dispatch<SetStateAction<EditorState | null>>;
-  saving: boolean;
-  onSave: () => void;
+  saveState: SaveState;
+  /** Write now and stay (Ctrl+S). */
+  onSaveNow: () => void;
+  /** Save & close. */
+  onDone: () => void;
   onClose: () => void;
 }) {
   const [mode, setMode] = useState<"edit" | "preview">("edit");
-  const [previewFill, setPreviewFill] = useState<"token" | "sample">("token");
   const [sidePanel, setSidePanel] = useState(true);
-  const [sampleOverrides, setSampleOverrides] = useState<Record<string, string>>({});
-  const overridesRef = useRef<Record<string, string>>({});
-  overridesRef.current = sampleOverrides;
   const detected = extractFields(editor.body.html);
   const stylePreset = STYLE_PRESETS.find((p) => p.key === editor.body.style) ?? STYLE_PRESETS[0];
   const relevantPlaceholders = useMemo(
     () => getRelevantPlaceholders(editor.body.style, detected),
     [editor.body.style, detected.join("|")],
   );
-  // Quick fields = every relevant placeholder for this template type
-  // (plus any extras detected in the body). Grid wraps so all stay visible.
-  const quickFields = relevantPlaceholders;
-
   const tiptap = useEditor({
     // Deliberately the same extension set as the project page editor. A
     // template is authored here and rendered there, so anything missing from
@@ -2367,13 +2399,12 @@ function DocumentEditorSurface({
       TableRow,
       TableHeader,
       TableCell,
-      PlaceholderChips.configure({
-        getValue: (token: string) => overridesRef.current[token],
-      }),
+      TemplateToken,
     ],
-    content: editor.body.html || "<p></p>",
+    // Placeholders edit as pills and are stored as {{token}} text.
+    content: tokensToPills(editor.body.html || "<p></p>", tokenLabel),
     onUpdate: ({ editor: e }) => {
-      const html = e.getHTML();
+      const html = pillsToTokens(e.getHTML());
       setEditor((prev) => (prev ? { ...prev, body: { ...prev.body, html } } : prev));
     },
   });
@@ -2381,20 +2412,27 @@ function DocumentEditorSurface({
   // Sync when switching templates
   useEffect(() => {
     if (!tiptap) return;
-    if (tiptap.getHTML() !== (editor.body.html || "<p></p>")) {
-      tiptap.commands.setContent(editor.body.html || "<p></p>", {
+    if (pillsToTokens(tiptap.getHTML()) !== (editor.body.html || "<p></p>")) {
+      tiptap.commands.setContent(tokensToPills(editor.body.html || "<p></p>", tokenLabel), {
         emitUpdate: false,
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor.template?.id]);
 
-  // Refresh decorations live whenever the Fields panel values change.
+  // Ctrl+S / Cmd+S saves where the browser would otherwise save the page.
+  const saveNowRef = useRef(onSaveNow);
+  saveNowRef.current = onSaveNow;
   useEffect(() => {
-    if (!tiptap) return;
-    const { view } = tiptap;
-    view.dispatch(view.state.tr.setMeta(placeholderChipsKey, sampleOverrides));
-  }, [sampleOverrides, tiptap]);
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        saveNowRef.current();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   /*
    * How many pages the document currently runs to.
@@ -2420,12 +2458,25 @@ function DocumentEditorSurface({
 
   function insertPlaceholder(token: string) {
     if (!tiptap) return;
-    tiptap.chain().focus().insertContent(`{{${token}}}`).run();
+    tiptap
+      .chain()
+      .focus()
+      .insertContent({ type: "templateToken", attrs: { token, label: tokenLabel(token) } })
+      .run();
   }
 
   function insertSection(html: string) {
     if (!tiptap) return;
-    tiptap.chain().focus().insertContent(html).run();
+    tiptap.chain().focus().insertContent(tokensToPills(html, tokenLabel)).run();
+  }
+
+  /** Continues the document's "Photo N" numbering for a photo grid. */
+  function nextPhotoIndex(): number {
+    let n = 0;
+    tiptap?.state.doc.descendants((node) => {
+      if (node.type.name === "image") n += 1;
+    });
+    return n + 1;
   }
 
   function exportPdf() {
@@ -2481,103 +2532,113 @@ function DocumentEditorSurface({
     win.document.close();
   }
 
-  const wordCount = editor.body.html
-    .replace(/<[^>]+>/g, " ")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean).length;
-
   return (
     <div className="flex h-full w-full flex-col overflow-hidden">
-      {/* Top bar */}
+      <ChipStyles />
+      {/* Top bar: just what a writer reaches for. Everything about the
+          template rather than its words lives under Settings. */}
       <header className="flex flex-wrap items-center gap-2 border-b bg-background px-4 py-2">
         <Button variant="ghost" size="sm" onClick={onClose}>
           <ArrowLeft className="mr-1 h-4 w-4" /> Back
         </Button>
-        <div className="mx-2 h-6 w-px bg-border" />
+        <div className="mx-1 h-6 w-px bg-border" />
         <Input
           value={editor.name}
           onChange={(e) => {
             const name = e.target.value;
             setEditor((prev) => (prev ? { ...prev, name } : prev));
           }}
-          // Wide enough to read a real template name back. "Electrical Panel &
-          // Circuit Inspection (copy)" is 42 characters, and max-w-xs at h-8
-          // showed about half of it in the one box you rename it from.
-          className="h-9 w-64 max-w-sm text-sm font-semibold"
+          className="h-9 w-72 max-w-full text-sm font-semibold"
           placeholder="Untitled document"
+          aria-label="Template name"
         />
-        <Badge variant="secondary" className="hidden gap-1 md:inline-flex">
-          <stylePreset.icon className="h-3 w-3" />
-          {stylePreset.label}
-        </Badge>
-        {/* The trade it files under. Saved with the body, so it takes effect on
-            Save alongside everything else the editor changes. */}
-        <Select
-          value={editor.body.category ?? GENERAL_CATEGORY}
-          onValueChange={(v) =>
-            setEditor((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    body: { ...prev.body, category: v === GENERAL_CATEGORY ? undefined : v },
-                  }
-                : prev,
-            )
-          }
-        >
-          <SelectTrigger className="h-8 w-[164px] text-xs" title="Which trade this files under">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={GENERAL_CATEGORY}>{GENERAL_CATEGORY}</SelectItem>
-            {CATEGORY_ORDER.map((c) => (
-              <SelectItem key={c} value={c}>
-                {c}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <span className="hidden text-xs text-muted-foreground lg:inline">
-          {stylePreset.description}
-        </span>
+        <SaveStatus state={saveState} onRetry={onSaveNow} />
         <div className="ml-auto flex items-center gap-2">
-          <div className="hidden text-xs text-muted-foreground md:block">
-            {wordCount} words · {detected.length} placeholder
-            {detected.length === 1 ? "" : "s"} · {pageCount} page
-            {pageCount === 1 ? "" : "s"}
-          </div>
-          <Button
-            variant={sidePanel ? "default" : "outline"}
-            size="sm"
-            onClick={() => setSidePanel((v) => !v)}
-            title="Toggle live fields panel"
-          >
-            {sidePanel ? (
-              <PanelRightClose className="mr-1 h-4 w-4" />
-            ) : (
-              <PanelRightOpen className="mr-1 h-4 w-4" />
-            )}
-            Fields
-          </Button>
           <Button
             variant={mode === "preview" ? "default" : "outline"}
             size="sm"
             onClick={() => setMode(mode === "edit" ? "preview" : "edit")}
           >
-            <Eye className="mr-1 h-4 w-4" />
-            {mode === "edit" ? "Preview" : "Back to editor"}
+            {mode === "edit" ? (
+              <>
+                <Eye className="mr-1 h-4 w-4" /> Preview
+              </>
+            ) : (
+              <>
+                <Pencil className="mr-1 h-4 w-4" /> Edit
+              </>
+            )}
           </Button>
-          <Button variant="outline" size="sm" onClick={exportPdf}>
-            <Download className="mr-1 h-4 w-4" /> Export PDF
-          </Button>
-          <Button size="sm" onClick={onSave} disabled={saving}>
-            {saving ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" aria-label="Template settings">
+                <MoreHorizontal className="mr-1 h-4 w-4" /> Settings
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64">
+              <DropdownMenuLabel className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                <stylePreset.icon className="h-3.5 w-3.5" /> {stylePreset.label} template
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {/* The trade it files under. Saved with the body, so it is
+                  autosaved alongside everything else the editor changes. */}
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <span className="flex-1">Trade</span>
+                  <span className="ml-3 truncate text-xs text-muted-foreground">
+                    {editor.body.category ?? GENERAL_CATEGORY}
+                  </span>
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="max-h-80 overflow-y-auto">
+                  <DropdownMenuRadioGroup
+                    value={editor.body.category ?? GENERAL_CATEGORY}
+                    onValueChange={(v) =>
+                      setEditor((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              body: {
+                                ...prev.body,
+                                category: v === GENERAL_CATEGORY ? undefined : v,
+                              },
+                            }
+                          : prev,
+                      )
+                    }
+                  >
+                    {[GENERAL_CATEGORY, ...CATEGORY_ORDER].map((c) => (
+                      <DropdownMenuRadioItem key={c} value={c}>
+                        {c}
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              <DropdownMenuItem onSelect={() => setSidePanel((v) => !v)}>
+                {sidePanel ? (
+                  <PanelRightClose className="mr-2 h-4 w-4" />
+                ) : (
+                  <PanelRightOpen className="mr-2 h-4 w-4" />
+                )}
+                {sidePanel ? "Hide fields panel" : "Show fields panel"}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={exportPdf}>
+                <Download className="mr-2 h-4 w-4" /> Export PDF
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <div className="px-2 py-1.5 text-[11px] text-muted-foreground">
+                {detected.length} field{detected.length === 1 ? "" : "s"} · {pageCount} page
+                {pageCount === 1 ? "" : "s"}
+              </div>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button size="sm" onClick={onDone} disabled={saveState === "saving"}>
+            {saveState === "saving" ? (
               <Loader2 className="mr-1 h-4 w-4 animate-spin" />
             ) : (
               <Save className="mr-1 h-4 w-4" />
             )}
-            Save template
+            Save &amp; close
           </Button>
         </div>
       </header>
@@ -2591,100 +2652,22 @@ function DocumentEditorSurface({
           <div className="mx-auto px-4 py-6" style={{ width: `calc(${PAGE_IN.width}in + 2rem)` }}>
             {mode === "preview" ? (
               <>
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="h-3.5 w-3.5" />
-                    {previewFill === "sample"
-                      ? "Preview with example values. Real project data fills in when used."
-                      : "Preview with placeholders. Each one fills in from the project, or becomes a blank to type into."}
-                  </div>
-                  <div className="inline-flex rounded-md border bg-background p-0.5">
-                    <button
-                      type="button"
-                      onClick={() => setPreviewFill("token")}
-                      className={`rounded px-2 py-1 text-xs font-medium transition ${
-                        previewFill === "token"
-                          ? "bg-primary text-primary-foreground"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      Placeholders
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPreviewFill("sample")}
-                      className={`rounded px-2 py-1 text-xs font-medium transition ${
-                        previewFill === "sample"
-                          ? "bg-primary text-primary-foreground"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      Sample data
-                    </button>
-                  </div>
+                <div className="mb-3 flex items-center gap-2 text-xs text-muted-foreground">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Preview with example values. Real project details fill in when this template is
+                  used.
                 </div>
                 <div className="doc-page flow-root" style={{ padding: `${PAGE_IN.margin}in` }}>
                   <div
                     className="doc-preview prose prose-neutral max-w-none prose-headings:font-semibold"
                     dangerouslySetInnerHTML={{
-                      __html: fillPreview(editor.body.html, previewFill, sampleOverrides),
+                      __html: fillPreview(editor.body.html, "sample"),
                     }}
                   />
                 </div>
               </>
             ) : (
               <div className="doc-page" ref={paperRef}>
-                {/*
-                  Quick fields - the narrow-screen home for the same values the
-                  Fields panel holds. Editing either updates the matching
-                  placeholder in the document live (PlaceholderChips widget
-                  decorations); both write the one `sampleOverrides` map.
-
-                  `md:hidden` against the panel's `hidden md:block` is what stops
-                  them rendering together, and that pairing is the fix for the
-                  screenshot the client sent. Above `md` this strip laid all nine
-                  placeholders out in a four-column grid *inside the paper*,
-                  directly above a toolbar, while the panel listed the very same
-                  nine down the right-hand side - two sets of inputs for one set
-                  of values, filling the top third of the window and pushing the
-                  document itself below the fold. "Very bad looking. Crowded."
-
-                  The panel wins the wide breakpoint because it is the superset
-                  (detected placeholders as well as the suggested ones), it can
-                  be dismissed from the header, and it sits beside the document
-                  rather than on top of it. This strip wins the narrow one,
-                  where the panel is not rendered at all.
-                */}
-                {quickFields.length > 0 && (
-                  <div className="rounded-t-lg border-b border-gray-200 bg-blue-50/60 px-4 py-3 md:hidden">
-                    <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-blue-900/70">
-                      <Sparkles className="h-3 w-3" /> Quick fields
-                      <span className="ml-1 font-normal normal-case tracking-normal text-blue-900/50">
-                        · edits appear live in the document
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-                      {quickFields.map((p) => (
-                        <label key={p.token} className="flex flex-col gap-0.5">
-                          <span className="text-[10px] font-medium text-blue-900/70">
-                            {p.label}
-                          </span>
-                          <input
-                            className="h-10 w-full rounded-md border border-blue-200 bg-white px-3 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-400/40"
-                            value={sampleOverrides[p.token] ?? ""}
-                            placeholder={SAMPLE[p.token] ?? p.label}
-                            onChange={(e) =>
-                              setSampleOverrides((s) => ({
-                                ...s,
-                                [p.token]: e.target.value,
-                              }))
-                            }
-                          />
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                )}
                 {/* Formatting toolbar - the same component the project page
                     editor uses, so a template can contain everything a real
                     document can. Project-only actions (insert a project photo,
@@ -2697,14 +2680,10 @@ function DocumentEditorSurface({
                      near-white on white and its two menu buttons were the app's
                      dark navy on white. */
                   <div className="doc-chrome sticky top-0 z-20 -mx-px rounded-t-lg border-b border-gray-200 bg-white/95 shadow-sm backdrop-blur">
-                    <DocumentToolbar editor={tiptap} />
-                    <div className="flex flex-wrap items-center gap-2 border-t border-gray-100 bg-slate-50/80 px-3 py-2">
-                      <SectionMenu onInsert={insertSection} />
+                    <DocumentToolbar editor={tiptap}>
                       <PlaceholderMenu onInsert={insertPlaceholder} />
-                      <span className="ml-auto hidden text-[11px] text-slate-500 lg:inline">
-                        Placeholders fill themselves in from the project this is used on.
-                      </span>
-                    </div>
+                      <SectionPicker onInsert={insertSection} nextPhotoIndex={nextPhotoIndex} />
+                    </DocumentToolbar>
                   </div>
                 )}
                 {/*
@@ -2734,121 +2713,57 @@ function DocumentEditorSurface({
         </div>
         {sidePanel && mode === "edit" && (
           /*
-             Wider from lg up. At a flat 320px the value inputs below are about
-             270px of usable width, which truncates a full company address - in
-             the one panel whose whole job is showing you what you typed. "The
-             fields should be larger to view what we type."
-          */
-          <aside className="hidden w-80 shrink-0 overflow-y-auto border-l bg-card text-card-foreground md:block lg:w-96 xl:w-[26rem]">
+           * The fields this kind of template usually needs, plus any the
+           * document already uses. One list, one action: click to put the
+           * field where the cursor is. A tick shows it is already in.
+           */
+          <aside className="hidden w-72 shrink-0 overflow-y-auto border-l bg-card text-card-foreground md:block lg:w-80">
             <div className="p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <div className="text-base font-semibold text-foreground">
-                  Fields for {stylePreset.label}
-                </div>
+              <div className="mb-1 flex items-center justify-between">
+                <div className="text-base font-semibold text-foreground">Fields</div>
                 <button
                   className="text-muted-foreground hover:text-foreground"
                   onClick={() => setSidePanel(false)}
-                  aria-label="Close panel"
+                  aria-label="Hide fields panel"
                 >
                   <X className="h-4 w-4" />
                 </button>
               </div>
               <p className="mb-3 text-xs text-muted-foreground">
-                Suggested placeholders for this template type. Click to insert.
+                Click a field to add it where your cursor is. Each one fills in from the project
+                when this template is used.
               </p>
-              <div className="mb-4 flex flex-wrap gap-1">
-                {relevantPlaceholders.map((p) => (
-                  <button
-                    key={p.token}
-                    onClick={() => insertPlaceholder(p.token)}
-                    className="rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary transition hover:border-primary/60 hover:bg-primary/20"
-                    title={`Insert {{${p.token}}}`}
-                  >
-                    {p.label}
-                  </button>
-                ))}
-              </div>
-              <div className="space-y-2">
-                <div className="text-xs font-semibold uppercase text-muted-foreground">
-                  Editable fields
-                </div>
-                <p className="text-[11px] text-muted-foreground">
-                  Change any value - the document updates live.
-                </p>
-                {(() => {
-                  const editableTokens = Array.from(
-                    new Set([...detected, ...relevantPlaceholders.map((p) => p.token)]),
-                  );
-                  if (editableTokens.length === 0) {
-                    return (
-                      <div className="text-xs text-muted-foreground">
-                        No placeholders yet. Insert one from above or the toolbar.
-                      </div>
-                    );
-                  }
-                  /*
-                    One column, not two. The panel is 320px wide, so two columns
-                    gave each field about 130px - enough to truncate "Project
-                    address" in its own label and to hide the end of whatever was
-                    typed into it. Nine of those stacked in a 2-up grid is the
-                    right-hand half of the client's screenshot.
-                  */
+              <ul className="space-y-1">
+                {Array.from(
+                  new Set([...relevantPlaceholders.map((p) => p.token), ...detected]),
+                ).map((token) => {
+                  const used = detected.includes(token);
                   return (
-                    <div className="space-y-3">
-                      {editableTokens.map((token) => (
-                        <div key={token} className="space-y-1">
-                          <label
-                            htmlFor={`doc-field-${token}`}
-                            className="block text-xs font-semibold text-foreground"
-                          >
-                            {snippetLabel(token)}
-                          </label>
-                          {/*
-                            The app's own Input, not a hand-rolled one.
-
-                            This was white-with-gray-400-placeholder, pinned
-                            that way in both themes - and the panel behind it
-                            follows the theme, so in dark mode it was a white
-                            card holding 2.6:1 grey text. Every box here shows
-                            its placeholder until somebody types, so that grey
-                            was most of the words on the panel: "the contrast
-                            on the form filling on the right side is too
-                            little. its hiding alot of text."
-                          */}
-                          <Input
-                            id={`doc-field-${token}`}
-                            className="h-10 text-sm"
-                            value={sampleOverrides[token] ?? ""}
-                            onChange={(e) =>
-                              setSampleOverrides((s) => ({ ...s, [token]: e.target.value }))
-                            }
-                            placeholder={SAMPLE[token] ?? snippetLabel(token)}
-                          />
-                        </div>
-                      ))}
-                    </div>
+                    <li key={token}>
+                      <button
+                        type="button"
+                        onClick={() => insertPlaceholder(token)}
+                        className="flex w-full items-center justify-between gap-2 rounded-md border border-transparent px-2.5 py-2 text-left text-sm text-foreground transition hover:border-primary/30 hover:bg-primary/5"
+                        title={`Insert ${tokenLabel(token)}`}
+                      >
+                        <span className="flex items-center gap-2">
+                          <Plus className="h-3.5 w-3.5 text-primary" />
+                          {tokenLabel(token)}
+                        </span>
+                        {used && (
+                          <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
+                            <Check className="h-3.5 w-3.5" /> In use
+                          </span>
+                        )}
+                      </button>
+                    </li>
                   );
-                })()}
-              </div>
-              <details className="mt-4 rounded-md border bg-muted/40 p-2 text-xs">
-                <summary className="cursor-pointer font-medium text-muted-foreground">
-                  All placeholders
-                </summary>
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {PLACEHOLDERS.filter(
-                    (p) => !relevantPlaceholders.some((r) => r.token === p.token),
-                  ).map((p) => (
-                    <button
-                      key={p.token}
-                      onClick={() => insertPlaceholder(p.token)}
-                      className="rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary transition hover:border-primary/60 hover:bg-primary/20"
-                      title={`Insert {{${p.token}}}`}
-                    >
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
-              </details>
+                })}
+              </ul>
+              <p className="mt-4 text-[11px] text-muted-foreground">
+                Need another? Use <span className="font-semibold">Insert field</span> in the toolbar
+                for the full list.
+              </p>
             </div>
           </aside>
         )}
@@ -2865,12 +2780,16 @@ function PlaceholderMenu({ onInsert }: { onInsert: (token: string) => void }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" className="h-8">
-          <Sparkles className="mr-1 h-3.5 w-3.5" /> Insert placeholder
-          <ChevronDown className="ml-1 h-3.5 w-3.5" />
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1 px-2 text-xs font-bold text-primary hover:bg-primary/10 hover:text-primary"
+        >
+          <Sparkles className="h-4 w-4" /> Insert field
+          <ChevronDown className="h-3.5 w-3.5 opacity-60" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-64">
+      <DropdownMenuContent align="start" className="max-h-96 w-60 overflow-y-auto">
         {Object.entries(grouped).map(([group, list], idx) => (
           <div key={group}>
             {idx > 0 && <DropdownMenuSeparator />}
@@ -2884,10 +2803,8 @@ function PlaceholderMenu({ onInsert }: { onInsert: (token: string) => void }) {
                   e.preventDefault();
                   onInsert(p.token);
                 }}
-                className="flex items-center justify-between gap-3"
               >
-                <span>{p.label}</span>
-                <span className="font-mono text-[10px] text-muted-foreground">{p.token}</span>
+                {p.label}
               </DropdownMenuItem>
             ))}
           </div>
@@ -2897,71 +2814,251 @@ function PlaceholderMenu({ onInsert }: { onInsert: (token: string) => void }) {
   );
 }
 
-const SECTION_PRESETS: { label: string; description: string; html: string }[] = [
-  { label: "Heading", description: "Large section title", html: "<h2>New section</h2><p></p>" },
-  { label: "Subheading", description: "Smaller heading", html: "<h3>Subheading</h3><p></p>" },
-  { label: "Paragraph", description: "Empty paragraph", html: "<p>Type here…</p>" },
+/**
+ * The blocks the section picker offers, each with a small sketch of what it
+ * adds so nobody has to insert one to find out.
+ */
+type SectionThumb =
+  | "heading"
+  | "paragraph"
+  | "bullets"
+  | "numbered"
+  | "divider"
+  | "callout"
+  | "company"
+  | "photos"
+  | "notes"
+  | "table"
+  | "signature";
+
+const SECTION_PRESETS: {
+  label: string;
+  thumb: SectionThumb;
+  html: string | ((nextPhoto: number) => string);
+}[] = [
+  { label: "Heading", thumb: "heading", html: "<h2>New section</h2><p></p>" },
+  { label: "Paragraph", thumb: "paragraph", html: "<p>Type here…</p>" },
+  {
+    label: "Company header",
+    thumb: "company",
+    html: "<h1>{{company_name}}</h1><p>{{company_address}} · {{company_phone}}</p><table><tbody><tr><th>Project</th><td>{{project_name}}</td><th>Date</th><td>{{date}}</td></tr><tr><th>Client</th><td>{{client_name}}</td><th>Address</th><td>{{project_address}}</td></tr></tbody></table><p></p>",
+  },
+  {
+    label: "Photo grid",
+    thumb: "photos",
+    html: (next) => `<h3>Photos</h3>${photoRowHtml(3, next)}<p></p>`,
+  },
   {
     label: "Bulleted list",
-    description: "3-item bullet list",
+    thumb: "bullets",
     html: "<ul><li>Item one</li><li>Item two</li><li>Item three</li></ul>",
   },
   {
     label: "Numbered list",
-    description: "3-item numbered list",
+    thumb: "numbered",
     html: "<ol><li>Step one</li><li>Step two</li><li>Step three</li></ol>",
   },
-  { label: "Divider", description: "Horizontal rule", html: "<hr/><p></p>" },
   {
-    label: "Quote / callout",
-    description: "Blockquote block",
-    html: "<blockquote><p>Important note.</p></blockquote>",
-  },
-  {
-    label: "Photo notes block",
-    description: "Header + list",
+    label: "Photo notes",
+    thumb: "notes",
     html: "<h3>Photo notes</h3><ul><li>Location: </li><li>Observation: </li><li>Recommendation: </li></ul>",
   },
   {
+    label: "Line items",
+    thumb: "table",
+    html: "<h3>Line items</h3><table><thead><tr><th>#</th><th>Item</th><th>Qty</th><th>Price</th></tr></thead><tbody><tr><td>1</td><td></td><td></td><td></td></tr><tr><td>2</td><td></td><td></td><td></td></tr></tbody></table><p></p>",
+  },
+  {
     label: "Action items",
-    description: "Task table",
+    thumb: "table",
     html: "<h3>Action items</h3><table><thead><tr><th>#</th><th>Item</th><th>Owner</th><th>Due</th></tr></thead><tbody><tr><td>1</td><td></td><td></td><td></td></tr><tr><td>2</td><td></td><td></td><td></td></tr></tbody></table>",
   },
   {
-    label: "Signature block",
-    description: "Prepared by / signature",
+    label: "Note / callout",
+    thumb: "callout",
+    html: "<blockquote><p>Important note.</p></blockquote>",
+  },
+  { label: "Divider", thumb: "divider", html: "<hr/><p></p>" },
+  {
+    label: "Signature",
+    thumb: "signature",
     html: "<hr/><p><strong>Prepared by:</strong> {{prepared_by}}</p><p><strong>Signature:</strong> ______________________</p><p><strong>Date:</strong> {{date}}</p>",
   },
 ];
 
-function SectionMenu({ onInsert }: { onInsert: (html: string) => void }) {
+/** A grey sketch of a block, drawn with bars and boxes. */
+function SectionSketch({ kind }: { kind: SectionThumb }) {
+  const bar = (w: string, h = "h-1.5", tone = "bg-slate-300") => (
+    <div className={cn("rounded-full", h, tone)} style={{ width: w }} />
+  );
+  switch (kind) {
+    case "heading":
+      return (
+        <div className="space-y-1.5">
+          {bar("70%", "h-2.5", "bg-slate-500")}
+          {bar("90%")}
+        </div>
+      );
+    case "paragraph":
+      return (
+        <div className="space-y-1">
+          {bar("95%")}
+          {bar("88%")}
+          {bar("60%")}
+        </div>
+      );
+    case "company":
+      return (
+        <div className="space-y-1">
+          {bar("55%", "h-2", "bg-slate-500")}
+          {bar("75%", "h-1")}
+          <div className="grid grid-cols-2 gap-0.5 pt-0.5">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="h-2 rounded-sm border border-slate-300" />
+            ))}
+          </div>
+        </div>
+      );
+    case "photos":
+      return (
+        <div className="space-y-1">
+          {bar("40%", "h-1.5", "bg-slate-500")}
+          <div className="grid grid-cols-3 gap-1">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="aspect-square rounded-sm bg-slate-300" />
+            ))}
+          </div>
+        </div>
+      );
+    case "bullets":
+    case "numbered":
+    case "notes":
+      return (
+        <div className="space-y-1">
+          {kind === "notes" && bar("45%", "h-1.5", "bg-slate-500")}
+          {["80%", "70%", "75%"].map((w, i) => (
+            <div key={i} className="flex items-center gap-1">
+              {kind === "numbered" ? (
+                <span className="text-[7px] font-bold leading-none text-slate-500">{i + 1}</span>
+              ) : (
+                <span className="h-1 w-1 rounded-full bg-slate-500" />
+              )}
+              {bar(w, "h-1")}
+            </div>
+          ))}
+        </div>
+      );
+    case "table":
+      return (
+        <div className="space-y-1">
+          {bar("45%", "h-1.5", "bg-slate-500")}
+          <div className="grid grid-cols-4 gap-px overflow-hidden rounded-sm border border-slate-300">
+            {Array.from({ length: 12 }, (_, i) => (
+              <div key={i} className={cn("h-1.5", i < 4 ? "bg-slate-300" : "bg-white")} />
+            ))}
+          </div>
+        </div>
+      );
+    case "callout":
+      return (
+        <div className="space-y-1 border-l-2 border-sky-300 bg-slate-100 py-1 pl-1.5">
+          {bar("85%", "h-1")}
+          {bar("60%", "h-1")}
+        </div>
+      );
+    case "divider":
+      return (
+        <div className="flex h-full items-center">
+          <div className="h-px w-full bg-slate-400" />
+        </div>
+      );
+    case "signature":
+      return (
+        <div className="space-y-1.5 pt-1">
+          <div className="h-px w-full bg-slate-300" />
+          {bar("50%", "h-1")}
+          <div className="h-px w-3/4 bg-slate-500" />
+          {bar("35%", "h-1")}
+        </div>
+      );
+  }
+}
+
+/** Add section: a grid of sketched blocks rather than a list of names. */
+function SectionPicker({
+  onInsert,
+  nextPhotoIndex,
+}: {
+  onInsert: (html: string) => void;
+  nextPhotoIndex: () => number;
+}) {
+  const [open, setOpen] = useState(false);
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" className="h-8">
-          <LayoutTemplate className="mr-1 h-3.5 w-3.5" /> Add section
-          <ChevronDown className="ml-1 h-3.5 w-3.5" />
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1 px-2 text-xs font-bold text-primary hover:bg-primary/10 hover:text-primary"
+        >
+          <LayoutTemplate className="h-4 w-4" /> Add section
+          <ChevronDown className="h-3.5 w-3.5 opacity-60" />
         </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-64">
-        <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
-          Insert section
-        </DropdownMenuLabel>
-        {SECTION_PRESETS.map((s) => (
-          <DropdownMenuItem
-            key={s.label}
-            onSelect={(e) => {
-              e.preventDefault();
-              onInsert(s.html);
-            }}
-            className="flex flex-col items-start gap-0.5"
-          >
-            <span className="font-medium">{s.label}</span>
-            <span className="text-[10px] text-muted-foreground">{s.description}</span>
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-[23rem] p-3">
+        <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          Add a section
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          {SECTION_PRESETS.map((p) => (
+            <button
+              key={p.label}
+              type="button"
+              onClick={() => {
+                onInsert(typeof p.html === "function" ? p.html(nextPhotoIndex()) : p.html);
+                setOpen(false);
+              }}
+              className="group flex flex-col gap-1.5 rounded-lg border border-border bg-background p-2 text-left transition hover:border-primary hover:bg-primary/5"
+            >
+              <div className="h-12 rounded-md border border-slate-200 bg-white p-1.5">
+                <SectionSketch kind={p.thumb} />
+              </div>
+              <span className="text-[11.5px] font-semibold text-foreground">{p.label}</span>
+            </button>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** The header's "Saved" / "Saving…" / "Unsaved changes" line. */
+function SaveStatus({ state, onRetry }: { state: SaveState; onRetry: () => void }) {
+  if (state === "error") {
+    return (
+      <button
+        type="button"
+        onClick={onRetry}
+        className="flex items-center gap-1 text-xs font-medium text-destructive hover:underline"
+      >
+        <AlertCircle className="h-3.5 w-3.5" /> Not saved. Retry
+      </button>
+    );
+  }
+  return (
+    <span className="flex items-center gap-1 text-xs text-muted-foreground" aria-live="polite">
+      {state === "saving" ? (
+        <>
+          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving…
+        </>
+      ) : state === "dirty" ? (
+        "Unsaved changes"
+      ) : (
+        <>
+          <Check className="h-3.5 w-3.5 text-emerald-600" /> Saved
+        </>
+      )}
+    </span>
   );
 }
 
