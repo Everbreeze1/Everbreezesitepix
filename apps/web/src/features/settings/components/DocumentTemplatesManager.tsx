@@ -51,6 +51,7 @@ import { Spacer } from "@/lib/tiptap-spacer";
 import { FillField, MergeToken } from "@/lib/tiptap-fill-field";
 import { DocumentToolbar } from "@/features/projects/components/DocumentToolbar";
 import { TemplateToken, pillsToTokens, tokensToPills } from "@/lib/tiptap-template-token";
+import { Pagination, refreshPagination } from "@/lib/tiptap-pagination";
 import { photoRowHtml } from "@/lib/tiptap-photo-slot";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -286,6 +287,24 @@ function getRelevantPlaceholders(style: string, detected: string[]): Placeholder
   return merged
     .map((t) => PLACEHOLDERS.find((p) => p.token === t))
     .filter((p): p is Placeholder => Boolean(p));
+}
+
+/**
+ * The side panel's field list: the ones the document already uses first, then
+ * the ones this kind of template usually needs, one entry per label. Two
+ * tokens can share a label - the legacy `{{company}}` and `{{company_name}}`
+ * are both "Company name" - and listing it twice only looked like a mistake.
+ */
+function sidePanelTokens(relevant: Placeholder[], detected: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const token of [...detected, ...relevant.map((p) => p.token)]) {
+    const label = tokenLabel(token).trim().toLowerCase();
+    if (seen.has(label)) continue;
+    seen.add(label);
+    out.push(token);
+  }
+  return out;
 }
 
 /*
@@ -528,6 +547,8 @@ const CONTENT_IN = {
 };
 const PX_PER_IN = 96;
 const PAGE_CONTENT_PX = CONTENT_IN.height * PX_PER_IN;
+/** The running header on pages two onward (document name, page number). */
+const PAGE_HEADER_PX = 40;
 
 /**
  * The typography the editor, the preview and the export all share.
@@ -2211,6 +2232,53 @@ function ChipStyles() {
        * in styles.css). Same idea, same look - and unmistakably a guide rather
        * than a rule somebody put in the document.
        */
+      /*
+       * An automatic page break (see lib/tiptap-pagination.ts): the rest of
+       * the sheet left blank, a grey gap the width of the paper, and the new
+       * sheet's header. Drawn as a widget, so none of it is in the document.
+       */
+      .doc-page-gap {
+        position: relative;
+        pointer-events: none;
+        user-select: none;
+      }
+      .doc-page-gap-band {
+        position: absolute;
+        margin: 0 -1px;
+        background: oklch(0.93 0.008 75);
+        box-shadow:
+          inset 0 6px 6px -6px rgb(0 0 0 / 0.22),
+          inset 0 -6px 6px -6px rgb(0 0 0 / 0.22);
+      }
+      .doc-page-gap-header {
+        position: absolute;
+        left: 0;
+        right: 0;
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        padding-bottom: 6px;
+        border-bottom: 1px solid oklch(0.89 0.012 75);
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        font-size: 11px;
+        font-weight: 600;
+        color: oklch(0.5 0.02 75);
+        box-sizing: border-box;
+        height: auto !important;
+        max-height: ${PAGE_HEADER_PX - 12}px;
+        overflow: hidden;
+        white-space: nowrap;
+      }
+      .doc-page-gap-header span:first-child {
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      /* A block taller than a whole page still has to split; mark where. */
+      .doc-page-cut {
+        position: relative;
+        height: 0;
+      }
       .doc-page-break-guide {
         position: absolute;
         left: 0;
@@ -2367,6 +2435,14 @@ function DocumentEditorSurface({
     () => getRelevantPlaceholders(editor.body.style, detected),
     [editor.body.style, detected.join("|")],
   );
+  /*
+   * How many pages the document runs to, and the name each new page's header
+   * carries. Both reach the pagination plugin through refs: it is created once
+   * with the editor, and must read the current values, not the first ones.
+   */
+  const [pageCount, setPageCount] = useState(1);
+  const nameRef = useRef(editor.name);
+  nameRef.current = editor.name;
   const tiptap = useEditor({
     // Deliberately the same extension set as the project page editor. A
     // template is authored here and rendered there, so anything missing from
@@ -2400,6 +2476,17 @@ function DocumentEditorSurface({
       TableHeader,
       TableCell,
       TemplateToken,
+      // Automatic page breaks: a form or photo row that would cross the foot
+      // of a page moves to the next one whole, and each new page gets a
+      // header - the same rules the PDF export follows.
+      Pagination.configure({
+        pageContentPx: PAGE_CONTENT_PX,
+        headerPx: PAGE_HEADER_PX,
+        marginPx: PAGE_IN.margin * PX_PER_IN,
+        gapPx: 28,
+        headerText: () => nameRef.current.trim() || "Untitled document",
+        onPageCount: (n) => setPageCount(n),
+      }),
     ],
     // Placeholders edit as pills and are stored as {{token}} text.
     content: tokensToPills(editor.body.html || "<p></p>", tokenLabel),
@@ -2434,27 +2521,10 @@ function DocumentEditorSurface({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  /*
-   * How many pages the document currently runs to.
-   *
-   * Measured off the rendered height rather than counted from the markup:
-   * every element on the paper contributes, images and tables included, and a
-   * ResizeObserver catches a photo finishing loading as readily as a keystroke.
-   */
-  const paperRef = useRef<HTMLDivElement | null>(null);
-  const [pageCount, setPageCount] = useState(1);
+  // The running header shows the name, so redraw it when the name changes.
   useEffect(() => {
-    const body = paperRef.current?.querySelector<HTMLElement>(".ProseMirror");
-    if (!body) return;
-    const measure = () => {
-      const height = body.getBoundingClientRect().height;
-      setPageCount(Math.max(1, Math.ceil(height / PAGE_CONTENT_PX - 0.001)));
-    };
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(body);
-    return () => observer.disconnect();
-  }, [tiptap, mode]);
+    if (tiptap && !tiptap.isDestroyed) refreshPagination(tiptap.view);
+  }, [tiptap, editor.name]);
 
   function insertPlaceholder(token: string) {
     if (!tiptap) return;
@@ -2667,7 +2737,7 @@ function DocumentEditorSurface({
                 </div>
               </>
             ) : (
-              <div className="doc-page" ref={paperRef}>
+              <div className="doc-page">
                 {/* Formatting toolbar - the same component the project page
                     editor uses, so a template can contain everything a real
                     document can. Project-only actions (insert a project photo,
@@ -2687,24 +2757,11 @@ function DocumentEditorSurface({
                   </div>
                 )}
                 {/*
-                  The printable box, at the size it prints at, with a marker
-                  wherever the printer will cut. `relative` is what the guides
-                  are positioned against; they sit inside the padding so their
-                  offsets start where the text does.
+                  The printable box, at the size it prints at. Page breaks are
+                  drawn inside it by the Pagination extension: a grey gap
+                  between sheets, then a header on the new page.
                 */}
-                <div className="relative flow-root" style={{ padding: `${PAGE_IN.margin}in` }}>
-                  {Array.from({ length: pageCount - 1 }, (_, i) => {
-                    const at = `calc(${PAGE_IN.margin}in + ${(i + 1) * CONTENT_IN.height}in)`;
-                    return (
-                      <div
-                        key={i}
-                        className="doc-page-break-guide"
-                        style={{ top: at }}
-                        data-label={`Page ${i + 2}`}
-                        aria-hidden="true"
-                      />
-                    );
-                  })}
+                <div className="flow-root" style={{ padding: `${PAGE_IN.margin}in` }}>
                   <EditorContent editor={tiptap} />
                 </div>
               </div>
@@ -2734,9 +2791,7 @@ function DocumentEditorSurface({
                 when this template is used.
               </p>
               <ul className="space-y-1">
-                {Array.from(
-                  new Set([...relevantPlaceholders.map((p) => p.token), ...detected]),
-                ).map((token) => {
+                {sidePanelTokens(relevantPlaceholders, detected).map((token) => {
                   const used = detected.includes(token);
                   return (
                     <li key={token}>

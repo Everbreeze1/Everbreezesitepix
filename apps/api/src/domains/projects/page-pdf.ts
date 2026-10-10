@@ -194,18 +194,28 @@ class Layout {
   y = 0;
   headerWords: Word[];
   footerWords: Word[];
+  /**
+   * The running header for pages 2 onward when the document has no header of
+   * its own: the document's title. A reader holding page 3 of a printout can
+   * tell which document it belongs to without anyone having added a header.
+   */
+  continuationWords: Word[];
+  /** Whether the current page carries a running header, so content starts below it. */
+  pageHasHeader = false;
 
   constructor(
     pdf: PDFDocument,
     fontFamilies: Record<FontFamilyKey, FontSet>,
     headerWords: Word[] = [],
     footerWords: Word[] = [],
+    continuationWords: Word[] = [],
   ) {
     this.pdf = pdf;
     this.fontFamilies = fontFamilies;
     this.fonts = fontFamilies.helvetica;
     this.headerWords = headerWords;
     this.footerWords = footerWords;
+    this.continuationWords = continuationWords;
   }
 
   get bottomBoundary(): number {
@@ -226,8 +236,14 @@ class Layout {
 
   newPage() {
     this.page = this.pdf.addPage([PAGE_W, PAGE_H]);
-    if (this.headerWords.length) {
-      this.drawRunningLine(this.headerWords, PAGE_H - 34);
+    const header = this.headerWords.length
+      ? this.headerWords
+      : this.pdf.getPageCount() > 1
+        ? this.continuationWords
+        : [];
+    this.pageHasHeader = header.length > 0;
+    if (header.length) {
+      this.drawRunningLine(header, PAGE_H - 34);
       this.page.drawLine({
         start: { x: MARGIN, y: PAGE_H - MARGIN + 2 },
         end: { x: PAGE_W - MARGIN, y: PAGE_H - MARGIN + 2 },
@@ -260,7 +276,17 @@ class Layout {
    * from one with content on it.
    */
   get pageTop(): number {
-    return PAGE_H - MARGIN - (this.headerWords.length ? HEADER_RESERVE : 0);
+    return PAGE_H - MARGIN - (this.pageHasHeader ? HEADER_RESERVE : 0);
+  }
+
+  /**
+   * How much a fresh continuation page holds. What decides whether a table
+   * can be kept together: one that fits here moves to a new page whole rather
+   * than starting at the foot of this one.
+   */
+  get freshPageCapacity(): number {
+    const header = this.headerWords.length || this.continuationWords.length;
+    return PAGE_H - MARGIN - (header ? HEADER_RESERVE : 0) - this.bottomBoundary;
   }
 
   ensureSpace(h: number) {
@@ -669,23 +695,48 @@ async function renderPhotoGrid(layout: Layout, node: ElementNode, cols: number) 
   layout.y -= 10;
 }
 
-async function renderTable(layout: Layout, table: ElementNode) {
-  const rows: ElementNode[] = [];
+interface MeasuredRow {
+  cells: ElementNode[];
+  cellLines: Word[][][];
+  cellImages: PDFImage[][];
+  height: number;
+  /** Every cell is a `th`: the table's header row, repeated on each page it spans. */
+  header: boolean;
+}
+
+interface MeasuredTable {
+  rows: MeasuredRow[];
+  colCount: number;
+  colWidth: number;
+  height: number;
+}
+
+const TABLE_FONT_SIZE = 10;
+/** The gap left under a table. */
+const TABLE_AFTER = 10;
+
+/**
+ * Lay a table out without drawing it: every row's wrapped lines, photos and
+ * height. Separate from drawing so the table's full height is known before
+ * its first row goes on the page, which is what keeping it together needs.
+ */
+async function measureTable(layout: Layout, table: ElementNode): Promise<MeasuredTable | null> {
+  const trs: ElementNode[] = [];
   const walk = (n: HtmlNode) => {
     if (n.type !== "element") return;
-    if (n.tag === "tr") rows.push(n);
+    if (n.tag === "tr") trs.push(n);
     else n.children.forEach(walk);
   };
   table.children.forEach(walk);
-  if (!rows.length) return;
+  if (!trs.length) return null;
 
-  const cellsPerRow = rows.map((r) =>
+  const cellsPerRow = trs.map((r) =>
     r.children.filter((c) => c.type === "element" && (c as ElementNode).tag !== "text"),
   );
   const colCount = Math.max(...cellsPerRow.map((c) => c.length), 1);
   const colWidth = CONTENT_W / colCount;
 
-  const size = 10;
+  const size = TABLE_FONT_SIZE;
   const innerW = colWidth - CELL_PAD * 2;
   const emptyStyle: Style = {
     bold: false,
@@ -696,16 +747,10 @@ async function renderTable(layout: Layout, table: ElementNode) {
     fontSize: null,
   };
 
-  for (const row of rows) {
+  const rows: MeasuredRow[] = [];
+  for (const row of trs) {
     const cells = row.children.filter((c) => c.type === "element") as ElementNode[];
 
-    /*
-     * Measure the whole row before drawing any of it. A cell holding a photo is
-     * taller than its text, and the row's height is what its borders are drawn
-     * from - so the images have to be embedded (and their aspect ratios known)
-     * before the first glyph goes down, or a row with a picture in it draws its
-     * rules through the middle of the picture.
-     */
     const cellLines = cells.map((cell) => {
       const lines: Word[][] = [];
       let line: Word[] = [];
@@ -732,52 +777,87 @@ async function renderTable(layout: Layout, table: ElementNode) {
       const imgH = cellImages[i].length ? cellImageRowHeight(cellImages[i], innerW) + 6 : 0;
       return cellLines[i].length * 14 + imgH;
     });
-    const rowHeight = Math.max(maxLines * 14, ...cellHeights) + 8;
-
-    layout.ensureSpace(rowHeight);
-    const rowTop = layout.y;
-
-    for (let i = 0; i < cells.length; i++) {
-      const x = MARGIN + i * colWidth;
-      let cy = rowTop - 4;
-      for (const ln of cellLines[i]) {
-        let lx = x + CELL_PAD;
-        for (const w of ln) {
-          const font = layout.fontFor(w.style);
-          const txt = sanitizeForWinAnsi(w.text);
-          layout.page.drawText(txt, { x: lx, y: cy - size, size, font, color: TEXT });
-          lx += font.widthOfTextAtSize(txt, size) + 3;
-        }
-        cy -= size + 4;
-      }
-      drawCellImageRow(layout.page, cellImages[i], x + CELL_PAD, cy - 2, innerW);
-    }
-    for (let i = 0; i <= cells.length; i++) {
-      layout.page.drawLine({
-        start: { x: MARGIN + i * colWidth, y: rowTop },
-        end: { x: MARGIN + i * colWidth, y: rowTop - rowHeight },
-        thickness: 0.5,
-        color: BORDER,
-      });
-    }
-    layout.page.drawLine({
-      start: { x: MARGIN, y: rowTop },
-      end: { x: MARGIN + colCount * colWidth, y: rowTop },
-      thickness: 0.5,
-      color: BORDER,
-    });
-    layout.page.drawLine({
-      start: { x: MARGIN, y: rowTop - rowHeight },
-      end: { x: MARGIN + colCount * colWidth, y: rowTop - rowHeight },
-      thickness: 0.5,
-      color: BORDER,
-    });
-    layout.y = rowTop - rowHeight;
+    const height = Math.max(maxLines * 14, ...cellHeights) + 8;
+    const header = cells.length > 0 && cells.every((c) => c.tag === "th");
+    rows.push({ cells, cellLines, cellImages, height, header });
   }
-  layout.y -= 10;
+  const height = rows.reduce((sum, r) => sum + r.height, 0);
+  return { rows, colCount, colWidth, height };
 }
 
-/** Tiptap's TextAlign extension renders as `style="text-align: center"` etc. on the block node. */
+function drawTableRow(layout: Layout, m: MeasuredTable, row: MeasuredRow) {
+  const size = TABLE_FONT_SIZE;
+  const innerW = m.colWidth - CELL_PAD * 2;
+  const rowTop = layout.y;
+  const { cells, cellLines, cellImages, height: rowHeight } = row;
+
+  for (let i = 0; i < cells.length; i++) {
+    const x = MARGIN + i * m.colWidth;
+    let cy = rowTop - 4;
+    for (const ln of cellLines[i]) {
+      let lx = x + CELL_PAD;
+      for (const w of ln) {
+        const font = layout.fontFor(w.style);
+        const txt = sanitizeForWinAnsi(w.text);
+        layout.page.drawText(txt, { x: lx, y: cy - size, size, font, color: TEXT });
+        lx += font.widthOfTextAtSize(txt, size) + 3;
+      }
+      cy -= size + 4;
+    }
+    drawCellImageRow(layout.page, cellImages[i], x + CELL_PAD, cy - 2, innerW);
+  }
+  for (let i = 0; i <= cells.length; i++) {
+    layout.page.drawLine({
+      start: { x: MARGIN + i * m.colWidth, y: rowTop },
+      end: { x: MARGIN + i * m.colWidth, y: rowTop - rowHeight },
+      thickness: 0.5,
+      color: BORDER,
+    });
+  }
+  layout.page.drawLine({
+    start: { x: MARGIN, y: rowTop },
+    end: { x: MARGIN + m.colCount * m.colWidth, y: rowTop },
+    thickness: 0.5,
+    color: BORDER,
+  });
+  layout.page.drawLine({
+    start: { x: MARGIN, y: rowTop - rowHeight },
+    end: { x: MARGIN + m.colCount * m.colWidth, y: rowTop - rowHeight },
+    thickness: 0.5,
+    color: BORDER,
+  });
+  layout.y = rowTop - rowHeight;
+}
+
+/**
+ * The space a table asks for before it starts: all of it when it fits on one
+ * page, so a form never starts at the foot of one page and finishes on the
+ * next; otherwise its header row and first row, so it never starts with only
+ * its header showing.
+ */
+function tableLeadHeight(layout: Layout, m: MeasuredTable): number {
+  if (m.height <= layout.freshPageCapacity) return m.height;
+  const [first, second] = m.rows;
+  return first.height + (first.header && second ? second.height : 0);
+}
+
+async function renderTable(layout: Layout, table: ElementNode, measured?: MeasuredTable | null) {
+  const m = measured === undefined ? await measureTable(layout, table) : measured;
+  if (!m) return;
+
+  layout.ensureSpace(tableLeadHeight(layout, m));
+  const headerRow = m.rows[0].header ? m.rows[0] : null;
+  m.rows.forEach((row, i) => {
+    const page = layout.page;
+    layout.ensureSpace(row.height);
+    // A table too long for one page carries on with its header row repeated,
+    // so the columns on page two still say what they are.
+    if (layout.page !== page && headerRow && i > 0) drawTableRow(layout, m, headerRow);
+    drawTableRow(layout, m, row);
+  });
+  layout.y -= TABLE_AFTER;
+}
+
 function readAlign(node: ElementNode): "left" | "center" | "right" {
   const m = /text-align:\s*(left|center|right)/.exec(node.attrs.style ?? "");
   return (m?.[1] as "left" | "center" | "right" | undefined) ?? "left";
@@ -854,6 +934,40 @@ async function renderPanel(layout: Layout, node: ElementNode) {
   layout.y -= PANEL_GAP;
 }
 
+/** What a heading reserves under itself, about three lines of body text. */
+const HEADING_KEEP_WITH_NEXT = 40;
+
+function headingHeight(node: ElementNode): number {
+  const size = node.tag === "h1" ? 20 : node.tag === "h2" ? 16 : 13;
+  return size + 14 + 10;
+}
+
+/**
+ * Top-level blocks, in order, with one look-ahead rule: a heading directly
+ * followed by a table moves to the next page together with it whenever the
+ * table moves, so a form's title is never left behind on the page before.
+ */
+async function renderBlocks(layout: Layout, nodes: HtmlNode[]) {
+  const elements = nodes.filter((n): n is ElementNode => n.type === "element");
+  for (let i = 0; i < elements.length; i++) {
+    const node = elements[i];
+    const next = elements[i + 1];
+    if (/^h[1-3]$/.test(node.tag) && next?.tag === "table") {
+      const m = await measureTable(layout, next);
+      if (m) {
+        const lead = tableLeadHeight(layout, m);
+        const need = headingHeight(node) + lead;
+        layout.ensureSpace(need <= layout.freshPageCapacity ? need : headingHeight(node));
+      }
+      await renderNode(layout, node);
+      await renderTable(layout, next, m);
+      i += 1;
+      continue;
+    }
+    await renderNode(layout, node);
+  }
+}
+
 async function renderNode(
   layout: Layout,
   node: HtmlNode,
@@ -876,7 +990,11 @@ async function renderNode(
     case "h2":
     case "h3": {
       const size = node.tag === "h1" ? 20 : node.tag === "h2" ? 16 : 13;
-      layout.ensureSpace(size + 14);
+      // Room for the heading and a few lines under it, so a heading is never
+      // the last thing on a page with its section starting on the next. A
+      // heading followed by a table has already asked for the table's room too
+      // (`renderBlocks`).
+      layout.ensureSpace(size + 14 + HEADING_KEEP_WITH_NEXT);
       layout.y -= 6;
       layout.drawParagraph(collectInlineWords(node, { ...empty, bold: true }), {
         x: MARGIN,
@@ -1065,6 +1183,22 @@ async function renderListItem(
   if (imgs.length) await renderImageRow(layout, imgs, "left", { x: savedX, width: itemWidth });
 }
 
+/** The document title as a running-header line, for pages after the first. */
+function titleWords(title: string): Word[] {
+  const style: Style = {
+    bold: true,
+    italic: false,
+    underline: false,
+    color: null,
+    fontFamily: null,
+    fontSize: null,
+  };
+  return title
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((text) => ({ text, style }));
+}
+
 /** Header/footer are rendered as a single running line per page - flattens all inline text across the fragment. */
 function wordsFromHtml(html: string | null | undefined): Word[] {
   if (!html) return [];
@@ -1131,6 +1265,7 @@ export async function renderPagePdf(
     fontFamilies,
     wordsFromHtml(resolvedHeaderHtml),
     wordsFromHtml(resolvedFooterHtml),
+    titleWords(title),
   );
   layout.newPage();
   layout.page.drawText(sanitizeForWinAnsi(title), {
@@ -1149,7 +1284,7 @@ export async function renderPagePdf(
   });
   layout.y -= 20;
 
-  for (const node of nodes) await renderNode(layout, node);
+  await renderBlocks(layout, nodes);
 
   // Page numbers need the final page count, so this runs after all content is laid out.
   const pages = pdf.getPages();
