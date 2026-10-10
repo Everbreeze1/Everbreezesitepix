@@ -519,7 +519,13 @@ describe("the style presets the Templates page writes", () => {
     // itself all over the place, and a comment is not a gate.
     const src = MANAGER.replace(/(?<![\w"'])\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
     expect(src).toContain("function editorNeedsDesktop()");
-    for (const opener of ["setCreateOpen(true)", "void edit(t)", "void copyForEditing(t)"]) {
+    // The editor itself lives in useDocumentTemplateEditing; these are the
+    // manager's routes into it.
+    for (const opener of [
+      "editing.openCreate()",
+      "void editing.edit(t)",
+      "void editing.copyForEditing(t)",
+    ]) {
       const at = src.indexOf(opener);
       expect(at, `${opener} is not in the component any more`).toBeGreaterThan(0);
       const before = src.slice(Math.max(0, at - 400), at);
@@ -987,7 +993,7 @@ describe("copying is not how a template gets used", () => {
   it("a copy nobody edited is deleted again when the editor closes", () => {
     const block = MANAGER.slice(
       MANAGER.indexOf("async function closeEditor"),
-      MANAGER.indexOf("async function assignTrade"),
+      MANAGER.indexOf("const dialogs = ("),
     );
     expect(block.length).toBeGreaterThan(200);
     // Only ever a row this session created and never saved.
@@ -1131,7 +1137,7 @@ describe("unsaved work survives a stray click", () => {
     const src = stripComments(MANAGER);
     const block = src.slice(
       src.indexOf("async function closeEditor"),
-      src.indexOf("async function assignTrade"),
+      src.indexOf("const dialogs = ("),
     );
     expect(block.length).toBeGreaterThan(200);
     // Dirtiness is measured against what was loaded, not against the stored
@@ -1288,5 +1294,45 @@ describe("the Fields panel is readable", () => {
     expect(aside.length).toBeGreaterThan(200);
     expect(aside).not.toContain("bg-white");
     expect(aside).not.toContain("text-blue-700");
+  });
+});
+
+describe("the Documents page opens the real editors", () => {
+  /*
+   * The redesigned Documents page shipped with a mocked three-step wizard whose
+   * Save only toasted "Template saved", and every card's Edit opened that same
+   * blank wizard. The page now hands off to the editors that write rows.
+   */
+  const LIBRARY = readFileSync(
+    join(ROOT, "apps/web/src/features/settings/components/DocumentLibraryContent.tsx"),
+    "utf8",
+  )
+    .replace(/(?<![\w"'])\/\*[\s\S]*?\*\//g, "")
+    .replace(/^[ \t]*\/\/.*$/gm, "");
+
+  it("has no mocked wizard left", () => {
+    expect(LIBRARY).not.toContain("function WizardView");
+    expect(LIBRARY).not.toMatch(/toast\.success\("Template saved"\)/);
+  });
+
+  it("edits a document card in the rich text editor and a report in the report wizard", () => {
+    expect(LIBRARY).toContain("useDocumentTemplateEditing(");
+    expect(LIBRARY).toContain("{editing.dialogs}");
+    expect(LIBRARY).toMatch(/void editing\.edit\(doc\.row\)/);
+    expect(LIBRARY).toContain("<ReportTemplateWizard");
+    expect(LIBRARY).toContain("saveReportTemplate(");
+  });
+
+  it("keeps authoring on a desktop here too", () => {
+    for (const opener of [
+      "void editing.edit(doc.row)",
+      "editing.openCreate()",
+      "setReportWizard({ initial: null })",
+      "setReportWizard({ initial: report.row })",
+    ]) {
+      const at = LIBRARY.indexOf(opener);
+      expect(at, `${opener} is not in the page any more`).toBeGreaterThan(0);
+      expect(LIBRARY.slice(Math.max(0, at - 300), at)).toContain("editorNeedsDesktop()");
+    }
   });
 });
