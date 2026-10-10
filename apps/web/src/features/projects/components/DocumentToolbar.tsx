@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { Editor } from "@tiptap/react";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import {
@@ -158,6 +159,7 @@ export function DocumentToolbar({
   onOpenSnippets,
   onAddHeader,
   onAddFooter,
+  children,
 }: {
   editor: Editor;
   /** Insert a real project photo. Omitted in the template designer - a template
@@ -166,6 +168,9 @@ export function DocumentToolbar({
   onOpenSnippets?: () => void;
   onAddHeader?: () => void;
   onAddFooter?: () => void;
+  /** Extra controls for this editor, kept on the same row (the template
+      designer's Insert field and Add section). */
+  children?: ReactNode;
 }) {
   // Numbering continues from what's already on the page, so a section added by
   // hand lines up with the ones a pre-built template shipped.
@@ -673,6 +678,8 @@ export function DocumentToolbar({
             )}
           </DropdownMenuContent>
         </DropdownMenu>
+
+        {children}
 
         <span className="mx-1.5 h-4 w-px bg-border" />
 
