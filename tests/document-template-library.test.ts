@@ -1256,17 +1256,11 @@ describe("the editor shows where the printed page ends", () => {
     expect(css).toMatch(/table \{ border-collapse: collapse/);
   });
 
-  it("draws one guide per boundary and no guide on a one-page template", () => {
-    const block = MANAGER.slice(
-      MANAGER.indexOf("const paperRef"),
-      MANAGER.indexOf("function insertPlaceholder"),
-    );
-    expect(block.length).toBeGreaterThan(200);
-    // Measured off the rendered box, so an image finishing loading counts.
-    expect(block).toContain("ResizeObserver");
-    expect(block).toMatch(/Math\.ceil\(height \/ PAGE_CONTENT_PX/);
-    // `pageCount - 1` boundaries: a single-page template gets none.
-    expect(MANAGER).toMatch(/length: pageCount - 1/);
+  it("lays the editor out as pages instead of drawing a line through a form", () => {
+    // tests/editor-pagination.test.ts covers the layout rules themselves.
+    expect(MANAGER).toContain("Pagination.configure(");
+    expect(MANAGER).toContain("pageContentPx: PAGE_CONTENT_PX");
+    expect(MANAGER).not.toMatch(/length: pageCount - 1/);
   });
 });
 
