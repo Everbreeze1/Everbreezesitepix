@@ -78,6 +78,21 @@ describe("forms are kept together in the PDF", () => {
     for (const words of pages.slice(1)) expect(words.slice(0, 2)).toEqual(["Landscape", "report"]);
   });
 
+  it("heads later pages with the document's own title when it has one", async () => {
+    /*
+     * "I tried to change the header for the document on top but the pages
+     * still had the same Document name as header." The title at the top of
+     * the body is what the reader sees as the document's name, so it wins.
+     */
+    const pages = await pageWords(
+      "Grounds Survey (copy)",
+      "<h1>Survey for Smith</h1>" + filler(30) + form(8),
+    );
+    expect(pages.length).toBeGreaterThan(1);
+    for (const words of pages.slice(1))
+      expect(words.slice(0, 3)).toEqual(["Survey", "for", "Smith"]);
+  });
+
   it("leaves a table that fits where it is", async () => {
     const pages = await pageWords("Short", filler(2) + form(4));
     expect(pages.length).toBe(1);

@@ -1199,6 +1199,22 @@ function titleWords(title: string): Word[] {
     .map((text) => ({ text, style }));
 }
 
+/**
+ * The document's own title, for the running header: the text of its first
+ * top-level heading, level 1 if there is one. The editor's page headers read
+ * the same heading (documentHeading in lib/tiptap-pagination.ts), so renaming
+ * the title at the top of a document renames every later page in both.
+ */
+function bodyHeading(nodes: HtmlNode[]): string {
+  const textOf = (node: HtmlNode): string =>
+    node.type === "text" ? node.text : node.children.map(textOf).join("");
+  const headings = nodes.filter(
+    (n): n is ElementNode => n.type === "element" && /^h[1-3]$/.test(n.tag),
+  );
+  const pick = headings.find((n) => n.tag === "h1") ?? headings[0];
+  return pick ? textOf(pick).replace(/\s+/g, " ").trim() : "";
+}
+
 /** Header/footer are rendered as a single running line per page - flattens all inline text across the fragment. */
 function wordsFromHtml(html: string | null | undefined): Word[] {
   if (!html) return [];
@@ -1265,7 +1281,7 @@ export async function renderPagePdf(
     fontFamilies,
     wordsFromHtml(resolvedHeaderHtml),
     wordsFromHtml(resolvedFooterHtml),
-    titleWords(title),
+    titleWords(bodyHeading(nodes) || title),
   );
   layout.newPage();
   layout.page.drawText(sanitizeForWinAnsi(title), {
