@@ -75,7 +75,7 @@ type SectionLayout = ReportSectionLayout;
 type Section = ReportTemplateSection;
 type TemplateStructure = ReportTemplateStructure;
 
-interface ReportTemplate {
+export interface ReportTemplate {
   id: string;
   team_id: string | null;
   created_by: string;
@@ -155,6 +155,63 @@ interface Props {
   canManage: boolean;
 }
 
+export type ReportTemplatePayload = {
+  name: string;
+  subtitle: string | null;
+  structure: TemplateStructure;
+};
+
+/**
+ * Write the report wizard's result: an update when `editingId` names an
+ * existing template, a new team-owned row otherwise. Returns the row's id, or
+ * null after toasting the error.
+ */
+export async function saveReportTemplate({
+  editingId,
+  payload,
+  teamId,
+  userId,
+}: {
+  editingId: string | null;
+  payload: ReportTemplatePayload;
+  teamId: string | null;
+  userId: string | undefined;
+}): Promise<string | null> {
+  if (editingId) {
+    const { error } = await supabase
+      .from("report_templates" as any)
+      .update({
+        name: payload.name,
+        subtitle: payload.subtitle,
+        sections: payload.structure as any,
+      })
+      .eq("id", editingId);
+    if (error) {
+      toast.error(error.message ?? "Failed to save");
+      return null;
+    }
+    toast.success("Report template saved");
+    return editingId;
+  }
+  const { data, error } = await supabase
+    .from("report_templates" as any)
+    .insert({
+      name: payload.name,
+      subtitle: payload.subtitle,
+      sections: payload.structure as any,
+      team_id: teamId,
+      created_by: userId,
+    })
+    .select("id")
+    .single();
+  if (error || !data) {
+    toast.error(error?.message ?? "Failed to create");
+    return null;
+  }
+  toast.success("Report template created");
+  return (data as any).id as string;
+}
+
 export function ReportTemplatesManager({ teamId, canManage }: Props) {
   const { user } = useAuth();
   const confirm = useConfirm();
@@ -222,47 +279,11 @@ export function ReportTemplatesManager({ teamId, canManage }: Props) {
     setWizardOpen(true);
   };
 
-  const persist = async (payload: {
-    name: string;
-    subtitle: string | null;
-    structure: TemplateStructure;
-  }) => {
-    if (editingId) {
-      const { error } = await supabase
-        .from("report_templates" as any)
-        .update({
-          name: payload.name,
-          subtitle: payload.subtitle,
-          sections: payload.structure as any,
-        })
-        .eq("id", editingId);
-      if (error) {
-        toast.error(error.message ?? "Failed to save");
-        return false;
-      }
-      toast.success("Report template saved");
-      await load();
-      setSelectedId(editingId);
-      return true;
-    }
-    const { data, error } = await supabase
-      .from("report_templates" as any)
-      .insert({
-        name: payload.name,
-        subtitle: payload.subtitle,
-        sections: payload.structure as any,
-        team_id: teamId,
-        created_by: user?.id,
-      })
-      .select("id")
-      .single();
-    if (error || !data) {
-      toast.error(error?.message ?? "Failed to create");
-      return false;
-    }
-    toast.success("Report template created");
+  const persist = async (payload: ReportTemplatePayload) => {
+    const id = await saveReportTemplate({ editingId, payload, teamId, userId: user?.id });
+    if (!id) return false;
     await load();
-    setSelectedId((data as any).id);
+    setSelectedId(id);
     return true;
   };
 
@@ -626,7 +647,7 @@ function TemplatePreview({
 
 // ---------- Wizard ----------
 
-function TemplateWizard({
+export function TemplateWizard({
   open,
   onOpenChange,
   initial,
@@ -635,11 +656,7 @@ function TemplateWizard({
   open: boolean;
   onOpenChange: (v: boolean) => void;
   initial: ReportTemplate | null;
-  onSave: (payload: {
-    name: string;
-    subtitle: string | null;
-    structure: TemplateStructure;
-  }) => Promise<boolean>;
+  onSave: (payload: ReportTemplatePayload) => Promise<boolean>;
 }) {
   const initStruct = initial ? parseStructure(initial.sections) : null;
   const [step, setStep] = useState<1 | 2 | 3>(1);

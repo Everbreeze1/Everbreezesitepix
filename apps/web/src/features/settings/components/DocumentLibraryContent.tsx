@@ -4,24 +4,41 @@ import { supabase } from "@/integrations/everlumen/client";
 import { parseReportTemplateStructure } from "@everlumen/shared";
 import { GENERAL_CATEGORY, makeCategoryRank } from "@/lib/template-categories";
 import { useCompanySetup } from "@/hooks/use-company-setup";
+import { useAuth } from "@/hooks/use-auth";
+import { useIsMobile } from "@/hooks/use-mobile";
+import {
+  useDocumentTemplateEditing,
+  type DocumentTemplate as DocumentTemplateRow,
+} from "@/features/settings/components/DocumentTemplatesManager";
+import {
+  TemplateWizard as ReportTemplateWizard,
+  saveReportTemplate,
+  type ReportTemplate as ReportTemplateRow,
+} from "@/features/settings/components/ReportTemplatesManager";
 
 /*
  * The Documents page, laid out exactly as the Main-html reference
  * (public/Main-html/DocumentsContent.dc.html): a Document-template /
  * Report-template sub-tab strip, trade filter pills, a grid of template cards,
- * a reports rail with a detail pane, and a 3-step wizard with a live preview.
+ * and a reports rail with a detail pane.
  *
  * Unlike the reference (a static mockup), the cards come from the account's
  * real document_templates and report_templates. Badge type, token count and
- * the preview excerpt are derived from each template's stored body; the wizard
- * is the reference's authoring UI, shown exactly as mocked.
+ * the preview excerpt are derived from each template's stored body.
+ *
+ * Authoring is the real thing, not the reference's mocked wizard (which saved
+ * nothing): a document card opens the rich text editor on that template, New
+ * template runs the guided setup that writes the row, and a report template
+ * opens the report wizard on it - the same editors DocumentTemplatesManager
+ * and ReportTemplatesManager use.
  */
 
 type SubTab = "documents" | "reports";
 type BadgeType = "Report" | "Invoice" | "Site log" | "Document";
-type CoverKind = "minimal" | "centered" | "hero" | "photo";
 
 interface DocTemplate {
+  /** The stored row, handed to the editor as-is. */
+  row: DocumentTemplateRow;
   id: string;
   name: string;
   archived: boolean;
@@ -33,6 +50,8 @@ interface DocTemplate {
 }
 
 interface ReportTemplate {
+  /** The stored row, handed to the report wizard as-is. */
+  row: ReportTemplateRow;
   id: string;
   name: string;
   archived: boolean;
@@ -102,13 +121,6 @@ const REPORT_LAYOUT_LABEL: Record<string, string> = {
   checklist: "Checklist recap",
 };
 
-const COVER_OPTIONS: Array<{ kind: CoverKind; label: string; desc: string }> = [
-  { kind: "minimal", label: "Minimal", desc: "Clean title on a plain page." },
-  { kind: "centered", label: "Centered", desc: "Large centered title with subtitle." },
-  { kind: "hero", label: "Hero band", desc: "Bold colored hero band on top." },
-  { kind: "photo", label: "Photo cover", desc: "Full-bleed cover photo with overlay." },
-];
-
 /* ---- Icons (paths from the mockup's inline SVGs) ---- */
 
 function PlusIcon({ size = 15 }: { size?: number }) {
@@ -127,35 +139,11 @@ function PlusIcon({ size = 15 }: { size?: number }) {
   );
 }
 
-function XIcon({ size = 10 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-    >
-      <path d="M18 6 6 18M6 6l12 12" />
-    </svg>
-  );
-}
-
 /* ---- Shared atoms ---- */
 
 function Chip({ children }: { children: string }) {
   return (
     <span className="inline-flex items-center gap-1 rounded-[6px] bg-muted px-2 py-[3px] text-[10.5px] text-muted-foreground">
-      {children}
-    </span>
-  );
-}
-
-function Tok({ children }: { children: string }) {
-  return (
-    <span className="rounded-[4px] bg-[oklch(93%_0.025_200)] px-1.5 py-0.5 font-mono text-[10.5px] text-[oklch(38%_0.1_200)]">
       {children}
     </span>
   );
@@ -215,7 +203,7 @@ function DocumentsGrid({
   docs: DocTemplate[];
   /** The company's top trade among those present, shown with a star. */
   leadingCategory: string | null;
-  onEdit: () => void;
+  onEdit: (doc: DocTemplate) => void;
   onCreate: () => void;
 }) {
   const [trade, setTrade] = useState<string>("all");
@@ -273,7 +261,7 @@ function DocumentsGrid({
           .map((doc) => (
             <div
               key={doc.id}
-              onClick={onEdit}
+              onClick={() => onEdit(doc)}
               className="flex cursor-pointer flex-col gap-[11px] rounded-[13px] border border-border bg-card p-[18px] transition-colors hover:border-primary"
             >
               <div className="flex items-center justify-between">
@@ -309,7 +297,7 @@ function ReportsView({
   onCreate,
 }: {
   reports: ReportTemplate[];
-  onEdit: () => void;
+  onEdit: (report: ReportTemplate) => void;
   onCreate: () => void;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(reports[0]?.id ?? null);
@@ -365,7 +353,7 @@ function ReportsView({
                 </div>
               </div>
               <button
-                onClick={onEdit}
+                onClick={() => onEdit(selected)}
                 className="cursor-pointer rounded-lg border border-border px-3.5 py-2 text-[12.5px] font-semibold text-muted-foreground transition-colors hover:bg-muted/40"
               >
                 Edit template
@@ -402,369 +390,25 @@ function ReportsView({
   );
 }
 
-/* ---- 3-step wizard (the mockup's <sc-if isEditor> block) ---- */
-
-function CoverSwatch({ kind }: { kind: CoverKind }) {
-  if (kind === "minimal") {
-    return (
-      <div className="mb-2 flex h-11 items-center justify-center rounded-[6px] bg-muted">
-        <div className="h-[5px] w-3/5 rounded-full bg-faint" />
-      </div>
-    );
-  }
-  if (kind === "centered") {
-    return (
-      <div className="mb-2 flex h-11 flex-col items-center justify-center gap-1 rounded-[6px] bg-muted">
-        <div className="h-1.5 w-1/2 rounded-full bg-faint" />
-        <div className="h-1 w-[30%] rounded-full bg-faint opacity-50" />
-      </div>
-    );
-  }
-  if (kind === "hero") {
-    return (
-      <div className="mb-2 flex h-11 items-center rounded-[6px] bg-[oklch(93%_0.03_55)] px-2">
-        <div className="h-[5px] w-1/2 rounded-full bg-primary" />
-      </div>
-    );
-  }
-  return (
-    <div
-      className="mb-2 h-11 rounded-[6px]"
-      style={{ background: "linear-gradient(160deg, oklch(45% 0.03 75), oklch(25% 0.02 75))" }}
-    />
-  );
-}
-
-function PreviewCover({
-  cover,
-  title,
-  subtitle,
-}: {
-  cover: CoverKind;
-  title: string;
-  subtitle: string;
-}) {
-  if (cover === "minimal") {
-    return (
-      <div className="px-[26px] py-[34px]">
-        <div className="text-[17px] font-bold text-foreground">{title || "Untitled template"}</div>
-        <div className="mt-1 text-xs text-faint">{subtitle}</div>
-      </div>
-    );
-  }
-  if (cover === "centered") {
-    return (
-      <div className="px-[26px] py-11 text-center">
-        <div className="text-[19px] font-bold text-foreground">{title || "Untitled template"}</div>
-        <div className="mt-1.5 text-xs text-faint">{subtitle}</div>
-      </div>
-    );
-  }
-  if (cover === "hero") {
-    return (
-      <div className="bg-primary px-[26px] py-[30px] text-primary-foreground">
-        <div className="text-[18px] font-bold">{title || "Untitled template"}</div>
-        <div className="mt-1 text-xs opacity-85">{subtitle}</div>
-      </div>
-    );
-  }
-  return (
-    <div
-      className="px-[26px] py-10 text-white"
-      style={{ background: "linear-gradient(160deg, oklch(45% 0.03 75), oklch(25% 0.02 75))" }}
-    >
-      <div className="text-[18px] font-bold">{title || "Untitled template"}</div>
-      <div className="mt-1 text-xs opacity-80">{subtitle}</div>
-    </div>
-  );
-}
-
-function BasicsStep({
-  title,
-  subtitle,
-  setTitle,
-  setSubtitle,
-  cover,
-  setCover,
-}: {
-  title: string;
-  subtitle: string;
-  setTitle: (v: string) => void;
-  setSubtitle: (v: string) => void;
-  cover: CoverKind;
-  setCover: (c: CoverKind) => void;
-}) {
-  return (
-    <div className="rounded-[13px] border border-border bg-card p-[26px]">
-      <div className="mb-1.5 text-xs font-semibold text-foreground">Template name</div>
-      <input
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        className="mb-4 w-full rounded-lg border border-border bg-card px-3.5 py-2.5 text-[13px] text-foreground outline-none transition-colors focus:border-primary"
-      />
-      <div className="mb-1.5 text-xs font-semibold text-foreground">Subtitle (optional)</div>
-      <input
-        value={subtitle}
-        onChange={(e) => setSubtitle(e.target.value)}
-        className="mb-5 w-full rounded-lg border border-border bg-card px-3.5 py-2.5 text-[13px] text-faint outline-none transition-colors focus:border-primary"
-      />
-      <div className="mb-2.5 text-xs font-semibold text-foreground">Cover page style</div>
-      <div className="grid grid-cols-2 gap-2.5">
-        {COVER_OPTIONS.map((opt) => {
-          const active = cover === opt.kind;
-          return (
-            <div
-              key={opt.kind}
-              onClick={() => setCover(opt.kind)}
-              className={`cursor-pointer rounded-[10px] border-[1.5px] p-3 transition-colors ${
-                active
-                  ? "border-primary bg-[oklch(93%_0.03_55)]"
-                  : "border-border hover:border-primary/50"
-              }`}
-            >
-              <CoverSwatch kind={opt.kind} />
-              <div className="text-[12.5px] font-semibold text-foreground">{opt.label}</div>
-              <div className="text-[11px] text-faint">{opt.desc}</div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function SectionsStep() {
-  return (
-    <div className="flex flex-col gap-3">
-      <div className="mb-0.5 text-xs text-faint">
-        Drag to reorder. Click a token below to insert it into the body text.
-      </div>
-
-      <div className="rounded-[13px] border border-border bg-card px-[18px] py-4">
-        <div className="mb-2 flex items-center justify-between">
-          <span className="text-[13.5px] font-semibold text-foreground">Executive summary</span>
-          <Chip>Text only</Chip>
-        </div>
-        <div className="rounded-lg border border-border bg-card px-3.5 py-2.5 text-[12.5px] text-muted-foreground">
-          Overview of the site visit for <Tok>{"{{project_name}}"}</Tok> on{" "}
-          <Tok>{"{{report_date}}"}</Tok>.
-        </div>
-      </div>
-
-      <div className="rounded-[13px] border border-border bg-card px-[18px] py-4">
-        <div className="mb-2 flex items-center justify-between">
-          <span className="text-[13.5px] font-semibold text-foreground">Observations</span>
-          <Chip>Text + photos</Chip>
-        </div>
-        <div className="rounded-lg border border-border bg-card px-3.5 py-2.5 text-[12.5px] text-muted-foreground">
-          Notes from the crew, plus supporting photos from today&rsquo;s visit.
-        </div>
-      </div>
-
-      <div className="rounded-[13px] border border-border bg-card px-[18px] py-4">
-        <div className="mb-2 flex items-center justify-between">
-          <span className="text-[13.5px] font-semibold text-foreground">Photos</span>
-          <Chip>Photo grid</Chip>
-        </div>
-        <div className="rounded-lg border border-border bg-card px-3.5 py-2.5 text-[12.5px] text-muted-foreground">
-          All photos tagged to this visit, in a grid.
-        </div>
-      </div>
-
-      <div className="flex cursor-pointer flex-col items-center justify-center rounded-[13px] border border-dashed border-border bg-card p-3.5 text-faint transition-colors hover:border-primary">
-        <div className="text-[12.5px] font-medium">+ Add section</div>
-      </div>
-    </div>
-  );
-}
-
-function PlaceholdersStep() {
-  const tokens = ["project_name", "project_address", "author_name", "report_date", "photo_count"];
-  return (
-    <div className="rounded-[13px] border border-border bg-card p-[26px]">
-      <p className="mb-4 text-[12.5px] text-muted-foreground">
-        Placeholders are tokens like <Tok>{"{{project_name}}"}</Tok> that get replaced with real
-        project data when the template is used.
-      </p>
-      <div className="mb-[18px] flex flex-wrap gap-2">
-        {tokens.map((t) => (
-          <span
-            key={t}
-            className="inline-flex cursor-pointer items-center gap-1.5 rounded-[4px] bg-[oklch(93%_0.025_200)] px-[9px] py-[5px] font-mono text-[10.5px] text-[oklch(38%_0.1_200)] transition-colors hover:bg-[oklch(90%_0.03_200)]"
-          >
-            {"{{" + t + "}}"} <XIcon />
-          </span>
-        ))}
-      </div>
-      <div className="flex gap-2.5">
-        <div className="flex-grow rounded-lg border border-border bg-card px-3.5 py-2.5 text-[13px] text-faint">
-          e.g. client_name
-        </div>
-        <button className="cursor-pointer rounded-lg border border-border px-3.5 py-2 text-[12.5px] font-semibold text-muted-foreground transition-colors hover:bg-muted/40">
-          + Add
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function WizardView({
-  title,
-  subtitle,
-  setTitle,
-  setSubtitle,
-  step,
-  setStep,
-  cover,
-  setCover,
-  onClose,
-  onSave,
-}: {
-  title: string;
-  subtitle: string;
-  setTitle: (v: string) => void;
-  setSubtitle: (v: string) => void;
-  step: number;
-  setStep: (n: number) => void;
-  cover: CoverKind;
-  setCover: (c: CoverKind) => void;
-  onClose: () => void;
-  onSave: () => void;
-}) {
-  const dotClass = (state: "done" | "idle") =>
-    state === "idle" ? "bg-muted text-faint" : "bg-primary text-primary-foreground";
-
-  return (
-    <div className="mx-auto w-full max-w-[1200px]">
-      {/* Breadcrumb */}
-      <div className="mb-4 text-[12.5px] text-faint">
-        <a className="cursor-pointer text-primary hover:underline" onClick={onClose}>
-          Documents
-        </a>{" "}
-        &nbsp;/&nbsp; New template
-      </div>
-
-      {/* Step dots */}
-      <div className="mb-7 flex items-center gap-3.5" style={{ maxWidth: 520 }}>
-        <span
-          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${dotClass(step >= 1 ? "done" : "idle")}`}
-        >
-          1
-        </span>
-        <span className={`h-0.5 flex-1 rounded-full ${step > 1 ? "bg-primary" : "bg-border"}`} />
-        <span
-          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${dotClass(step >= 2 ? "done" : "idle")}`}
-        >
-          2
-        </span>
-        <span className={`h-0.5 flex-1 rounded-full ${step > 2 ? "bg-primary" : "bg-border"}`} />
-        <span
-          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${dotClass(step >= 3 ? "done" : "idle")}`}
-        >
-          3
-        </span>
-      </div>
-      <div className="mb-2 flex gap-9 text-[11.5px] font-semibold text-faint">
-        <span className={step === 1 ? "text-foreground" : ""}>Basics</span>
-        <span className={step === 2 ? "text-foreground" : ""}>Sections</span>
-        <span className={step === 3 ? "text-foreground" : ""}>Placeholders</span>
-      </div>
-
-      <div className="mt-[22px] grid grid-cols-1 gap-7 lg:grid-cols-[1fr_420px]">
-        {/* Left: step content */}
-        <div>
-          {step === 1 && (
-            <BasicsStep
-              title={title}
-              subtitle={subtitle}
-              setTitle={setTitle}
-              setSubtitle={setSubtitle}
-              cover={cover}
-              setCover={setCover}
-            />
-          )}
-          {step === 2 && <SectionsStep />}
-          {step === 3 && <PlaceholdersStep />}
-
-          <div className="mt-6 flex items-center justify-between">
-            {step > 1 ? (
-              <button
-                onClick={() => setStep(step - 1)}
-                className="cursor-pointer rounded-lg border border-border px-3.5 py-2 text-[12.5px] font-semibold text-muted-foreground transition-colors hover:bg-muted/40"
-              >
-                Back
-              </button>
-            ) : (
-              <span />
-            )}
-            <button
-              onClick={step === 3 ? onSave : () => setStep(step + 1)}
-              className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-3.5 py-2 text-[12.5px] font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
-            >
-              {step === 3 ? "Save changes" : "Next"}
-            </button>
-          </div>
-        </div>
-
-        {/* Right: live preview */}
-        <div>
-          <div className="mb-2.5 text-[11.5px] font-semibold uppercase tracking-[0.05em] text-faint">
-            Live preview
-          </div>
-          <div className="overflow-hidden rounded-[14px] border border-border bg-card shadow-[0_10px_26px_rgba(20,15,5,0.06)]">
-            <PreviewCover cover={cover} title={title} subtitle={subtitle} />
-            <div className="flex flex-col gap-4 px-[26px] py-[22px]">
-              <div>
-                <div className="mb-1 text-[10.5px] font-bold uppercase tracking-wide text-faint">
-                  Executive summary
-                </div>
-                <p className="text-[12.5px] leading-[1.55] text-muted-foreground">
-                  Overview of the site visit, completed on time and photo-documented.
-                </p>
-              </div>
-              <div>
-                <div className="mb-1 text-[10.5px] font-bold uppercase tracking-wide text-faint">
-                  Observations
-                </div>
-                <p className="text-[12.5px] leading-[1.55] text-muted-foreground">
-                  Field notes from the crew, with photos attached.
-                </p>
-              </div>
-              <div>
-                <div className="mb-1.5 text-[10.5px] font-bold uppercase tracking-wide text-faint">
-                  Photos
-                </div>
-                <div className="grid grid-cols-3 gap-1.5">
-                  <div className="aspect-square rounded-[6px] bg-muted" />
-                  <div className="aspect-square rounded-[6px] bg-muted" />
-                  <div className="aspect-square rounded-[6px] bg-muted" />
-                </div>
-              </div>
-            </div>
-          </div>
-          <p className="mt-2.5 text-[11.5px] leading-[1.5] text-faint">
-            This updates as you edit. What your client sees is exactly what you&rsquo;re building
-            here.
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ---- Library page (list <-> wizard), real data ---- */
+/* ---- Library page, real data ---- */
 
 export function DocumentLibraryContent({
   initialTab = "documents",
+  teamId,
+  canManage,
   createTick,
   onCreate,
 }: {
   /** Which sub-tab a deep link (/templates?docTab=reports) wants open. */
   initialTab?: SubTab;
+  teamId: string | null;
+  /** Whether this member may write templates; others are sent to onCreate. */
+  canManage: boolean;
   /** Incremented by the hub's "New template" button. */
   createTick: number;
   onCreate: () => void;
 }) {
+  const { user } = useAuth();
   const { profile: company } = useCompanySetup();
   const rank = useMemo(
     () => makeCategoryRank(company.industry, company.trades),
@@ -772,71 +416,79 @@ export function DocumentLibraryContent({
   );
 
   const [loading, setLoading] = useState(true);
-  const [docs, setDocs] = useState<DocTemplate[]>([]);
+  const [docRows, setDocRows] = useState<DocumentTemplateRow[]>([]);
   const [reports, setReports] = useState<ReportTemplate[]>([]);
   const [subTab, setSubTab] = useState<SubTab>(initialTab);
-  const [wizardOpen, setWizardOpen] = useState(false);
-  const [step, setStep] = useState(1);
-  const [cover, setCover] = useState<CoverKind>("hero");
-  const [title, setTitle] = useState("");
-  const [subtitle, setSubtitle] = useState("");
+  /** The report wizard: closed, a new template, or the template being edited. */
+  const [reportWizard, setReportWizard] = useState<{ initial: ReportTemplateRow | null } | null>(
+    null,
+  );
+
+  const editing = useDocumentTemplateEditing({ teamId, items: docRows, onChanged: load });
+
+  /*
+   * The editor is desktop-only (see DocumentTemplatesManager): on a phone every
+   * route into it explains where it lives instead of opening a cramped copy.
+   */
+  const isMobile = useIsMobile();
+  function editorNeedsDesktop(): boolean {
+    if (!isMobile) return false;
+    toast.info("Template editing needs a bigger screen", {
+      description:
+        "Open Templates on a desktop or tablet to write or change one. On a phone you can still use any template on a project.",
+    });
+    return true;
+  }
 
   useEffect(() => {
     setSubTab(initialTab);
   }, [initialTab]);
 
+  /** New template, on whichever sub-tab is showing. */
+  function startCreate() {
+    if (!canManage) return onCreate();
+    if (editorNeedsDesktop()) return;
+    if (subTab === "reports") setReportWizard({ initial: null });
+    else editing.openCreate();
+  }
+
   const prevCreateTick = useRef(createTick);
   useEffect(() => {
-    if (createTick > prevCreateTick.current) {
-      void load();
-      openWizard();
-    }
+    if (createTick > prevCreateTick.current) startCreate();
     prevCreateTick.current = createTick;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [createTick]);
 
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [teamId]);
 
   async function load() {
-    setLoading(true);
+    let docQuery = supabase
+      .from("document_templates" as any)
+      .select("*")
+      .order("updated_at", { ascending: false });
+    if (teamId) docQuery = docQuery.or(`team_id.eq.${teamId},team_id.is.null`);
     const [docRes, repRes] = await Promise.all([
-      supabase
-        .from("document_templates" as any)
-        .select("id, name, body, archived, updated_at")
-        .order("updated_at", { ascending: false })
-        .limit(100),
+      docQuery,
       supabase
         .from("report_templates" as any)
-        .select("id, name, sections, archived, updated_at, category")
+        .select(
+          "id, team_id, created_by, name, subtitle, sections, archived, created_at, updated_at, category",
+        )
         .order("updated_at", { ascending: false })
         .limit(100),
     ]);
 
-    setDocs(
-      ((docRes.data as any[]) ?? [])
-        .filter((d: any) => !d.archived)
-        .map((d: any) => {
-          const body = parseDocBody(d.body);
-          return {
-            id: d.id,
-            name: d.name ?? "",
-            archived: false,
-            updated_at: d.updated_at ?? "",
-            style: body.style,
-            category: body.category ?? null,
-            tokens: countTokens(body.html),
-            excerpt: cardExcerpt(body.html, body.description),
-          } as DocTemplate;
-        }),
-    );
+    setDocRows((docRes.data as unknown as DocumentTemplateRow[]) ?? []);
     setReports(
-      ((repRes.data as any[]) ?? [])
-        .filter((r: any) => !r.archived)
-        .map((r: any) => {
+      ((repRes.data as unknown as ReportTemplateRow[]) ?? [])
+        .filter((r) => !r.archived)
+        .map((r) => {
           const structure = parseReportTemplateStructure(r.sections);
           return {
+            row: r,
             id: r.id,
             name: r.name ?? "",
             archived: false,
@@ -852,6 +504,37 @@ export function DocumentLibraryContent({
     setLoading(false);
   }
 
+  /*
+   * Built-ins the company has made its own version of. Editing an example
+   * writes a team copy (examples are shared by every company), and the copy
+   * stands in for the example on the page rather than sitting beside it - the
+   * same rule as DocumentTemplatesManager, so Edit never grows a second card.
+   */
+  const docs = useMemo(() => {
+    const shadowed = new Set<string>();
+    for (const r of docRows) {
+      if (r.team_id === null || r.archived) continue;
+      const from = (r.body as { copiedFrom?: unknown } | null)?.copiedFrom;
+      if (typeof from === "string") shadowed.add(from);
+    }
+    return docRows
+      .filter((r) => !r.archived && !(r.team_id === null && shadowed.has(r.id)))
+      .map((r) => {
+        const body = parseDocBody(r.body);
+        return {
+          row: r,
+          id: r.id,
+          name: r.name ?? "",
+          archived: false,
+          updated_at: r.updated_at ?? "",
+          style: body.style,
+          category: body.category ?? null,
+          tokens: countTokens(body.html),
+          excerpt: cardExcerpt(body.html, body.description),
+        } as DocTemplate;
+      });
+  }, [docRows]);
+
   /** The company's top-ranked trade among the categories present. */
   const leadingCategory = useMemo(() => {
     const present = docs.map((d) => d.category || GENERAL_CATEGORY);
@@ -859,34 +542,29 @@ export function DocumentLibraryContent({
     return [...new Set(present)].sort((a, b) => rank(a) - rank(b))[0] ?? null;
   }, [docs, rank]);
 
-  const openWizard = () => {
-    setTitle("");
-    setSubtitle("");
-    setCover("hero");
-    setStep(1);
-    setWizardOpen(true);
-  };
+  /** Members without template rights can browse; only managers edit. */
+  function cannotEdit(): boolean {
+    if (canManage) return false;
+    toast.info("Ask your account owner or admin to change templates.");
+    return true;
+  }
+
+  function editDoc(doc: DocTemplate) {
+    if (cannotEdit()) return;
+    if (editorNeedsDesktop()) return;
+    void editing.edit(doc.row);
+  }
+
+  function editReport(report: ReportTemplate) {
+    if (cannotEdit()) return;
+    if (editorNeedsDesktop()) return;
+    setReportWizard({ initial: report.row });
+  }
 
   return (
     <div className="mx-auto w-full max-w-[1200px] px-4 pb-10 sm:px-10">
       {loading && docs.length === 0 && reports.length === 0 ? (
         <div className="py-16 text-center text-[13px] text-faint">Loading templates&hellip;</div>
-      ) : wizardOpen ? (
-        <WizardView
-          title={title}
-          subtitle={subtitle}
-          setTitle={setTitle}
-          setSubtitle={setSubtitle}
-          step={step}
-          setStep={setStep}
-          cover={cover}
-          setCover={setCover}
-          onClose={() => setWizardOpen(false)}
-          onSave={() => {
-            toast.success("Template saved");
-            setWizardOpen(false);
-          }}
-        />
       ) : (
         <>
           <SubTabStrip
@@ -899,13 +577,36 @@ export function DocumentLibraryContent({
             <DocumentsGrid
               docs={docs}
               leadingCategory={leadingCategory}
-              onEdit={openWizard}
-              onCreate={onCreate}
+              onEdit={editDoc}
+              onCreate={startCreate}
             />
           ) : (
-            <ReportsView reports={reports} onEdit={openWizard} onCreate={onCreate} />
+            <ReportsView reports={reports} onEdit={editReport} onCreate={startCreate} />
           )}
         </>
+      )}
+
+      {editing.dialogs}
+
+      {reportWizard && (
+        <ReportTemplateWizard
+          open
+          onOpenChange={(open) => {
+            if (!open) setReportWizard(null);
+          }}
+          initial={reportWizard.initial}
+          onSave={async (payload) => {
+            const id = await saveReportTemplate({
+              editingId: reportWizard.initial?.id ?? null,
+              payload,
+              teamId,
+              userId: user?.id,
+            });
+            if (!id) return false;
+            await load();
+            return true;
+          }}
+        />
       )}
     </div>
   );

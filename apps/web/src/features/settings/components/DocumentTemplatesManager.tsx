@@ -127,7 +127,7 @@ const TYPE_BADGE_TINT: Record<DocStyle, string> = {
   sitelog: "bg-stone-100 text-stone-700 dark:bg-stone-900/40 dark:text-stone-300",
 };
 
-interface DocumentTemplate {
+export interface DocumentTemplate {
   id: string;
   team_id: string | null;
   created_by: string;
@@ -776,9 +776,6 @@ export function DocumentTemplatesManager({ teamId, canManage, initialTab = "docu
     () => makeCategoryRank(company.industry, company.trades),
     [company.industry, company.trades],
   );
-  const [editor, setEditor] = useState<EditorState | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [createOpen, setCreateOpen] = useState(false);
   /** Template awaiting a project to be applied to. */
   const [useFor, setUseFor] = useState<DocumentTemplate | null>(null);
   const [projects, setProjects] = useState<
@@ -983,253 +980,7 @@ export function DocumentTemplatesManager({ teamId, canManage, initialTab = "docu
 
   const shownSections = trade ? sections.filter(([heading]) => heading === trade) : sections;
 
-  /** The mockup wizard's Save: write the finished template, back to the list.
-   *  The rich editor still opens from a card's Edit button. */
-  const wizardSave = async (payload: DocumentWizardPayload): Promise<boolean> => {
-    if (!payload.name.trim()) {
-      toast.error("Give your template a name");
-      return false;
-    }
-    const body: DocBody = {
-      style: "report",
-      html: payload.html,
-      description: payload.description.trim() || "",
-      // General is the absence of a trade, not a trade of its own - storing it
-      // would file the template under a category the picker does not rank.
-      category: payload.category === GENERAL_CATEGORY ? undefined : payload.category,
-    };
-    const { data, error } = await supabase
-      .from("document_templates" as any)
-      .insert({
-        name: payload.name.trim(),
-        team_id: teamId,
-        created_by: user?.id,
-        body: body as any,
-        fields: payload.fields,
-      })
-      .select()
-      .single();
-    if (error) {
-      toast.error(error.message);
-      return false;
-    }
-    toast.success("Template created");
-    setItems((prev) => [data as unknown as DocumentTemplate, ...prev]);
-    setCreateOpen(false);
-    return true;
-  };
-
-  /*
-   * Open an EXISTING template through the API rather than from the row we
-   * already hold.
-   *
-   * `load()` reads `document_templates` straight from the browser with
-   * `select("*")`, and the editor renders `editor.body.html` through
-   * `dangerouslySetInnerHTML`. Template bodies are authored HTML that came from
-   * a project page, they are shared across the whole team, and a teammate can
-   * write one directly via PostgREST - so rendering the raw column is stored
-   * XSS against every other member of the team.
-   *
-   * `getDocumentTemplate` runs the same sanitiser the public page share uses
-   * (apps/api sanitize-page-html.ts, covered by tests/sanitize-page-html.test.ts)
-   * and returns cleaned HTML. Reusing it beats adding a second, unproven
-   * sanitiser to the client - and it disarms rows that are already poisoned,
-   * which a write-side fix alone would not.
-   *
-   * `style` and `description` still come from the local row: they are plain
-   * strings the API does not return, and neither is ever rendered as HTML.
-   */
-  async function openForEdit(t: DocumentTemplate) {
-    const local = parseBody(t.body);
-    try {
-      const fresh = await getDocumentTemplate({ data: { templateId: t.id } });
-      const html = (fresh as { html?: string })?.html ?? "";
-      setEditor({
-        template: t,
-        name: t.name,
-        body: { ...local, html },
-        original: { name: t.name, html },
-      });
-    } catch (e: any) {
-      // Never fall back to the unsanitised local copy - that is the bug.
-      toast.error(e?.message ?? "Could not open this template");
-    }
-  }
-
-  /*
-   * The sample-site-logs button used to sit here. It wrote three team-owned
-   * copies of the preset bodies - a basic log, a walkthrough log and an HVAC
-   * log - and it is where the templates the client called terrible came from.
-   *
-   * Every one of the three is covered better by a built-in the library already
-   * ships: Daily Site Report and Site Visit Report under Field Reports, and the
-   * HVAC service and maintenance sheets under HVAC. So the button's only real
-   * effect was to drop worse duplicates of existing cards into General, owned
-   * by the team and therefore the only ones on the page carrying an Edit and a
-   * delete. Two tiers of quality in one grid, with the worse tier the one that
-   * looked editable.
-   *
-   * Anyone wanting an editable copy of a sample now takes "Make an editable
-   * copy" on the built-in itself, which starts them from the good body.
-   */
-
-  async function persist() {
-    if (!editor?.template) return;
-    setSaving(true);
-    const fields = extractFields(editor.body.html);
-    const { error } = await supabase
-      .from("document_templates" as any)
-      .update({
-        name: editor.name.trim() || "Untitled document",
-        body: editor.body as any,
-        fields,
-      })
-      .eq("id", editor.template.id);
-    setSaving(false);
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
-    toast.success("Template saved");
-    await load();
-    setEditor(null);
-  }
-
-  /**
-   * Edit a template, whoever owns it.
-   *
-   * On the team's own row this is a plain edit. On a built-in it cannot be:
-   * those belong to no team, every company sees the same row, and RLS rejects
-   * the write. The page used to answer that with a second button reading
-   * "Duplicate to edit" - a database constraint written out as a chore for
-   * whoever is holding the phone, and following it left a second card in the
-   * grid. The client, pointing at that button: "I am not sure what the point of
-   * duplicating is ... creating duplicates is a big mess."
-   *
-   * So the copy happens here instead, and `shadowedExamples` hides the built-in
-   * behind the row it produced. Press Edit, get the editor, and the number of
-   * cards on the page does not move.
-   */
-  async function edit(t: DocumentTemplate) {
-    if (t.team_id !== null) return openForEdit(t);
-    await copyForEditing(t);
-    toast.success("Editing your company's version", {
-      description: `The example "${t.name}" is shared with every company, so this is yours to change. Delete it and the example comes back.`,
-    });
-  }
-
-  /**
-   * Make a copy of a template and open it for editing, as one action.
-   *
-   * Copying used to end at the insert: it wrote a row byte-identical to the one
-   * it came from, toasted "Duplicated", and left a second card in the section -
-   * so the grid grew a twin every time someone pressed it to find out what it
-   * did, and the twin was indistinguishable from its original.
-   *
-   * A copy is only worth having once it differs from the original, so the copy
-   * and the edit are one gesture: this opens the editor on the new row
-   * immediately, and `closeEditor` deletes it again if it is closed unchanged.
-   * The library can no longer accumulate a card nobody meant to create.
-   */
-  async function copyForEditing(t: DocumentTemplate) {
-    const isExample = t.team_id === null;
-    const body = t.body && typeof t.body === "object" ? { ...(t.body as object) } : t.body;
-    /*
-     * A copy of an example replaces it on the page, so it takes the original's
-     * name rather than "... (copy)": there is nothing left beside it for the
-     * suffix to distinguish it from. `nextCopyName` still runs when that name is
-     * somehow taken - by a copy made before this existed, say - because two
-     * cards reading exactly the same thing is worse than a suffix.
-     *
-     * `items` and not `visible`, so an archived row still reserves its name: a
-     * collision the user cannot see is still a collision.
-     */
-    const taken = items.map((i) => i.name);
-    const free = !taken.some((n) => n.trim().toLowerCase() === t.name.trim().toLowerCase());
-    const { data, error } = await supabase
-      .from("document_templates" as any)
-      .insert({
-        name: isExample && free ? t.name : nextCopyName(t.name, taken),
-        // Never inherit a null team_id from an example - the copy must belong
-        // to the caller's team so it is editable.
-        team_id: teamId ?? null,
-        created_by: user?.id,
-        // Provenance, so the example this stands in for can step aside. Only
-        // for an example: a copy of the team's own template is a second
-        // template, and both belong on the page.
-        body: isExample ? { ...(body as object), copiedFrom: t.id } : body,
-        fields: t.fields,
-      })
-      .select()
-      .single();
-    if (error) return toast.error(error.message);
-    const copy = data as unknown as DocumentTemplate;
-    /*
-     * Deliberately not added to `items` here. Until the editor is saved this
-     * row is provisional, and listing it would put the identical twin back on
-     * the page - which is the thing being fixed. `persist` reloads the library,
-     * and `closeEditor` deletes the row if nothing came of the edit.
-     */
-    const copyBody = parseBody(copy.body);
-    setEditor({
-      template: copy,
-      name: copy.name,
-      body: copyBody,
-      fresh: true,
-      original: { name: copy.name, html: copyBody.html },
-    });
-  }
-
-  /**
-   * Leave the editor. Never silently, if there is anything to lose.
-   *
-   * This used to discard an ordinary edit without a word. The `fresh` branch
-   * below asked before throwing away an unsaved COPY, because that also deletes
-   * a row - but editing a template you already own fell through to
-   * `setEditor(null)`, so every keystroke since the last Save went with it.
-   * Nothing on this screen autosaves, and the editor is opened from a dialog
-   * whose overlay is one stray click away from the document.
-   *
-   * The client, having done exactly that: "i just opened one to fill it out,
-   * when i clicked out of it accidentally the whole thing disappeared."
-   *
-   * So there are two questions now, in this order. Is there unsaved work? Ask.
-   * Is this a copy that never became a template? Say so, and delete the row.
-   * A clean editor still closes on the first press, because adding friction to
-   * "I opened this to look at it" is how confirmations start being ignored.
-   */
-  async function closeEditor() {
-    const open = editor;
-    if (!open) return;
-    const edited = open.body.html !== open.original.html || open.name !== open.original.name;
-
-    if (edited) {
-      const isCopy = Boolean(open.fresh && open.template);
-      const ok = await confirm({
-        title: isCopy ? "Discard this copy?" : "Discard your changes?",
-        description: isCopy
-          ? `"${open.template!.name}" hasn't been saved, so nothing is added to your templates.`
-          : `Your edits to "${open.name || "this template"}" haven't been saved. Closing now loses them.`,
-        confirmText: isCopy ? "Discard copy" : "Discard changes",
-        cancelText: "Keep editing",
-        variant: "destructive",
-      });
-      if (!ok) return;
-    }
-
-    if (!open.fresh || !open.template) {
-      setEditor(null);
-      return;
-    }
-    setEditor(null);
-    const { error } = await supabase
-      .from("document_templates" as any)
-      .delete()
-      .eq("id", open.template.id);
-    // The row survived the delete, so it is on the page whether we say so or
-    // not. Reload rather than leave the grid disagreeing with the database.
-    if (error) await load();
-  }
+  const editing = useDocumentTemplateEditing({ teamId, items, onChanged: load });
 
   /**
    * Refile a template under another trade, from the card.
@@ -1371,7 +1122,7 @@ export function DocumentTemplatesManager({ teamId, canManage, initialTab = "docu
                 className={SURFACE_BUTTON}
                 onClick={() => {
                   if (editorNeedsDesktop()) return;
-                  setCreateOpen(true);
+                  editing.openCreate();
                 }}
               >
                 <Plus className="h-4 w-4" /> New template
@@ -1520,7 +1271,7 @@ export function DocumentTemplatesManager({ teamId, canManage, initialTab = "docu
               description="Create reusable Word-style documents with dynamic project placeholders."
               action={
                 canManage ? (
-                  <Button onClick={() => setCreateOpen(true)}>
+                  <Button onClick={() => editing.openCreate()}>
                     <Plus className="mr-1 h-4 w-4" /> Create template
                   </Button>
                 ) : null
@@ -1673,7 +1424,7 @@ export function DocumentTemplatesManager({ teamId, canManage, initialTab = "docu
                                 }
                                 onClick={() => {
                                   if (editorNeedsDesktop()) return;
-                                  void edit(t);
+                                  void editing.edit(t);
                                 }}
                               >
                                 <Pencil className="mr-1 h-3.5 w-3.5" /> Edit
@@ -1706,7 +1457,7 @@ export function DocumentTemplatesManager({ teamId, canManage, initialTab = "docu
                                         e.preventDefault();
                                         return;
                                       }
-                                      void copyForEditing(t);
+                                      void editing.copyForEditing(t);
                                     }}
                                   >
                                     <Copy className="mr-2 h-4 w-4" />
@@ -1758,7 +1509,7 @@ export function DocumentTemplatesManager({ teamId, canManage, initialTab = "docu
                         type="button"
                         onClick={() => {
                           if (editorNeedsDesktop()) return;
-                          setCreateOpen(true);
+                          editing.openCreate();
                         }}
                         className="flex min-h-[150px] flex-col items-center justify-center gap-2 rounded-[13px] border border-dashed border-border text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
                       >
@@ -1835,6 +1586,288 @@ export function DocumentTemplatesManager({ teamId, canManage, initialTab = "docu
         </div>
       )}
 
+      {editing.dialogs}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Template editing - the New template wizard and the rich text editor
+// ---------------------------------------------------------------------------
+/**
+ * Everything it takes to create or edit a document template, so any library
+ * view can offer it: the guided New template wizard (which saves the row), the
+ * full-screen rich text editor, the copy-on-edit for built-in examples, and the
+ * unsaved-changes guard on close. Render `dialogs` once; call `edit`,
+ * `copyForEditing` or `openCreate` from the cards and buttons.
+ */
+export function useDocumentTemplateEditing({
+  teamId,
+  items,
+  onChanged,
+}: {
+  teamId: string | null;
+  /** Every row the library holds, archived included - copies avoid their names. */
+  items: DocumentTemplate[];
+  /** Reload the library after a template is created, saved or cleaned up. */
+  onChanged: () => void | Promise<void>;
+}) {
+  const { user } = useAuth();
+  const confirm = useConfirm();
+  const [editor, setEditor] = useState<EditorState | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+
+  /** The mockup wizard's Save: write the finished template, back to the list.
+   *  The rich editor still opens from a card's Edit button. */
+  const wizardSave = async (payload: DocumentWizardPayload): Promise<boolean> => {
+    if (!payload.name.trim()) {
+      toast.error("Give your template a name");
+      return false;
+    }
+    const body: DocBody = {
+      style: "report",
+      html: payload.html,
+      description: payload.description.trim() || "",
+      // General is the absence of a trade, not a trade of its own - storing it
+      // would file the template under a category the picker does not rank.
+      category: payload.category === GENERAL_CATEGORY ? undefined : payload.category,
+    };
+    const { data, error } = await supabase
+      .from("document_templates" as any)
+      .insert({
+        name: payload.name.trim(),
+        team_id: teamId,
+        created_by: user?.id,
+        body: body as any,
+        fields: payload.fields,
+      })
+      .select()
+      .single();
+    if (error) {
+      toast.error(error.message);
+      return false;
+    }
+    toast.success("Template created");
+    await onChanged();
+    setCreateOpen(false);
+    return true;
+  };
+
+  /*
+   * Open an EXISTING template through the API rather than from the row we
+   * already hold.
+   *
+   * `load()` reads `document_templates` straight from the browser with
+   * `select("*")`, and the editor renders `editor.body.html` through
+   * `dangerouslySetInnerHTML`. Template bodies are authored HTML that came from
+   * a project page, they are shared across the whole team, and a teammate can
+   * write one directly via PostgREST - so rendering the raw column is stored
+   * XSS against every other member of the team.
+   *
+   * `getDocumentTemplate` runs the same sanitiser the public page share uses
+   * (apps/api sanitize-page-html.ts, covered by tests/sanitize-page-html.test.ts)
+   * and returns cleaned HTML. Reusing it beats adding a second, unproven
+   * sanitiser to the client - and it disarms rows that are already poisoned,
+   * which a write-side fix alone would not.
+   *
+   * `style` and `description` still come from the local row: they are plain
+   * strings the API does not return, and neither is ever rendered as HTML.
+   */
+  async function openForEdit(t: DocumentTemplate) {
+    const local = parseBody(t.body);
+    try {
+      const fresh = await getDocumentTemplate({ data: { templateId: t.id } });
+      const html = (fresh as { html?: string })?.html ?? "";
+      setEditor({
+        template: t,
+        name: t.name,
+        body: { ...local, html },
+        original: { name: t.name, html },
+      });
+    } catch (e: any) {
+      // Never fall back to the unsanitised local copy - that is the bug.
+      toast.error(e?.message ?? "Could not open this template");
+    }
+  }
+
+  /*
+   * The sample-site-logs button used to sit here. It wrote three team-owned
+   * copies of the preset bodies - a basic log, a walkthrough log and an HVAC
+   * log - and it is where the templates the client called terrible came from.
+   *
+   * Every one of the three is covered better by a built-in the library already
+   * ships: Daily Site Report and Site Visit Report under Field Reports, and the
+   * HVAC service and maintenance sheets under HVAC. So the button's only real
+   * effect was to drop worse duplicates of existing cards into General, owned
+   * by the team and therefore the only ones on the page carrying an Edit and a
+   * delete. Two tiers of quality in one grid, with the worse tier the one that
+   * looked editable.
+   *
+   * Anyone wanting an editable copy of a sample now takes "Make an editable
+   * copy" on the built-in itself, which starts them from the good body.
+   */
+
+  async function persist() {
+    if (!editor?.template) return;
+    setSaving(true);
+    const fields = extractFields(editor.body.html);
+    const { error } = await supabase
+      .from("document_templates" as any)
+      .update({
+        name: editor.name.trim() || "Untitled document",
+        body: editor.body as any,
+        fields,
+      })
+      .eq("id", editor.template.id);
+    setSaving(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("Template saved");
+    await onChanged();
+    setEditor(null);
+  }
+
+  /**
+   * Edit a template, whoever owns it.
+   *
+   * On the team's own row this is a plain edit. On a built-in it cannot be:
+   * those belong to no team, every company sees the same row, and RLS rejects
+   * the write. The page used to answer that with a second button reading
+   * "Duplicate to edit" - a database constraint written out as a chore for
+   * whoever is holding the phone, and following it left a second card in the
+   * grid. The client, pointing at that button: "I am not sure what the point of
+   * duplicating is ... creating duplicates is a big mess."
+   *
+   * So the copy happens here instead, and `shadowedExamples` hides the built-in
+   * behind the row it produced. Press Edit, get the editor, and the number of
+   * cards on the page does not move.
+   */
+  async function edit(t: DocumentTemplate) {
+    if (t.team_id !== null) return openForEdit(t);
+    await copyForEditing(t);
+    toast.success("Editing your company's version", {
+      description: `The example "${t.name}" is shared with every company, so this is yours to change. Delete it and the example comes back.`,
+    });
+  }
+
+  /**
+   * Make a copy of a template and open it for editing, as one action.
+   *
+   * Copying used to end at the insert: it wrote a row byte-identical to the one
+   * it came from, toasted "Duplicated", and left a second card in the section -
+   * so the grid grew a twin every time someone pressed it to find out what it
+   * did, and the twin was indistinguishable from its original.
+   *
+   * A copy is only worth having once it differs from the original, so the copy
+   * and the edit are one gesture: this opens the editor on the new row
+   * immediately, and `closeEditor` deletes it again if it is closed unchanged.
+   * The library can no longer accumulate a card nobody meant to create.
+   */
+  async function copyForEditing(t: DocumentTemplate) {
+    const isExample = t.team_id === null;
+    const body = t.body && typeof t.body === "object" ? { ...(t.body as object) } : t.body;
+    /*
+     * A copy of an example replaces it on the page, so it takes the original's
+     * name rather than "... (copy)": there is nothing left beside it for the
+     * suffix to distinguish it from. `nextCopyName` still runs when that name is
+     * somehow taken - by a copy made before this existed, say - because two
+     * cards reading exactly the same thing is worse than a suffix.
+     *
+     * `items` and not `visible`, so an archived row still reserves its name: a
+     * collision the user cannot see is still a collision.
+     */
+    const taken = items.map((i) => i.name);
+    const free = !taken.some((n) => n.trim().toLowerCase() === t.name.trim().toLowerCase());
+    const { data, error } = await supabase
+      .from("document_templates" as any)
+      .insert({
+        name: isExample && free ? t.name : nextCopyName(t.name, taken),
+        // Never inherit a null team_id from an example - the copy must belong
+        // to the caller's team so it is editable.
+        team_id: teamId ?? null,
+        created_by: user?.id,
+        // Provenance, so the example this stands in for can step aside. Only
+        // for an example: a copy of the team's own template is a second
+        // template, and both belong on the page.
+        body: isExample ? { ...(body as object), copiedFrom: t.id } : body,
+        fields: t.fields,
+      })
+      .select()
+      .single();
+    if (error) return toast.error(error.message);
+    const copy = data as unknown as DocumentTemplate;
+    /*
+     * Deliberately not added to `items` here. Until the editor is saved this
+     * row is provisional, and listing it would put the identical twin back on
+     * the page - which is the thing being fixed. `persist` reloads the library,
+     * and `closeEditor` deletes the row if nothing came of the edit.
+     */
+    const copyBody = parseBody(copy.body);
+    setEditor({
+      template: copy,
+      name: copy.name,
+      body: copyBody,
+      fresh: true,
+      original: { name: copy.name, html: copyBody.html },
+    });
+  }
+
+  /**
+   * Leave the editor. Never silently, if there is anything to lose.
+   *
+   * This used to discard an ordinary edit without a word. The `fresh` branch
+   * below asked before throwing away an unsaved COPY, because that also deletes
+   * a row - but editing a template you already own fell through to
+   * `setEditor(null)`, so every keystroke since the last Save went with it.
+   * Nothing on this screen autosaves, and the editor is opened from a dialog
+   * whose overlay is one stray click away from the document.
+   *
+   * The client, having done exactly that: "i just opened one to fill it out,
+   * when i clicked out of it accidentally the whole thing disappeared."
+   *
+   * So there are two questions now, in this order. Is there unsaved work? Ask.
+   * Is this a copy that never became a template? Say so, and delete the row.
+   * A clean editor still closes on the first press, because adding friction to
+   * "I opened this to look at it" is how confirmations start being ignored.
+   */
+  async function closeEditor() {
+    const open = editor;
+    if (!open) return;
+    const edited = open.body.html !== open.original.html || open.name !== open.original.name;
+
+    if (edited) {
+      const isCopy = Boolean(open.fresh && open.template);
+      const ok = await confirm({
+        title: isCopy ? "Discard this copy?" : "Discard your changes?",
+        description: isCopy
+          ? `"${open.template!.name}" hasn't been saved, so nothing is added to your templates.`
+          : `Your edits to "${open.name || "this template"}" haven't been saved. Closing now loses them.`,
+        confirmText: isCopy ? "Discard copy" : "Discard changes",
+        cancelText: "Keep editing",
+        variant: "destructive",
+      });
+      if (!ok) return;
+    }
+
+    if (!open.fresh || !open.template) {
+      setEditor(null);
+      return;
+    }
+    setEditor(null);
+    const { error } = await supabase
+      .from("document_templates" as any)
+      .delete()
+      .eq("id", open.template.id);
+    // The row survived the delete, so it is on the page whether we say so or
+    // not. Reload rather than leave the grid disagreeing with the database.
+    if (error) await onChanged();
+  }
+
+  const dialogs = (
+    <>
       {/* New template - the mockup's three-step wizard (Basics, Sections,
           Placeholders), with Save writing the finished template straight to
           the library. The rich editor still opens from a card's Edit button. */}
@@ -1880,8 +1913,15 @@ export function DocumentTemplatesManager({ teamId, canManage, initialTab = "docu
           )}
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
+
+  return {
+    edit,
+    copyForEditing,
+    openCreate: () => setCreateOpen(true),
+    dialogs,
+  };
 }
 
 // ---------------------------------------------------------------------------

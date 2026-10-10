@@ -1627,6 +1627,8 @@ export function TemplatesPage() {
           {tab === "documents" && (
             <DocumentLibraryContent
               initialTab={docTab}
+              teamId={teamData?.team?.id ?? null}
+              canManage={canManage}
               createTick={documentCreateTick}
               onCreate={() => {
                 if (!canManage) {
