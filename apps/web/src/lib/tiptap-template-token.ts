@@ -85,7 +85,7 @@ export const TemplateToken = Node.create({
       "span",
       mergeAttributes(HTMLAttributes, {
         class: "tiptap-template-field",
-        title: `Fills in from the project: ${node.attrs.label || node.attrs.token}`,
+        title: `${node.attrs.label || node.attrs.token} fills in by itself. Click for details.`,
       }),
       String(node.attrs.label || node.attrs.token || ""),
     ];

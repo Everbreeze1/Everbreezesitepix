@@ -114,3 +114,30 @@ describe("automatic page breaks in the template editor", () => {
     expect(src).toContain("sidePanelTokens(relevantPlaceholders, detected)");
   });
 });
+
+describe("blue fields explain themselves", () => {
+  /*
+   * "The blue tablets are not very intuitive for entering company name etc. ...
+   * I didn't know I could delete that and write company name."
+   */
+  const src = readFileSync(
+    "apps/web/src/features/settings/components/DocumentTemplatesManager.tsx",
+    "utf8",
+  );
+
+  it("shows a card saying where a clicked field's value comes from", () => {
+    const card = src.slice(src.indexOf("function FieldCard("), src.indexOf("function FieldsHint("));
+    expect(card).toContain('sel.node.type.name !== "templateToken"');
+    expect(card).toContain("fills in by itself");
+    expect(card).toContain("Type my own text");
+    expect(src).toContain("<FieldCard editor={tiptap} containerRef={pageBoxRef} />");
+    expect(src).toContain(
+      'return { from: "your company name in Settings › Company", now: profile?.company };',
+    );
+  });
+
+  it("tells a first-time author what the blue fields are", () => {
+    expect(src).toContain("<FieldsHint />");
+    expect(src).toContain("Blue fields fill in by themselves");
+  });
+});
