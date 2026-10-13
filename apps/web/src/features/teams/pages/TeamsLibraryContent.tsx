@@ -384,7 +384,7 @@ export function TeamsLibraryContent() {
     }`;
 
   return (
-    <div className="mx-auto w-full max-w-[1200px] px-4 pb-10 sm:px-10">
+    <div className="w-full px-4 pb-10 sm:px-10">
       {/* Header */}
       <div className="mb-[22px] flex flex-wrap items-start justify-between gap-4">
         <div>

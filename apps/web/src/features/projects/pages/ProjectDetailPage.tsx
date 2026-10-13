@@ -2695,7 +2695,7 @@ export function ProjectDetailPage() {
     return (
       <div className="min-h-screen bg-background">
         <div className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur">
-          <div className="container mx-auto flex items-center justify-between gap-3 px-4 py-3">
+          <div className="flex items-center justify-between gap-3 px-4 py-3">
             <Button
               variant="ghost"
               size="sm"
@@ -2708,7 +2708,7 @@ export function ProjectDetailPage() {
             <div className="w-24" />
           </div>
         </div>
-        <div className="container mx-auto max-w-6xl px-4 pb-32 pt-8 md:pt-10">
+        <div className="w-full px-4 pb-32 pt-8 md:pt-10">
           {panel === "trash" && (
             <ProjectTrash projectId={project.id} onChanged={() => void load({ silent: true })} />
           )}
@@ -2724,8 +2724,8 @@ export function ProjectDetailPage() {
   }
 
   return (
-    /* Left-aligned under a 1200px cap, exactly as the reference draws it: no auto margin. */
-    <div className="w-full max-w-[1200px] px-6 pb-32 pt-7 sm:px-10">
+    /* Full width, like the Admin dashboard and the Projects list. */
+    <div className="w-full px-6 pb-32 pt-7 sm:px-10">
       <BusyOverlay
         open={uploading}
         title="Uploading photo…"

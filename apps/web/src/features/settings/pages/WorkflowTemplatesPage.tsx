@@ -882,7 +882,7 @@ function WorkflowTemplatesBuilder({ embedded = false }: { embedded?: boolean } =
   );
 
   return (
-    <div className={embedded ? "" : "container mx-auto max-w-6xl px-4 pb-24 pt-4 md:pt-6"}>
+    <div className={embedded ? "" : "w-full px-4 pb-24 pt-4 md:pt-6"}>
       {embedded ? (
         <div className="flex justify-end">{headerActions}</div>
       ) : (
