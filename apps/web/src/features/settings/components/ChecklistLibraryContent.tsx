@@ -732,7 +732,7 @@ export function ChecklistLibraryContent({
   }
 
   return (
-    <div className="mx-auto w-full max-w-[1200px] px-4 pb-10 sm:px-10">
+    <div className="w-full px-4 pb-10 sm:px-10">
       <Dialog open={startersOpen} onOpenChange={(o) => !installing && onStartersOpenChange?.(o)}>
         <DialogContent className="max-h-[85vh] max-w-lg overflow-hidden p-0">
           <DialogHeader className="border-b border-border px-5 py-4">

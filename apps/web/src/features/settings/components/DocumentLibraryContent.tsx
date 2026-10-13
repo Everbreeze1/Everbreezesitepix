@@ -562,7 +562,7 @@ export function DocumentLibraryContent({
   }
 
   return (
-    <div className="mx-auto w-full max-w-[1200px] px-4 pb-10 sm:px-10">
+    <div className="w-full px-4 pb-10 sm:px-10">
       {loading && docs.length === 0 && reports.length === 0 ? (
         <div className="py-16 text-center text-[13px] text-faint">Loading templates&hellip;</div>
       ) : (

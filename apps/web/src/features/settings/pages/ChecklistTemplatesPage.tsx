@@ -825,7 +825,7 @@ function ChecklistTemplatesBuilder({
   ) : undefined;
 
   return (
-    <div className={embedded ? "" : "container mx-auto max-w-6xl px-4 pb-24 pt-4 md:pt-6"}>
+    <div className={embedded ? "" : "w-full px-4 pb-24 pt-4 md:pt-6"}>
       {pane === "editor" && selected ? null : embedded ? (
         embeddedPage
       ) : (

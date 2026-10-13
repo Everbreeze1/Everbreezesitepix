@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
  * Shared primitives for the Main-html design reference.
  *
  * The mockups in apps/web/public/Main-html define a precise page language:
- * a 32px/40px inset on a 1200px column, 24px / 700 titles, 13.5px muted
+ * a 32px/40px inset, 24px / 700 titles, 13.5px muted
  * subtitles, 13px-radius surface cards with a 1px border, 11px chips on a
  * secondary fill, rounded-full status pills with soft tints, 2.5px underline
  * tabs, and uppercase letter-spaced eyebrow labels. These constants carry
@@ -13,8 +13,8 @@ import { cn } from "@/lib/utils";
  * one product instead of each page hand-rolling its own numbers.
  */
 
-/** Page scaffold: the mockup pages sit on a 32px top / 40px side+bottom inset, capped at 1200px. */
-export const REFERENCE_PAGE = "mx-auto w-full max-w-[1200px] px-6 pb-10 pt-8 sm:px-10";
+/** Page scaffold: a 32px top / 40px side+bottom inset, full width like the Admin dashboard. */
+export const REFERENCE_PAGE = "w-full px-6 pb-10 pt-8 sm:px-10";
 
 /** Page title: 24px / 700 / -0.01em tracking, as in "Blueprints", "Projects". */
 export const REFERENCE_TITLE = "text-2xl font-bold tracking-[-0.01em] text-foreground";

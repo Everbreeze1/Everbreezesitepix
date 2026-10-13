@@ -144,7 +144,7 @@ export function HelpPage() {
       the shell, and on xl the width that is left over carries the category
       rail instead of nothing.
     */
-    <div className="mx-auto w-full max-w-[1192px] px-6 pb-24 pt-10 md:px-10">
+    <div className="w-full px-6 pb-24 pt-10 md:px-10">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 max-w-[560px]">
           <h1 className="font-sans text-2xl font-bold tracking-[-0.01em] text-foreground">
