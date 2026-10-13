@@ -237,7 +237,7 @@ export function SettingsPage() {
   const initial = (profile?.full_name || user?.email || "?")[0]?.toUpperCase();
 
   return (
-    <div className="mx-auto max-w-[1192px] px-6 pb-24 pt-10 md:px-10">
+    <div className="w-full px-6 pb-24 pt-10 md:px-10">
       <PageHeader
         eyebrow="Workspace settings"
         title="Your account, in focus."

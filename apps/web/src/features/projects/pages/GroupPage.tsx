@@ -400,7 +400,7 @@ export function GroupPage() {
   return (
     /* Same container as the Projects list and a project's own page, so the
        content edge does not jump when you click a group card. */
-    <div className="container mx-auto px-3 pb-32 pt-4 sm:px-4 sm:pt-6 md:pt-10">
+    <div className="w-full px-3 pb-32 pt-4 sm:px-4 sm:pt-6 md:pt-10">
       <Link
         to="/projects"
         className="mb-4 inline-flex items-center gap-2 text-sm font-bold text-muted-foreground transition hover:text-foreground"

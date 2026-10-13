@@ -84,7 +84,7 @@ export function ProjectTrashPage() {
   };
 
   return (
-    <div className="mx-auto max-w-5xl px-3 pb-16 pt-4 sm:px-4">
+    <div className="w-full px-3 pb-16 pt-4 sm:px-4">
       <PageHeader
         backTo="/projects"
         backLabel="Projects"
