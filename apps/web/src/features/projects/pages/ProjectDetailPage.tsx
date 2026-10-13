@@ -2708,7 +2708,7 @@ export function ProjectDetailPage() {
             <div className="w-24" />
           </div>
         </div>
-        <div className="w-full px-6 sm:px-10 pb-32 pt-8 md:pt-10">
+        <div className="w-full px-6 pb-32 pt-8 sm:px-10 md:pt-10">
           {panel === "trash" && (
             <ProjectTrash projectId={project.id} onChanged={() => void load({ silent: true })} />
           )}
