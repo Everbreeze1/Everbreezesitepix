@@ -1478,7 +1478,7 @@ export function TemplatesPage() {
       {/* Link two. No `min-h-0`, on purpose: the container has to be free to
           grow past the viewport, both for the tabs that are long lists and for
           a short screen where the workspace hits its floor. */}
-      <div className="container mx-auto px-3 pb-32 pt-4 sm:px-4 sm:pt-6 md:pb-10 md:pt-10 workspace:flex workspace:min-h-0 workspace:flex-1 workspace:flex-col [@media(max-height:950px)]:md:pb-4 [@media(max-height:950px)]:md:pt-5">
+      <div className="w-full px-3 pb-32 pt-4 sm:px-4 sm:pt-6 md:pb-10 md:pt-10 workspace:flex workspace:min-h-0 workspace:flex-1 workspace:flex-col [@media(max-height:950px)]:md:pb-4 [@media(max-height:950px)]:md:pt-5">
         {/* Hero - a light reference header: no dark band, just the title,
             subtitle, and primary action. The title follows the tab, the way the
             mockup set gives each library page its own name - "Blueprints",

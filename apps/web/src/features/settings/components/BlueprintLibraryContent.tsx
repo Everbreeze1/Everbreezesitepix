@@ -422,7 +422,7 @@ export function BlueprintLibraryContent({
   const selected = templates.find((t) => t.id === selectedId) ?? null;
 
   return (
-    <div className="mx-auto w-full max-w-[1200px] px-4 pb-10 sm:px-10">
+    <div className="w-full px-4 pb-10 sm:px-10">
       {loading && visible.length === 0 ? (
         <div className="py-16 text-center text-[13px] text-faint">Loading blueprints&hellip;</div>
       ) : selected ? (

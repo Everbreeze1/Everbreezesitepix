@@ -1737,7 +1737,7 @@ export function ProjectsPage() {
 
         {/* Same container as the project home page, so the content edge does not
             jump when you click through from this list into a project. */}
-        <div className="mx-auto w-full max-w-[1200px] px-4 pb-24 pt-8 sm:px-8 md:px-10">
+        <div className="w-full px-4 pb-24 pt-8 sm:px-8 md:px-10">
           {/* Hero - mockup-style: title, subtitle, primary action and a trash menu. */}
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0 max-w-[560px]">

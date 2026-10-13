@@ -389,7 +389,7 @@ export function DashboardPage() {
 
   return (
     <div className="min-h-full bg-background">
-      <div className="mx-auto w-full max-w-[1200px] px-6 pb-10 pt-8 sm:px-10">
+      <div className="w-full px-6 pb-10 pt-8 sm:px-10">
         {/* Above the greeting, and only until it is answered or dismissed - see
             AccountSetupCard, which renders nothing in every other case. */}
         <AccountSetupCard className="mb-5" />
