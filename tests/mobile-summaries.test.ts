@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 import {
   bodyError,
   deleteWarning,
-  isNarrated,
   markdownPreview,
   MAX_SUMMARY_MARKDOWN,
   MAX_SUMMARY_PHOTOS,
@@ -93,24 +92,6 @@ describe("stateMessage", () => {
 
   it("sets an expectation while waiting", () => {
     expect(stateMessage("pending")).toContain("under a minute");
-  });
-});
-
-describe("isNarrated", () => {
-  it("separates what was said from what was done", () => {
-    /*
-     * The distinction the service asks the UI to preserve. A silent shot has a
-     * note the model wrote; a narrated one also has the words the person on
-     * site actually said, which are the more valuable half.
-     */
-    expect(isNarrated(note({ spoken: "That crack is new since February." }))).toBe(true);
-    expect(isNarrated(note({ spoken: null }))).toBe(false);
-  });
-
-  it("treats whitespace as silence", () => {
-    // Otherwise an empty quote block renders under a shot nobody spoke over.
-    expect(isNarrated(note({ spoken: "   " }))).toBe(false);
-    expect(isNarrated(note({ spoken: "" }))).toBe(false);
   });
 });
 

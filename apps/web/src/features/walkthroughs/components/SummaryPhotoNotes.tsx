@@ -1,4 +1,4 @@
-import { ImageOff, Play, Quote, Sparkles } from "lucide-react";
+import { ImageOff, Play, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SummaryPhoto } from "@/lib/summaries.functions";
 
@@ -13,11 +13,10 @@ import type { SummaryPhoto } from "@/lib/summaries.functions";
  * as well, so every reader had to strip it back out before rendering, and any
  * that forgot showed the whole set twice.
  *
- * A note and a quote are different things and look different. `note` is what
- * was done in the shot and is always there; `spoken` is what the technician
- * actually said near that moment and is null when they said nothing, so a
- * silent walk produces visibly shorter cards rather than the same card with
- * different words in it.
+ * Each card shows the AI's note only. The AI already heard what was said near
+ * the shot and wrote it into the note, so printing the raw words again as a
+ * "heard on camera" quote just said the same thing twice. `spoken` stays in the
+ * data for the report writer; it is not shown.
  */
 
 const fmtOffset = (seconds: number) =>
@@ -39,7 +38,6 @@ export function SummaryPhotoNotes({
   className?: string;
 }) {
   if (!photos.length) return null;
-  const narratedCount = photos.filter((p) => p.spoken).length;
 
   return (
     <section className={cn("mt-8", className)}>
@@ -47,16 +45,13 @@ export function SummaryPhotoNotes({
         <div className="min-w-0">
           <h2 className="text-xl font-semibold tracking-tight">Photos</h2>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            {narratedCount > 0
-              ? "Each photo with what was being done, and what was said on camera near it."
-              : timed
-                ? "Nobody spoke during this recording, so each photo is described from what was captured with it."
-                : "The photos this summary was written from."}
+            {timed
+              ? "Each photo from the walk, with the AI's note on what was being done."
+              : "The photos this summary was written from."}
           </p>
         </div>
         <span className="shrink-0 rounded-full border border-border bg-muted/40 px-2.5 py-1 text-xs font-medium text-muted-foreground">
           {photos.length} {photos.length === 1 ? "photo" : "photos"}
-          {narratedCount > 0 ? ` · ${narratedCount} narrated` : ""}
         </span>
       </div>
 
@@ -118,19 +113,6 @@ export function SummaryPhotoNotes({
                     )}
                   </p>
                 </div>
-
-                {/* Only when somebody actually spoke here. */}
-                {photo.spoken && (
-                  <figure className="rounded-xl border-l-2 border-amber-400 bg-amber-50/70 px-3 py-2 dark:bg-amber-950/25">
-                    <figcaption className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-wide text-amber-700 dark:text-amber-400">
-                      <Quote className="h-3 w-3" strokeWidth={2.25} />
-                      Heard on camera
-                    </figcaption>
-                    <blockquote className="mt-1 text-[13px] italic leading-relaxed text-foreground">
-                      &ldquo;{photo.spoken}&rdquo;
-                    </blockquote>
-                  </figure>
-                )}
 
                 {caption && (
                   <p className="mt-auto border-t border-border/60 pt-2 text-[11.5px] text-muted-foreground">

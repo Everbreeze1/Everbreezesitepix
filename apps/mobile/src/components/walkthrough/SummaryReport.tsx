@@ -1,21 +1,17 @@
 import { useMemo } from "react";
 import { Pressable, View } from "react-native";
 import type { ResolvedSummaryPhoto } from "@/api/summaries";
-import {
-  isNarrated,
-  offsetLabel,
-  orderedNotes,
-  plainBody,
-  type WalkthroughSummary,
-} from "@/api/summary-view";
+import { offsetLabel, orderedNotes, plainBody, type WalkthroughSummary } from "@/api/summary-view";
 import { summarySections } from "@/api/walkthrough-list-view";
 import { radius, spacing, useTheme } from "@/theme";
-import { Play, Quote } from "@/ui/icons";
+import { Play } from "@/ui/icons";
 import { Card, Icon, PhotoThumb, SectionHeader, Text } from "@/ui";
 
 /**
  * The body of an AI Summary: the write-up in its headed sections, then every
- * photo with the note written for it and what was said around it.
+ * photo with the note the AI wrote for it. The AI already heard what was said
+ * near each shot and wrote it into that note, so the raw words are not shown
+ * again under it.
  *
  * Shared by the walkthrough screen, where it sits under the video, and by the
  * write-up's own screen. One renderer, so the two cannot drift into showing
@@ -110,28 +106,6 @@ export function SummaryReport({
                     ) : null}
 
                     <Text variant="body">{note.note}</Text>
-
-                    {/*
-                      What was SAID, kept apart from what was done. The service
-                      is explicit that this distinction is load-bearing: the
-                      model wrote the note, the person on site said this.
-                    */}
-                    {isNarrated(note) ? (
-                      <View
-                        style={{
-                          flexDirection: "row",
-                          gap: spacing.sm,
-                          paddingTop: spacing.sm,
-                          borderTopWidth: 1,
-                          borderTopColor: theme.colors.border,
-                        }}
-                      >
-                        <Icon icon={Quote} size="sm" tone="primary" />
-                        <Text variant="body" tone="muted" style={{ flex: 1 }}>
-                          {note.spoken}
-                        </Text>
-                      </View>
-                    ) : null}
                   </View>
                 </Card>
               );

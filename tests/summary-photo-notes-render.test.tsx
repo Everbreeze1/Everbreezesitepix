@@ -49,13 +49,13 @@ describe("SummaryPhotoNotes", () => {
     expect(html.match(/<ol/g) ?? []).toHaveLength(1);
   });
 
-  it("shows the quote only for a photo somebody spoke over", () => {
-    const html = render([
-      photo({ photoId: "a", spoken: "this is the condenser" }),
-      photo({ photoId: "b", spoken: null }),
-    ]);
-    expect(html.match(/Heard on camera/g)).toHaveLength(1);
-    expect(html).toContain("this is the condenser");
+  it("shows the AI's note, not the raw words heard on camera", () => {
+    // "On the pictures taken the AI hears the convo and writes its own notes.
+    // we dont need to also write what the camera heard."
+    const html = render([photo({ photoId: "a", spoken: "this is the condenser" })]);
+    expect(html).toContain("Replaced the condenser fan");
+    expect(html).not.toContain("Heard on camera");
+    expect(html).not.toContain("this is the condenser");
   });
 
   it("says so plainly when a photo has nothing recorded against it", () => {
@@ -105,9 +105,10 @@ describe("SummaryPhotoNotes", () => {
     expect(html).not.toContain('src=""');
   });
 
-  it("counts narrated photos in the header only when some are", () => {
-    expect(render([photo({ spoken: "said it" })])).toContain("1 narrated");
-    expect(render([photo()])).not.toContain("narrated");
+  it("counts photos in the header without a narrated tally", () => {
+    const html = render([photo({ spoken: "said it" })]);
+    expect(html).toContain("1 photo");
+    expect(html).not.toContain("narrated");
   });
 
   it("never emits undefined or NaN", () => {

@@ -3232,7 +3232,7 @@ export function ProjectDetailPage() {
                           className="mt-3 inline-flex items-center gap-2 text-xs font-extrabold text-primary hover:underline"
                         >
                           {isSummary ? "Open AI Summary" : "Open walkthrough"}{" "}
-                          <span aria-hidden>â†’</span>
+                          <span aria-hidden>→</span>
                         </Link>
                       </div>
                     </div>

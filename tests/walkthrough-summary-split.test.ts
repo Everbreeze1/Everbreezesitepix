@@ -184,7 +184,9 @@ describe("the split, as wiring", () => {
     const src = read(NOTES);
     expect(src).toContain("photos.map");
     expect(src).toContain("photo.note");
-    expect(src).toContain("photo.spoken");
+    // The AI's note already carries what was said near the shot, so the raw
+    // words are not printed again under it.
+    expect(src).not.toContain("photo.spoken");
     // One <ol>, not a rail plus a gallery.
     expect(src.match(/<ol/g) ?? []).toHaveLength(1);
   });
@@ -339,10 +341,13 @@ describe("the video page carries no summary", () => {
     expect(src).not.toContain("<WalkthroughMarkdown");
   });
 
-  it("still plays the recording", () => {
-    // The chapter rail stays: that is navigation within the footage, not a
-    // second copy of the write-up.
-    expect(read(WT_PAGE)).toContain("<WalkthroughNarratedPlayer");
+  it("still plays the recording, with the photos taken along the way", () => {
+    // The photo strip seeks the footage; it is navigation, not a second copy of
+    // the write-up. No AI voice-over and no transcript tools on this page.
+    const src = read(WT_PAGE);
+    expect(src).toContain("<WalkthroughVideo");
+    expect(src).not.toContain("Transcribe again");
+    expect(src).not.toContain("Play AI narration");
   });
 
   it("links across to the summary, and can create one", () => {

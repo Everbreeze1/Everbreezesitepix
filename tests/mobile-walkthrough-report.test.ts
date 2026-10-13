@@ -8,15 +8,9 @@ import {
   queuedWalkthroughPhotos,
   reportNote,
   reportResultMessage,
-  transcriptionIsProblem,
-  transcriptionNotice,
-  transcriptionState,
   uploadHoldMessage,
 } from "../apps/mobile/src/api/walkthrough-report-view";
-import {
-  runTranscription,
-  transcriptionNotice as webTranscriptionNotice,
-} from "../apps/web/src/features/walkthroughs/transcription";
+import { runTranscription } from "../apps/web/src/features/walkthroughs/transcription";
 
 /*
  * Turning a walkthrough into the report a client receives.
@@ -85,47 +79,6 @@ describe("reportNote", () => {
     expect(screen).not.toContain("reportRefusal");
     expect(screen).not.toContain("|| !detail.transcript");
     expect(screen).not.toContain("transcribed from the web app");
-  });
-});
-
-describe("transcription outcome wording", () => {
-  it("prefers the server's sentence", () => {
-    expect(
-      transcriptionNotice({ state: "partial", failedPieces: 2, message: "Server words." }),
-    ).toBe("Server words.");
-  });
-
-  it("names lost minutes when an older server sends only counts", () => {
-    expect(transcriptionNotice({ state: "partial", failedPieces: 2 })).toBe(
-      "2 minutes could not be transcribed. The rest was saved.",
-    );
-    expect(transcriptionNotice({ state: "failed", failedPieces: 1 })).toContain(
-      "1 minute could not be transcribed",
-    );
-  });
-
-  it("reads a bare `{ transcript }` from an older server", () => {
-    expect(transcriptionState({ transcript: "" })).toBe("empty");
-    expect(transcriptionState({ transcript: "Coil cleaned." })).toBe("done");
-    expect(transcriptionNotice({ transcript: "" })).toMatch(/No speech/);
-  });
-
-  it("marks only the bad endings as problems", () => {
-    expect(transcriptionIsProblem({ state: "done" })).toBe(false);
-    expect(transcriptionIsProblem({ state: "empty" })).toBe(true);
-    expect(transcriptionIsProblem({ state: "partial" })).toBe(true);
-    expect(transcriptionIsProblem({ state: "failed" })).toBe(true);
-  });
-
-  it("says the same thing on the web", () => {
-    for (const outcome of [
-      { state: "partial" as const, failedPieces: 3 },
-      { state: "empty" as const },
-      { transcript: "" },
-      { state: "done" as const },
-    ]) {
-      expect(webTranscriptionNotice(outcome)).toBe(transcriptionNotice(outcome));
-    }
   });
 });
 

@@ -1,51 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  AudioLines,
-  ImageOff,
-  Info,
-  ListVideo,
-  Pause,
-  Play,
-  Quote,
-  Sparkles,
-  Volume2,
-  VolumeX,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { useMemo } from "react";
+import { ImageOff, Play, Sparkles } from "lucide-react";
 import { cleanCaption } from "@everlumen/shared";
 import { cn } from "@/lib/utils";
 import type { WalkthroughPhotoStep } from "@/components/WalkthroughReport";
 
 /**
- * The premium Summary: a walkthrough recording with an AI narration track laid
- * over its timeline, and every captured photo carrying its own AI narration.
+ * The AI's narration payload for a recording, and the photo list the public
+ * walkthrough link renders from it.
  *
- * The client's words: "it should produce a short AI-narrated video from the
- * walkthrough recording, plus a list of the captured photos each with
- * AI-generated narration describing what was done in that shot and/or
- * summarizing what was said on camera near that moment", and it "needs to feel
- * premium: polished playback UI, a clear 'AI-narrated' treatment", not "a
- * generic photo-caption card that looks the same whether or not anyone spoke
- * during the recording".
- *
- * Three things carry that here.
- *
- * **The narration is on the timeline, not beside it.** Chapters have real
- * second offsets. The rail highlights the one playing, scrolls itself to it,
- * and seeks the video when you click one. The photo strip under the player sits
- * at each shot's offset, so the picture and the moment it was taken are the
- * same control.
- *
- * **Narration can be heard, not only read.** `speechSynthesis` reads the active
- * chapter aloud and ducks the original audio while it does, which is what makes
- * this an AI-narrated *video* rather than a video with a sidebar. It is opt-in,
- * off by default, and the toggle hides itself entirely where the browser has no
- * speech engine rather than offering a control that does nothing.
- *
- * **A silent walk looks different from a narrated one.** Every photo shows what
- * the AI says was going on. Only a photo with real speech behind it also shows
- * the quote, and a recording nobody spoke on says so once, at the top, instead
- * of repeating an apology under each tile.
+ * The narration exists to write reports. It is not read out loud or laid over
+ * the video any more: "we don't need no out loud AI narration. That is only
+ * used to produce automatic reports."
  */
 
 export interface NarrationChapter {
@@ -86,45 +51,6 @@ const fmtOffset = (seconds: number) =>
     .toString()
     .padStart(2, "0")}`;
 
-/**
- * How far the recording's own audio drops while the narrator is speaking.
- *
- * Ducked rather than muted: the site noise underneath is part of what the
- * technician recorded, and cutting it entirely makes the video look frozen.
- */
-const DUCKED_VOLUME = 0.15;
-
-/**
- * Which chapter is playing at `seconds`, or -1 when there are none.
- *
- * Walked backwards: the active chapter is the LAST one that has already
- * started. Forwards you have to test both edges of every chapter, and the
- * moment two of them disagree about a boundary - which is exactly what a model
- * reply can produce - the highlight lands on nothing.
- *
- * Past the end of the last chapter it stays on the last chapter rather than
- * going blank: a video can play a fraction of a second beyond the duration the
- * database recorded, and the rail should not flicker empty as it finishes.
- */
-export function activeChapterAt(chapters: NarrationChapter[], seconds: number): number {
-  if (!chapters.length) return -1;
-  for (let i = chapters.length - 1; i >= 0; i--) {
-    if (seconds >= chapters[i].start) return i;
-  }
-  // Before the first chapter starts, which only happens if something upstream
-  // failed to pull it back to zero. Show the opening one rather than nothing.
-  return 0;
-}
-
-/** Does this browser have a speech engine we can narrate through? */
-function speechAvailable(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    "speechSynthesis" in window &&
-    typeof window.SpeechSynthesisUtterance === "function"
-  );
-}
-
 /** The small purple mark that says "a model wrote this". Used in three places. */
 export function AiNarratedChip({ className }: { className?: string }) {
   return (
@@ -137,387 +63,6 @@ export function AiNarratedChip({ className }: { className?: string }) {
       <Sparkles className="h-3 w-3" strokeWidth={2.25} />
       AI narrated
     </span>
-  );
-}
-
-/**
- * The player and its narration rail.
- *
- * Owns playback state rather than reading it off the `<video>` on every render:
- * `timeupdate` fires roughly four times a second, and the rail, the strip and
- * the speech trigger all need the same value at the same moment.
- */
-export function WalkthroughNarratedPlayer({
-  videoUrl,
-  mimeType,
-  durationSeconds,
-  narration,
-  steps,
-  className,
-  controllerRef,
-}: {
-  videoUrl: string;
-  mimeType: string | null;
-  /** The recorded length, used to place markers before metadata has loaded. */
-  durationSeconds: number;
-  narration: WalkthroughNarration;
-  /** The captured photos, for the strip under the player. */
-  steps: WalkthroughPhotoStep[];
-  className?: string;
-  /**
-   * Filled in with a `seek` the page can call, so the photo list further down
-   * can drive this player. An imperative handle rather than lifted state
-   * because seeking is an event, not a value: mirroring `currentTime` into the
-   * page would re-render the whole walkthrough four times a second.
-   */
-  controllerRef?: React.MutableRefObject<{ seek: (seconds: number) => void } | null>;
-}) {
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const railRef = useRef<HTMLOListElement | null>(null);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [playing, setPlaying] = useState(false);
-  const [duration, setDuration] = useState(durationSeconds || 0);
-  /**
-   * The video's true aspect ratio, once its metadata loads. A phone-shot walk
-   * is portrait; forcing it into a 16:9 box letterboxes it with hard black
-   * bars, which looks cheap. Sizing the frame to the footage removes the bars.
-   */
-  const [aspect, setAspect] = useState<number | null>(null);
-  const [narrating, setNarrating] = useState(false);
-  const [canNarrate] = useState(speechAvailable);
-  /** The chapter last spoken, so a chapter is never read out twice running. */
-  const spokenChapterRef = useRef<number>(-1);
-  /**
-   * The recording's volume before the narrator ducked it, or null when it is
-   * not currently ducked.
-   *
-   * A ref rather than a captured local. Reading `el.volume` at the moment each
-   * utterance starts looks equivalent and is not: chapters can begin while the
-   * previous one is still being spoken, so the second reads the ALREADY ducked
-   * 0.15 as the value to restore, and its `onend` pins the video at a whisper
-   * for the rest of the session. Whoever ducks first owns the restore.
-   */
-  const preDuckVolumeRef = useRef<number | null>(null);
-
-  /*
-   * Did a model actually write this, or is it the deterministic fallback?
-   *
-   * Defaults to true for a payload stored before the flag was trustworthy;
-   * only an explicit `false` drops the AI claim.
-   */
-  const aiWritten = narration.aiGenerated !== false;
-  const chapters = narration.chapters ?? [];
-  const activeChapter = useMemo(
-    () => activeChapterAt(chapters, currentTime),
-    [chapters, currentTime],
-  );
-
-  const seek = useCallback((seconds: number) => {
-    const el = videoRef.current;
-    if (!el) return;
-    el.currentTime = Math.max(0, seconds);
-    setCurrentTime(Math.max(0, seconds));
-    void el.play().catch(() => {
-      /* Autoplay refused after a seek is fine - the user still moved. */
-    });
-  }, []);
-
-  useEffect(() => {
-    if (!controllerRef) return;
-    controllerRef.current = { seek };
-    return () => {
-      controllerRef.current = null;
-    };
-  }, [controllerRef, seek]);
-
-  const togglePlay = useCallback(() => {
-    const el = videoRef.current;
-    if (!el) return;
-    if (el.paused) void el.play().catch(() => undefined);
-    else el.pause();
-  }, []);
-
-  /*
-   * Speak the chapter that just became active.
-   *
-   * Keyed on the chapter index rather than on the clock so a chapter is read
-   * once however long it runs, and re-armed on seek because jumping back to a
-   * chapter is a deliberate request to hear it again. The original audio is
-   * ducked rather than muted outright: the site noise underneath is part of
-   * what the technician recorded.
-   */
-  useEffect(() => {
-    if (!narrating || !canNarrate) return;
-    if (activeChapter < 0 || activeChapter === spokenChapterRef.current) return;
-    const chapter = chapters[activeChapter];
-    if (!chapter?.narration) return;
-    spokenChapterRef.current = activeChapter;
-
-    /*
-     * Drop whatever is still being said before starting this chapter.
-     *
-     * `speak()` queues rather than interrupts, so without this the narration
-     * falls further behind the footage at every chapter boundary until it is
-     * describing a part of the walk that finished a minute ago. The line on
-     * screen is already the current chapter; the voice has to agree with it.
-     */
-    window.speechSynthesis.cancel();
-
-    const utterance = new SpeechSynthesisUtterance(chapter.narration);
-    utterance.rate = 1;
-    utterance.pitch = 1;
-    const el = videoRef.current;
-    if (el && preDuckVolumeRef.current === null) preDuckVolumeRef.current = el.volume;
-    if (el) el.volume = DUCKED_VOLUME;
-    utterance.onend = () => {
-      const video = videoRef.current;
-      if (video && preDuckVolumeRef.current !== null) video.volume = preDuckVolumeRef.current;
-      preDuckVolumeRef.current = null;
-    };
-    utterance.onerror = utterance.onend;
-    window.speechSynthesis.speak(utterance);
-  }, [activeChapter, chapters, narrating, canNarrate]);
-
-  // Never leave a voice talking over a page the user has left. `speechSynthesis`
-  // is a singleton on the window and outlives this component.
-  useEffect(() => {
-    return () => {
-      if (speechAvailable()) window.speechSynthesis.cancel();
-    };
-  }, []);
-
-  // Narration switched off: stop the voice and give the recording its own
-  // audio back, at whatever level the listener had it.
-  useEffect(() => {
-    if (narrating) return;
-    if (speechAvailable()) window.speechSynthesis.cancel();
-    const el = videoRef.current;
-    if (el && preDuckVolumeRef.current !== null) el.volume = preDuckVolumeRef.current;
-    preDuckVolumeRef.current = null;
-    spokenChapterRef.current = -1;
-  }, [narrating]);
-
-  /* Keep the active chapter in view without yanking the whole page with it. */
-  useEffect(() => {
-    const rail = railRef.current;
-    if (!rail || activeChapter < 0) return;
-    const item = rail.children[activeChapter] as HTMLElement | undefined;
-    if (!item) return;
-    const top = item.offsetTop - rail.clientHeight / 2 + item.clientHeight / 2;
-    rail.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
-  }, [activeChapter]);
-
-  const total = duration || durationSeconds || 0;
-  const progress = total > 0 ? Math.min(100, (currentTime / total) * 100) : 0;
-
-  return (
-    <section
-      className={cn(
-        "overflow-hidden rounded-3xl border border-border bg-card shadow-sm",
-        className,
-      )}
-    >
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 bg-gradient-to-r from-primary/[0.09] via-primary/[0.04] to-transparent px-4 py-3">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary/15 text-primary">
-            <AudioLines className="h-4.5 w-4.5" />
-          </span>
-          <div className="min-w-0">
-            <p className="flex items-center gap-2 text-sm font-bold">
-              {aiWritten ? "AI Summary" : "Summary"}
-              {aiWritten && <AiNarratedChip />}
-            </p>
-            {narration.headline && (
-              <p className="truncate text-[11.5px] text-muted-foreground">{narration.headline}</p>
-            )}
-          </div>
-        </div>
-        {canNarrate && chapters.length > 0 && (
-          <Button
-            size="sm"
-            variant={narrating ? "default" : "outline"}
-            onClick={() => setNarrating((v) => !v)}
-            className="h-8 rounded-lg text-xs font-bold"
-          >
-            {narrating ? (
-              <VolumeX className="mr-1.5 h-3.5 w-3.5" />
-            ) : (
-              <Volume2 className="mr-1.5 h-3.5 w-3.5" />
-            )}
-            {narrating ? "Stop narration" : "Play AI narration"}
-          </Button>
-        )}
-      </div>
-
-      <div className="grid gap-0 lg:grid-cols-[minmax(0,1.65fr)_minmax(0,1fr)]">
-        <div className="relative flex items-center justify-center bg-black">
-          <video
-            ref={videoRef}
-            src={videoUrl}
-            controls
-            playsInline
-            preload="metadata"
-            className="max-h-[72vh] w-auto max-w-full bg-black object-contain"
-            style={{ aspectRatio: aspect ?? 16 / 9 }}
-            onLoadedMetadata={(e) => {
-              const d = e.currentTarget.duration;
-              if (Number.isFinite(d) && d > 0) setDuration(d);
-              const w = e.currentTarget.videoWidth;
-              const h = e.currentTarget.videoHeight;
-              if (w > 0 && h > 0) setAspect(w / h);
-            }}
-            onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
-            onPlay={() => setPlaying(true)}
-            onPause={() => setPlaying(false)}
-            onSeeked={() => {
-              spokenChapterRef.current = -1;
-            }}
-          >
-            {mimeType && <source src={videoUrl} type={mimeType} />}
-          </video>
-
-          {/*
-            The chapter now playing, over the footage. This is the single
-            clearest signal that the video is narrated: the line moves as the
-            walk moves, whether or not the voice is switched on.
-          */}
-          {activeChapter >= 0 && chapters[activeChapter]?.narration && (
-            <div className="pointer-events-none absolute inset-x-0 bottom-12 px-4">
-              <p className="mx-auto max-w-2xl rounded-xl bg-black/65 px-3.5 py-2 text-center text-[13px] leading-snug text-white backdrop-blur-sm">
-                {chapters[activeChapter].narration}
-              </p>
-            </div>
-          )}
-        </div>
-
-        <div className="flex min-h-[220px] flex-col border-t border-border/60 lg:border-l lg:border-t-0">
-          <div className="flex items-center justify-between gap-2 border-b border-border/60 px-3.5 py-2">
-            <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
-              <ListVideo className="h-3.5 w-3.5" />
-              Narration
-            </p>
-            <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
-              {fmtOffset(currentTime)} / {fmtOffset(total)}
-            </span>
-          </div>
-
-          {chapters.length ? (
-            <ol ref={railRef} className="max-h-[300px] flex-1 overflow-y-auto px-2 py-2">
-              {chapters.map((chapter, i) => (
-                <li key={`${chapter.start}-${i}`}>
-                  <button
-                    type="button"
-                    onClick={() => seek(chapter.start)}
-                    aria-current={i === activeChapter}
-                    className={cn(
-                      "w-full rounded-xl px-2.5 py-2 text-left transition-colors",
-                      i === activeChapter
-                        ? "bg-primary/10 ring-1 ring-inset ring-primary/25"
-                        : "hover:bg-muted/60",
-                    )}
-                  >
-                    <span className="flex items-center gap-2">
-                      <span
-                        className={cn(
-                          "font-mono text-[11px] tabular-nums",
-                          i === activeChapter ? "text-primary" : "text-muted-foreground",
-                        )}
-                      >
-                        {fmtOffset(chapter.start)}
-                      </span>
-                      <span
-                        className={cn(
-                          "min-w-0 flex-1 truncate text-[12.5px] font-bold",
-                          i === activeChapter ? "text-foreground" : "text-muted-foreground",
-                        )}
-                      >
-                        {chapter.title}
-                      </span>
-                    </span>
-                    <span className="mt-0.5 block text-[12px] leading-snug text-muted-foreground">
-                      {chapter.narration}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <p className="flex-1 px-3.5 py-6 text-center text-xs text-muted-foreground">
-              No narration chapters for this recording.
-            </p>
-          )}
-
-          <div className="border-t border-border/60 px-3.5 py-2">
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={togglePlay}
-              className="h-8 w-full justify-start rounded-lg text-xs font-bold"
-            >
-              {playing ? (
-                <Pause className="mr-1.5 h-3.5 w-3.5" />
-              ) : (
-                <Play className="mr-1.5 h-3.5 w-3.5" />
-              )}
-              {playing ? "Pause" : "Play walkthrough"}
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      {/*
-        Photo markers on the recording's own timeline. The bar is a read-only
-        picture of where you are; the thumbnails are the controls, because a
-        two-pixel dot is not a tap target on a phone.
-      */}
-      {steps.length > 0 && total > 0 && (
-        <div className="border-t border-border/60 px-4 py-3">
-          <div className="relative h-1.5 w-full overflow-visible rounded-full bg-muted">
-            <div
-              className="h-full rounded-full bg-primary/70 transition-[width] duration-200"
-              style={{ width: `${progress}%` }}
-            />
-            {steps.map((step, i) => (
-              <span
-                key={`${step.photo_id}-${i}`}
-                aria-hidden
-                className="absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-card bg-foreground/60"
-                style={{ left: `${Math.min(100, (step.offset_seconds / total) * 100)}%` }}
-              />
-            ))}
-          </div>
-          <ol className="mt-3 flex gap-2 overflow-x-auto pb-1">
-            {steps.map((step, i) => (
-              <li key={`${step.photo_id}-strip-${i}`} className="shrink-0">
-                <button
-                  type="button"
-                  onClick={() => seek(step.offset_seconds)}
-                  title={`Jump to ${fmtOffset(step.offset_seconds)}`}
-                  className="group relative block h-14 w-20 overflow-hidden rounded-lg border border-border bg-muted transition hover:border-primary/50"
-                >
-                  {step.image_url ? (
-                    <img
-                      src={step.image_url}
-                      alt=""
-                      loading="lazy"
-                      decoding="async"
-                      className="h-full w-full object-cover transition group-hover:scale-[1.04]"
-                    />
-                  ) : (
-                    <span className="flex h-full w-full items-center justify-center text-muted-foreground">
-                      <ImageOff className="h-4 w-4" />
-                    </span>
-                  )}
-                  <span className="absolute inset-x-0 bottom-0 bg-black/60 px-1 py-0.5 text-center font-mono text-[10px] text-white">
-                    {fmtOffset(step.offset_seconds)}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ol>
-        </div>
-      )}
-    </section>
   );
 }
 
@@ -546,8 +91,6 @@ export function AiNarratedPhotoSteps({
   const aiWritten = narration.aiGenerated !== false;
   if (!steps.length) return null;
 
-  const spokenCount = steps.filter((s) => byId.get(s.photo_id)?.spoken).length;
-
   return (
     <section className="mb-8">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
@@ -559,14 +102,11 @@ export function AiNarratedPhotoSteps({
           <p className="mt-0.5 text-xs text-muted-foreground">
             {!aiWritten
               ? "Written from the timestamps and what was recorded with each photo. Regenerate the summary to have AI narrate them."
-              : narration.hasSpeech
-                ? "What was done in each shot, with what was said on camera near that moment."
-                : "Nobody spoke during this recording, so each photo is described from what was captured with it."}
+              : "What was being done in each shot."}
           </p>
         </div>
         <span className="shrink-0 rounded-full border border-border bg-muted/40 px-2.5 py-1 text-xs font-medium text-muted-foreground">
           {steps.length} {steps.length === 1 ? "photo" : "photos"}
-          {narration.hasSpeech ? ` · ${spokenCount} narrated on camera` : ""}
         </span>
       </div>
 
@@ -580,7 +120,6 @@ export function AiNarratedPhotoSteps({
            * an empty card while the walkthrough waits to be regenerated.
            */
           const narrationText = ai?.narration || step.spoken_note?.trim() || caption || "";
-          const spoken = ai ? ai.spoken : (step.spoken_note?.trim() ?? null);
 
           return (
             <li
@@ -637,29 +176,6 @@ export function AiNarratedPhotoSteps({
                     )}
                   </p>
                 </div>
-
-                {/*
-                  The half that only exists when somebody actually spoke. This
-                  is the difference the client asked for: a silent walkthrough's
-                  card is visibly shorter than a narrated one's, rather than
-                  both rendering the same strip with different text in it.
-                */}
-                {spoken ? (
-                  <figure className="rounded-xl border-l-2 border-amber-400 bg-amber-50/70 px-3 py-2 dark:bg-amber-950/25">
-                    <figcaption className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-wide text-amber-700 dark:text-amber-400">
-                      <Quote className="h-3 w-3" strokeWidth={2.25} />
-                      Heard on camera
-                    </figcaption>
-                    <blockquote className="mt-1 text-[13px] italic leading-relaxed text-foreground">
-                      &ldquo;{spoken}&rdquo;
-                    </blockquote>
-                  </figure>
-                ) : narration.hasSpeech ? (
-                  <p className="flex items-center gap-1.5 text-[11.5px] text-muted-foreground">
-                    <Info className="h-3 w-3 shrink-0" />
-                    Nothing was said near this moment.
-                  </p>
-                ) : null}
 
                 {/* The technician's own caption, kept distinct from both. */}
                 {caption && caption !== narrationText && (

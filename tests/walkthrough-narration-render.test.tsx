@@ -2,11 +2,10 @@ import { describe, it, expect, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   AiNarratedPhotoSteps,
-  WalkthroughNarratedPlayer,
   AiNarratedChip,
-  activeChapterAt,
   type WalkthroughNarration,
 } from "@/features/walkthroughs/components/WalkthroughNarration";
+import { WalkthroughVideo } from "@/features/walkthroughs/components/WalkthroughVideo";
 import type { WalkthroughPhotoStep } from "@/components/WalkthroughReport";
 
 /*
@@ -24,8 +23,7 @@ import type { WalkthroughPhotoStep } from "@/components/WalkthroughReport";
  * product were recorded with nobody speaking.
  */
 
-// The player's speech toggle asks the browser for a speech engine. Node has
-// none, and the component must render the rest of itself regardless.
+// Nothing here may need a browser to render.
 vi.stubGlobal("window", undefined);
 
 const narration = (over: Partial<WalkthroughNarration> = {}): WalkthroughNarration => ({
@@ -73,30 +71,17 @@ describe("AiNarratedChip", () => {
 });
 
 describe("AiNarratedPhotoSteps", () => {
-  it("shows the quote only for the photo that has one", () => {
+  it("shows the AI's note for each photo, not what the camera heard", () => {
+    // "On the pictures taken the AI hears the convo and writes its own notes.
+    // we dont need to also write what the camera heard."
     const html = renderToStaticMarkup(
       <AiNarratedPhotoSteps steps={steps} narration={narration()} />,
     );
-    // p1 was spoken over, p2 was not: exactly one quote block.
-    expect(html.match(/Heard on camera/g)).toHaveLength(1);
-    expect(html).toContain("checking the flashing");
-    expect(html).toContain("Nothing was said near this moment.");
-  });
-
-  it("renders a silent recording differently, and without apologising per tile", () => {
-    const silent = narration({
-      hasSpeech: false,
-      photos: [
-        { photoId: "p1", offsetSeconds: 20, narration: "A shot.", spoken: null },
-        { photoId: "p2", offsetSeconds: 140, narration: "Another shot.", spoken: null },
-      ],
-    });
-    const html = renderToStaticMarkup(<AiNarratedPhotoSteps steps={steps} narration={silent} />);
+    expect(html).toContain("Flashing at the parapet.");
+    expect(html).toContain("The north condensers.");
     expect(html).not.toContain("Heard on camera");
-    // The "nothing was said" line belongs to a narrated walk with a quiet
-    // moment. On a walk nobody spoke on it would repeat under every tile.
+    expect(html).not.toContain("checking the flashing");
     expect(html).not.toContain("Nothing was said near this moment.");
-    expect(html).toContain("Nobody spoke during this recording");
   });
 
   it("renders nothing at all when there are no photos", () => {
@@ -151,128 +136,56 @@ describe("AiNarratedPhotoSteps", () => {
   });
 });
 
-describe("WalkthroughNarratedPlayer", () => {
-  const render = (over: Partial<WalkthroughNarration> = {}, s = steps, duration = 300) =>
+describe("WalkthroughVideo", () => {
+  const render = (s = steps, duration = 300, mimeType: string | null = "video/webm") =>
     renderToStaticMarkup(
-      <WalkthroughNarratedPlayer
+      <WalkthroughVideo
         videoUrl="https://example.test/walk.webm"
-        mimeType="video/webm"
+        mimeType={mimeType}
         durationSeconds={duration}
-        narration={narration(over)}
         steps={s}
       />,
     );
 
-  it("renders the video, the rail and the AI treatment", () => {
+  it("renders the plain video and the photos taken along the way", () => {
     const html = render();
     expect(html).toContain("<video");
-    expect(html).toContain("AI Summary");
-    expect(html).toContain("AI narrated");
-    expect(html).toContain("Roof flashing");
-    expect(html).toContain("Moving to the north condensers.");
+    expect(html).toContain("Photos from this walk");
+    expect(html).toContain("Jump to 0:20");
+    expect(html).toContain("2:20");
   });
 
-  it("opens on the first chapter, captioned over the footage", () => {
-    // currentTime starts at 0, so chapter 0 is the active one.
+  it("carries no AI voice-over or narration rail", () => {
+    // "we dont need no out loud AI narration. that is only used to produce
+    // automatic reports."
     const html = render();
-    expect(html).toContain("Walking the roof flashing.");
-  });
-
-  it("says so rather than crashing when there are no chapters", () => {
-    const html = render({ chapters: [] });
-    expect(html).toContain("No narration chapters for this recording.");
-    expect(html).toContain("<video");
+    expect(html).not.toContain("Play AI narration");
+    expect(html).not.toContain("Narration");
   });
 
   it("renders without a photo strip when nothing was captured", () => {
-    const html = render({}, []);
+    const html = render([]);
     expect(html).toContain("<video");
     expect(html).not.toContain("Jump to");
   });
 
   it("does not divide by a zero duration", () => {
-    const html = render({}, steps, 0);
+    const html = render(steps, 0);
     expect(html).toContain("<video");
     expect(html).not.toContain("NaN");
     expect(html).not.toContain("Infinity");
   });
 
-  it("omits the source tag when the mime type is unknown", () => {
-    const html = renderToStaticMarkup(
-      <WalkthroughNarratedPlayer
-        videoUrl="https://example.test/walk.webm"
-        mimeType={null}
-        durationSeconds={300}
-        narration={narration()}
-        steps={steps}
-      />,
-    );
-    expect(html).toContain("<video");
-    expect(html).not.toContain("<source");
-  });
-
-  it("hides the read-aloud control where there is no speech engine", () => {
-    // window is stubbed undefined above: a control that cannot work must not
-    // be offered.
-    expect(render()).not.toContain("Play AI narration");
+  it("still gives the browser a source when the mime type is unknown", () => {
+    const html = render(steps, 300, null);
+    expect(html).toContain("<source");
+    expect(html).not.toContain('type="null"');
   });
 
   it("never emits undefined or NaN into the markup", () => {
     const html = render();
     expect(html).not.toContain("undefined");
     expect(html).not.toContain("NaN");
-  });
-});
-
-/*
- * Which chapter the rail highlights, at every point on the clock.
- *
- * The render pass above only ever sees t=0, because `currentTime` is internal
- * state driven by a `timeupdate` event no test fires. This is the function that
- * decides what the viewer is looking at for the rest of the recording.
- */
-describe("activeChapterAt", () => {
-  const chapters = [
-    { start: 0, end: 60, title: "One", narration: "First." },
-    { start: 60, end: 150, title: "Two", narration: "Second." },
-    { start: 150, end: 300, title: "Three", narration: "Third." },
-  ];
-
-  it("opens on the first chapter", () => {
-    expect(activeChapterAt(chapters, 0)).toBe(0);
-  });
-
-  it("advances exactly on the boundary, not a second late", () => {
-    // The boundary second belongs to the chapter starting on it. A `>` here
-    // would leave the rail a beat behind the footage all the way through.
-    expect(activeChapterAt(chapters, 59.9)).toBe(0);
-    expect(activeChapterAt(chapters, 60)).toBe(1);
-    expect(activeChapterAt(chapters, 150)).toBe(2);
-  });
-
-  it("stays on the last chapter as the video runs out", () => {
-    // Browsers report a currentTime a hair past the stored duration. Going
-    // blank there makes the rail flicker at the end of every playback.
-    expect(activeChapterAt(chapters, 299)).toBe(2);
-    expect(activeChapterAt(chapters, 300)).toBe(2);
-    expect(activeChapterAt(chapters, 400)).toBe(2);
-  });
-
-  it("reports no chapter when there are none", () => {
-    expect(activeChapterAt([], 12)).toBe(-1);
-  });
-
-  it("never lands on nothing, even for a rail that starts late", () => {
-    // `sealChapters` pulls the first start back to 0, so this should not
-    // happen - but a stored payload from an older version might not have been
-    // through it, and an unhighlighted rail is the worst-looking failure here.
-    const late = [{ start: 30, end: 60, title: "Late", narration: "Late." }];
-    expect(activeChapterAt(late, 0)).toBe(0);
-    expect(activeChapterAt(late, 10)).toBe(0);
-  });
-
-  it("survives a negative time", () => {
-    expect(activeChapterAt(chapters, -5)).toBe(0);
   });
 });
 
@@ -304,23 +217,6 @@ describe("the AI claim", () => {
     // Still says where the words came from, and how to get the real thing.
     expect(html).toContain("From this shot");
     expect(html).toContain("Regenerate the summary");
-  });
-
-  it("drops it in the player header too", () => {
-    const render = (aiGenerated: boolean) =>
-      renderToStaticMarkup(
-        <WalkthroughNarratedPlayer
-          videoUrl="https://example.test/walk.webm"
-          mimeType="video/webm"
-          durationSeconds={300}
-          narration={withFlag(aiGenerated)}
-          steps={steps}
-        />,
-      );
-    expect(render(true)).toContain("AI narrated");
-    expect(render(false)).not.toContain("AI narrated");
-    // The artefact is still a Summary, it just is not an AI one.
-    expect(render(false)).toContain("Summary");
   });
 
   it("keeps the badge for a payload stored before the flag was trustworthy", () => {
