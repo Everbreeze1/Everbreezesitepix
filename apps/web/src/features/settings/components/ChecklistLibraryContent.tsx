@@ -232,7 +232,7 @@ function ChecklistEditor({
   };
 
   return (
-    <div className="mx-auto w-full max-w-[900px]">
+    <div className="w-full">
       {/* Breadcrumb */}
       <div className="mb-3.5 text-[12.5px] text-faint">
         <a className="cursor-pointer text-primary hover:underline" onClick={onBack}>

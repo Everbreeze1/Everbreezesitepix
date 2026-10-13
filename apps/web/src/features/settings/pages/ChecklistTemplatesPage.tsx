@@ -825,7 +825,7 @@ function ChecklistTemplatesBuilder({
   ) : undefined;
 
   return (
-    <div className={embedded ? "" : "container mx-auto max-w-6xl px-4 pb-24 pt-4 md:pt-6"}>
+    <div className={embedded ? "" : "w-full px-4 pb-24 pt-4 sm:px-10 md:pt-6"}>
       {pane === "editor" && selected ? null : embedded ? (
         embeddedPage
       ) : (
@@ -864,7 +864,7 @@ function ChecklistTemplatesBuilder({
         />
       ) : selected && pane === "editor" ? (
         /* ============ EDITOR: the mockup's full-page checklist editor ============ */
-        <div className="mx-auto mt-6 w-full max-w-[900px] pb-10">
+        <div className="mt-6 w-full pb-10">
           <div className="flex items-center gap-1.5 text-[12.5px] text-faint">
             <button
               type="button"
