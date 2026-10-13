@@ -91,17 +91,6 @@ export function offsetLabel(note: SummaryPhotoNote, hasRecording: boolean): stri
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
-/**
- * Whether this shot was narrated.
- *
- * The distinction the service asks the UI to preserve. A silent shot has a note
- * the model wrote; a narrated one also has what the person actually said, and
- * their words are the more valuable of the two.
- */
-export function isNarrated(note: SummaryPhotoNote): boolean {
-  return Boolean(note.spoken?.trim());
-}
-
 /** Photos in the order they were taken, which is the order they were spoken about. */
 export function orderedNotes(notes: SummaryPhotoNote[]): SummaryPhotoNote[] {
   return [...notes].sort((a, b) => a.offsetSeconds - b.offsetSeconds);
