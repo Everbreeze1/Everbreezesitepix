@@ -20,16 +20,12 @@ import {
   queuedWalkthroughPhotos,
   reportNote,
   reportResultMessage,
-  transcriptionIsProblem,
-  transcriptionNotice,
   uploadHoldMessage,
   type QueuedWalkthroughPhotos,
 } from "@/api/walkthrough-report-view";
-import { retryWalkthroughTranscription } from "@/api/walkthrough-retry";
 import { listRows } from "@/offline/outbox";
 import { useQueue } from "@/offline/use-queue";
 import {
-  generateWalkthroughReport,
   getWalkthroughDetail,
   setWalkthroughShare,
   signWalkthroughVideo,
@@ -56,17 +52,14 @@ import {
 } from "@/api/walkthrough-list-view";
 import { goBack } from "@/lib/navigation";
 import { openShareSheet } from "@/api/sharing";
-import { SegmentTabs } from "@/components/walkthrough/SegmentTabs";
 import { SummaryReport } from "@/components/walkthrough/SummaryReport";
 import { radius, spacing, useLayout, useTheme } from "@/theme";
 import {
   CloudUpload,
   FileText,
   Link2,
-  Mic,
   Pencil,
   RefreshCw,
-  ScrollText,
   Share2,
   Sparkles,
   Trash2,
@@ -89,8 +82,6 @@ import {
   Text,
 } from "@/ui";
 
-type Tab = "summary" | "transcript";
-
 /** Outbox rows read when counting this walk's queued snaps. Far above any real queue. */
 const OUTBOX_SCAN_LIMIT = 1000;
 
@@ -106,12 +97,12 @@ function timecode(seconds: number): string {
  * A walkthrough is two artefacts, and this screen used to show one of them.
  * The video played, and the AI Summary (a separate row the service writes from
  * the transcript, with each photo described from what was said near it) was
- * only reachable from a list on another screen. Now the player sits at the top
- * and two labelled segments sit under it: the Summary, and the raw Transcript
- * it was written from.
+ * only reachable from a list on another screen. Now the player sits at the top,
+ * the photos taken along the way under it, then the Summary. There is no
+ * transcript tab: the transcript only exists to write the Summary.
  */
 export default function WalkthroughDetailScreen() {
-  const { id, tab, play } = useLocalSearchParams<{ id: string; tab?: string; play?: string }>();
+  const { id, play } = useLocalSearchParams<{ id: string; tab?: string; play?: string }>();
   const theme = useTheme();
   /*
    * On its side the recording and its title sit on the left and the summary
@@ -122,26 +113,11 @@ export default function WalkthroughDetailScreen() {
   const sideBySide = layout.spread;
   const queryClient = useQueryClient();
   const scrollRef = useRef<ScrollView>(null);
-  const [segment, setSegment] = useState<Tab>(tab === "transcript" ? "transcript" : "summary");
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   /* The edit sheet's draft: null while closed. */
   const [draft, setDraft] = useState<{ title: string; notes: string } | null>(null);
   const [draftError, setDraftError] = useState<string | null>(null);
-  /* Seconds the transcription retry has been waiting, while it runs. */
-  const [transcribeElapsed, setTranscribeElapsed] = useState(0);
-  const [transcribeResult, setTranscribeResult] = useState<{
-    text: string;
-    problem: boolean;
-  } | null>(null);
-  const mounted = useRef(true);
-  useEffect(
-    () => () => {
-      mounted.current = false;
-    },
-    [],
-  );
-
   /*
    * This walk's snaps still in the phone's upload queue.
    *
@@ -362,46 +338,6 @@ export default function WalkthroughDetailScreen() {
   }
 
   /**
-   * Transcribe the recording again, from the copy in storage.
-   *
-   * The server works in the background and this polls its outcome, so a long
-   * walk is not cut off by the phone's request timeout. Every ending is said
-   * out loud: transcribed, nothing heard, or how many minutes were lost.
-   */
-  async function onTranscribe() {
-    if (!id || !detail?.video_path) return;
-    setBusy("transcribe");
-    setNotice(null);
-    setTranscribeResult(null);
-    setTranscribeElapsed(0);
-    try {
-      const outcome = await retryWalkthroughTranscription({
-        walkthroughId: id,
-        storagePath: detail.video_path,
-        mimeType: detail.video_mime_type ?? "video/mp4",
-        onProgress: (seconds) => {
-          if (mounted.current) setTranscribeElapsed(seconds);
-        },
-        cancelled: () => !mounted.current,
-      });
-      if (!mounted.current) return;
-      setTranscribeResult({
-        text: transcriptionNotice(outcome),
-        problem: transcriptionIsProblem(outcome),
-      });
-      await detailQuery.refetch();
-    } catch (e) {
-      if (!mounted.current) return;
-      setTranscribeResult({
-        text: e instanceof Error ? e.message : "Could not transcribe the recording",
-        problem: true,
-      });
-    } finally {
-      if (mounted.current) setBusy(null);
-    }
-  }
-
-  /**
    * Share the write-up on its own.
    *
    * The summary's link, not the video's: a client can be sent the report
@@ -449,27 +385,6 @@ export default function WalkthroughDetailScreen() {
       }
     } catch (e) {
       setNotice(e instanceof Error ? e.message : "Could not create the report");
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  /*
-   * Re-runs the transcription write-up over the recording. Named for what it
-   * does, as the web's menu names it: the Summary above has its own
-   * Regenerate.
-   */
-  async function onReprocess() {
-    if (!id) return;
-    setBusy("report");
-    setNotice(null);
-    try {
-      await generateWalkthroughReport(id);
-      await detailQuery.refetch();
-      void summariesQuery.refetch();
-      setNotice("Recording reprocessed");
-    } catch (e) {
-      setNotice(e instanceof Error ? e.message : "Could not reprocess the recording");
     } finally {
       setBusy(null);
     }
@@ -666,236 +581,178 @@ export default function WalkthroughDetailScreen() {
               </View>
 
               <View style={sideBySide ? { flex: 1, gap: spacing.lg } : { gap: spacing.lg }}>
-                <SegmentTabs<Tab>
-                  segments={[
-                    { id: "summary", label: "Summary", icon: Sparkles },
-                    { id: "transcript", label: "Transcript", icon: ScrollText },
-                  ]}
-                  value={segment}
-                  onChange={setSegment}
-                />
-
                 {notice ? (
                   <Text variant="caption" tone="muted">
                     {notice}
                   </Text>
                 ) : null}
 
-                {segment === "summary" ? (
-                  <View style={{ gap: spacing.md }}>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
-                      <Icon icon={Sparkles} size="md" tone="primary" />
-                      <Text variant="heading" style={{ flex: 1 }}>
-                        AI Summary
-                      </Text>
-                      <Badge label={aiSummaryLabel(status)} tone={aiSummaryTone(status)} />
-                    </View>
-
-                    {status === "ready" && summaryQuery.data ? (
-                      <>
-                        <Text variant="caption" tone="muted">
-                          {`${summaryQuery.data.summary.title} · written ${relativeTime(
-                            summaryQuery.data.summary.updatedAt,
-                          )}`}
-                        </Text>
-                        <View style={{ flexDirection: "row", gap: spacing.sm }}>
-                          <View style={{ flex: 1 }}>
-                            <Button
-                              label="Share summary"
-                              icon={Share2}
-                              size="sm"
-                              fullWidth
-                              loading={busy === "shareSummary"}
-                              disabled={Boolean(busy)}
-                              onPress={() => void onShareSummary()}
-                            />
-                          </View>
-                          <View style={{ flex: 1 }}>
-                            <Button
-                              label="Open report"
-                              icon={FileText}
-                              variant="secondary"
-                              size="sm"
-                              fullWidth
-                              accessibilityHint="Opens the write-up to edit, rename or delete it"
-                              onPress={() => openSummary(summaryQuery.data!.summary.id)}
-                            />
-                          </View>
-                        </View>
-                        {newPhotosMessage(missingFromSummary) ? (
-                          <View style={{ flexDirection: "row", gap: spacing.sm }}>
-                            <Icon icon={TriangleAlert} size="md" tone="safety" />
-                            <Text variant="caption" tone="muted" style={{ flex: 1 }}>
-                              {newPhotosMessage(missingFromSummary)}
+                {detail.shots.length > 0 ? (
+                  <View style={{ gap: spacing.sm }}>
+                    <Text variant="overline" tone="muted">
+                      {`PHOTOS FROM THIS WALK · ${detail.shots.length}`}
+                    </Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                      <View style={{ flexDirection: "row", gap: spacing.sm }}>
+                        {detail.shots.map((shot: WalkthroughShot) => (
+                          <Pressable
+                            key={shot.id}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Photo at ${timecode(shot.offset_seconds)}`}
+                            accessibilityHint="Jumps the recording to this moment"
+                            onPress={() => seekTo(shot.offset_seconds)}
+                            style={({ pressed }) => ({
+                              width: 96,
+                              gap: spacing.xs,
+                              opacity: pressed ? 0.7 : 1,
+                            })}
+                          >
+                            <PhotoThumb uri={shotUrls[shot.photo_id]} width={96} height={96} />
+                            <Text variant="caption" tone="muted" align="center">
+                              {timecode(shot.offset_seconds)}
                             </Text>
-                          </View>
-                        ) : null}
-                        <SummaryReport
-                          summary={summaryQuery.data.summary}
-                          photos={summaryQuery.data.photos}
-                          onSeek={videoQuery.data ? seekTo : undefined}
-                        />
-                        <Button
-                          label="Regenerate summary"
-                          icon={RefreshCw}
-                          variant="outline"
-                          fullWidth
-                          loading={busy === "summary"}
-                          disabled={Boolean(busy)}
-                          onPress={confirmRegenerate}
-                        />
-                      </>
-                    ) : status === "ready" || (current && summaryQuery.isLoading) ? (
-                      <SkeletonList rows={2} />
-                    ) : status === "generating" ? (
-                      <Card>
-                        <View
-                          style={{ flexDirection: "row", gap: spacing.md, alignItems: "center" }}
-                        >
-                          <ActivityIndicator color={theme.colors.primary} />
-                          <Text variant="body" tone="muted" style={{ flex: 1 }}>
-                            {stateMessage("pending")}
-                          </Text>
-                        </View>
-                      </Card>
-                    ) : (
-                      <Card style={{ gap: spacing.md }}>
-                        {status === "failed" ? (
-                          <View style={{ flexDirection: "row", gap: spacing.sm }}>
-                            <Icon icon={TriangleAlert} size="md" tone="safety" />
-                            <Text variant="body" tone="muted" style={{ flex: 1 }}>
-                              {stateMessage("failed")}
-                            </Text>
-                          </View>
-                        ) : (
-                          <Text variant="body" tone="muted">
-                            Write this walk up as a report: an overview, the findings, and every
-                            photo you took with a note from what you said at that moment.
-                          </Text>
-                        )}
-                        {!detail.transcript ? (
-                          <Text variant="caption" tone="muted">
-                            There is no transcript yet, so the summary will lean on the photos.
-                          </Text>
-                        ) : null}
-                        {holdMessage ? <UploadHold message={holdMessage} /> : null}
-                        <Button
-                          label={status === "failed" ? "Try again" : "Generate summary"}
-                          icon={Sparkles}
-                          fullWidth
-                          loading={busy === "summary"}
-                          disabled={Boolean(busy)}
-                          onPress={() => whenUploaded(() => makeSummary(false))}
-                        />
-                      </Card>
-                    )}
-
-                    {ownSummaries.length > 1 ? (
-                      <>
-                        <SectionHeader title="Earlier summaries" count={ownSummaries.length - 1} />
-                        {ownSummaries.slice(1).map((earlier) => (
-                          <ListRow
-                            key={earlier.id}
-                            icon={FileText}
-                            title={earlier.title}
-                            subtitle={`Written ${relativeTime(earlier.createdAt)}`}
-                            onPress={() => openSummary(earlier.id)}
-                          />
+                          </Pressable>
                         ))}
-                      </>
-                    ) : null}
+                      </View>
+                    </ScrollView>
+                  </View>
+                ) : null}
 
-                    {/*
+                <View style={{ gap: spacing.md }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
+                    <Icon icon={Sparkles} size="md" tone="primary" />
+                    <Text variant="heading" style={{ flex: 1 }}>
+                      AI Summary
+                    </Text>
+                    <Badge label={aiSummaryLabel(status)} tone={aiSummaryTone(status)} />
+                  </View>
+
+                  {status === "ready" && summaryQuery.data ? (
+                    <>
+                      <Text variant="caption" tone="muted">
+                        {`${summaryQuery.data.summary.title} · written ${relativeTime(
+                          summaryQuery.data.summary.updatedAt,
+                        )}`}
+                      </Text>
+                      <View style={{ flexDirection: "row", gap: spacing.sm }}>
+                        <View style={{ flex: 1 }}>
+                          <Button
+                            label="Share summary"
+                            icon={Share2}
+                            size="sm"
+                            fullWidth
+                            loading={busy === "shareSummary"}
+                            disabled={Boolean(busy)}
+                            onPress={() => void onShareSummary()}
+                          />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Button
+                            label="Open report"
+                            icon={FileText}
+                            variant="secondary"
+                            size="sm"
+                            fullWidth
+                            accessibilityHint="Opens the write-up to edit, rename or delete it"
+                            onPress={() => openSummary(summaryQuery.data!.summary.id)}
+                          />
+                        </View>
+                      </View>
+                      {newPhotosMessage(missingFromSummary) ? (
+                        <View style={{ flexDirection: "row", gap: spacing.sm }}>
+                          <Icon icon={TriangleAlert} size="md" tone="safety" />
+                          <Text variant="caption" tone="muted" style={{ flex: 1 }}>
+                            {newPhotosMessage(missingFromSummary)}
+                          </Text>
+                        </View>
+                      ) : null}
+                      <SummaryReport
+                        summary={summaryQuery.data.summary}
+                        photos={summaryQuery.data.photos}
+                        onSeek={videoQuery.data ? seekTo : undefined}
+                      />
+                      <Button
+                        label="Regenerate summary"
+                        icon={RefreshCw}
+                        variant="outline"
+                        fullWidth
+                        loading={busy === "summary"}
+                        disabled={Boolean(busy)}
+                        onPress={confirmRegenerate}
+                      />
+                    </>
+                  ) : status === "ready" || (current && summaryQuery.isLoading) ? (
+                    <SkeletonList rows={2} />
+                  ) : status === "generating" ? (
+                    <Card>
+                      <View style={{ flexDirection: "row", gap: spacing.md, alignItems: "center" }}>
+                        <ActivityIndicator color={theme.colors.primary} />
+                        <Text variant="body" tone="muted" style={{ flex: 1 }}>
+                          {stateMessage("pending")}
+                        </Text>
+                      </View>
+                    </Card>
+                  ) : (
+                    <Card style={{ gap: spacing.md }}>
+                      {status === "failed" ? (
+                        <View style={{ flexDirection: "row", gap: spacing.sm }}>
+                          <Icon icon={TriangleAlert} size="md" tone="safety" />
+                          <Text variant="body" tone="muted" style={{ flex: 1 }}>
+                            {stateMessage("failed")}
+                          </Text>
+                        </View>
+                      ) : (
+                        <Text variant="body" tone="muted">
+                          Write this walk up as a report: an overview, the findings, and every photo
+                          you took with a note from what you said at that moment.
+                        </Text>
+                      )}
+                      {!detail.transcript ? (
+                        <Text variant="caption" tone="muted">
+                          There is no transcript yet, so the summary will lean on the photos.
+                        </Text>
+                      ) : null}
+                      {holdMessage ? <UploadHold message={holdMessage} /> : null}
+                      <Button
+                        label={status === "failed" ? "Try again" : "Generate summary"}
+                        icon={Sparkles}
+                        fullWidth
+                        loading={busy === "summary"}
+                        disabled={Boolean(busy)}
+                        onPress={() => whenUploaded(() => makeSummary(false))}
+                      />
+                    </Card>
+                  )}
+
+                  {ownSummaries.length > 1 ? (
+                    <>
+                      <SectionHeader title="Earlier summaries" count={ownSummaries.length - 1} />
+                      {ownSummaries.slice(1).map((earlier) => (
+                        <ListRow
+                          key={earlier.id}
+                          icon={FileText}
+                          title={earlier.title}
+                          subtitle={`Written ${relativeTime(earlier.createdAt)}`}
+                          onPress={() => openSummary(earlier.id)}
+                        />
+                      ))}
+                    </>
+                  ) : null}
+
+                  {/*
                   A walkthrough from before summaries had their own table
                   carries its write-up on the row itself. Shown only when there
                   is no summary, so nothing old is lost and nothing is doubled.
                 */}
-                    {!current && legacyReport ? (
-                      <>
-                        <SectionHeader title="Earlier report" />
-                        <Card>
-                          <Text variant="body">{plainBody(legacyReport)}</Text>
-                        </Card>
-                      </>
-                    ) : null}
-                  </View>
-                ) : (
-                  <View style={{ gap: spacing.md }}>
-                    {detail.shots.length > 0 ? (
-                      <View style={{ gap: spacing.sm }}>
-                        <Text variant="overline" tone="muted">
-                          {`PHOTOS ALONG THE WAY · ${detail.shots.length}`}
-                        </Text>
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                          <View style={{ flexDirection: "row", gap: spacing.sm }}>
-                            {detail.shots.map((shot: WalkthroughShot) => (
-                              <Pressable
-                                key={shot.id}
-                                accessibilityRole="button"
-                                accessibilityLabel={`Photo at ${timecode(shot.offset_seconds)}`}
-                                accessibilityHint="Jumps the recording to this moment"
-                                onPress={() => seekTo(shot.offset_seconds)}
-                                style={({ pressed }) => ({
-                                  width: 96,
-                                  gap: spacing.xs,
-                                  opacity: pressed ? 0.7 : 1,
-                                })}
-                              >
-                                <PhotoThumb uri={shotUrls[shot.photo_id]} width={96} height={96} />
-                                <Text variant="caption" tone="muted" align="center">
-                                  {timecode(shot.offset_seconds)}
-                                </Text>
-                              </Pressable>
-                            ))}
-                          </View>
-                        </ScrollView>
-                      </View>
-                    ) : null}
-
-                    <Card style={{ gap: spacing.sm }}>
-                      {detail.transcript ? (
-                        <Text variant="body" selectable>
-                          {detail.transcript}
-                        </Text>
-                      ) : (
-                        <>
-                          <Badge label="Not transcribed" tone="warning" />
-                          <Text variant="body" tone="muted">
-                            {detail.video_path
-                              ? "Transcribe the recording to caption each photo from what was said."
-                              : "There is no recording on this walkthrough to transcribe."}
-                          </Text>
-                        </>
-                      )}
-                      {transcribeResult ? (
-                        <View style={{ flexDirection: "row", gap: spacing.sm }}>
-                          {transcribeResult.problem ? (
-                            <Icon icon={TriangleAlert} size="md" tone="safety" />
-                          ) : null}
-                          <Text variant="caption" tone="muted" style={{ flex: 1 }}>
-                            {transcribeResult.text}
-                          </Text>
-                        </View>
-                      ) : null}
-                      {busy === "transcribe" ? (
-                        <Text variant="caption" tone="muted">
-                          {`Transcribing on the server · ${timecode(transcribeElapsed)}. A long walk can take a few minutes; you can leave this screen.`}
-                        </Text>
-                      ) : null}
-                      {detail.video_path ? (
-                        <Button
-                          label={detail.transcript ? "Transcribe again" : "Transcribe recording"}
-                          icon={Mic}
-                          variant={detail.transcript ? "outline" : "primary"}
-                          fullWidth
-                          loading={busy === "transcribe"}
-                          disabled={Boolean(busy)}
-                          onPress={() => void onTranscribe()}
-                        />
-                      ) : null}
-                    </Card>
-                  </View>
-                )}
+                  {!current && legacyReport ? (
+                    <>
+                      <SectionHeader title="Earlier report" />
+                      <Card>
+                        <Text variant="body">{plainBody(legacyReport)}</Text>
+                      </Card>
+                    </>
+                  ) : null}
+                </View>
 
                 <SectionHeader title="More" />
                 <View style={{ gap: spacing.sm }}>
@@ -921,15 +778,6 @@ export default function WalkthroughDetailScreen() {
                     loading={busy === "clientReport"}
                     disabled={Boolean(busy)}
                     onPress={() => whenUploaded(onCreateClientReport)}
-                  />
-                  <Button
-                    label="Reprocess recording"
-                    icon={RefreshCw}
-                    variant="ghost"
-                    fullWidth
-                    loading={busy === "report"}
-                    disabled={Boolean(busy)}
-                    onPress={() => whenUploaded(onReprocess)}
                   />
                   {/*
                     Not a refusal any more: the server builds from the photos

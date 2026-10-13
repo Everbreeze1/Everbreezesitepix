@@ -133,11 +133,20 @@ describe("Summary is the premium output of a walkthrough", () => {
   const DETAIL = "apps/web/src/features/walkthroughs/pages/WalkthroughDetailPage.tsx";
   const PLAYER = "apps/web/src/features/walkthroughs/components/WalkthroughNarration.tsx";
 
-  it("plays the recording with its narration rather than a thumbnail dialog", () => {
-    expect(read(DETAIL)).toContain("<WalkthroughNarratedPlayer");
+  it("plays the plain recording with its photos, not an AI voice-over", () => {
+    /*
+     * "we should have the video only and the screen shots taken ... we don't
+     * need no out loud AI narration. That is only used to produce automatic
+     * reports."
+     */
+    const src = read(DETAIL);
+    expect(src).toContain("<WalkthroughVideo");
+    expect(src).not.toContain("WalkthroughNarratedPlayer");
+    expect(src).not.toContain("generateWalkthroughNarration");
+    expect(read(PLAYER)).not.toContain("speechSynthesis");
   });
 
-  it("leaves the photo list to the summary", () => {
+  it("leaves the photo notes to the summary", () => {
     /*
      * The photo notes moved to the Summary page. "Right now the summery
      * produces the photo summery and the video in the same card" - the video
@@ -147,13 +156,12 @@ describe("Summary is the premium output of a walkthrough", () => {
     expect(read(DETAIL)).not.toContain("<AiNarratedPhotoSteps");
   });
 
-  it("renders a narrated photo differently from a silent one", () => {
-    // "not as a generic photo-caption card that looks the same whether or not
-    // anyone spoke during the recording."
+  it("does not repeat what the camera heard under the AI's note", () => {
+    // "On the pictures taken the AI hears the convo and writes its own notes.
+    // we dont need to also write what the camera heard."
     const src = read(PLAYER);
-    expect(src).toContain("Heard on camera");
-    expect(src).toContain("Nothing was said near this moment.");
-    expect(src).toContain("narration.hasSpeech");
+    expect(src).not.toContain("Heard on camera");
+    expect(src).not.toContain("Nothing was said near this moment.");
   });
 
   it("carries the AI-narrated treatment", () => {

@@ -1,5 +1,5 @@
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
   Loader2,
@@ -14,10 +14,7 @@ import {
   Check,
   Copy,
   MoreVertical,
-  PlayCircle,
   Download,
-  Mic,
-  TriangleAlert,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -39,19 +36,11 @@ import { useConfirm } from "@/hooks/use-confirm";
 import { useSubscription } from "@/hooks/use-subscription";
 import { UpgradeDialog } from "@/components/UpgradeDialog";
 import {
-  generateWalkthroughNarration,
   generateWalkthroughReport,
-  getWalkthroughTranscription,
   regenerateWalkthroughSummary,
   setWalkthroughShare,
-  transcribeWalkthrough,
   updateWalkthroughVideoPath,
 } from "@/features/walkthroughs/api";
-import {
-  runTranscription,
-  transcriptionIsProblem,
-  transcriptionNotice,
-} from "@/features/walkthroughs/transcription";
 import { toast } from "sonner";
 import { estimateWalkthroughNote, type WalkthroughPhotoStep } from "@/components/WalkthroughReport";
 import {
@@ -59,12 +48,7 @@ import {
   listProjectSummaries,
   type ProjectSummaryListItem,
 } from "@/lib/summaries.functions";
-import { VideoPlayerDialog } from "@/features/photos/components/VideoPlayerDialog";
-import { VideoThumbnail } from "@/features/photos/components/VideoThumbnail";
-import {
-  WalkthroughNarratedPlayer,
-  type WalkthroughNarration as WalkthroughNarrationPayload,
-} from "@/features/walkthroughs/components/WalkthroughNarration";
+import { WalkthroughVideo } from "@/features/walkthroughs/components/WalkthroughVideo";
 
 interface Walkthrough {
   id: string;
@@ -107,16 +91,6 @@ export function WalkthroughDetailPage() {
   const [regenerating, setRegenerating] = useState(false);
   const [copied, setCopied] = useState(false);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
-  const [videoOpen, setVideoOpen] = useState(false);
-  /**
-   * The AI narration behind the premium Summary. Null until it loads, and null
-   * for good on a database that has not run the narration migration - both of
-   * which fall back to the plain video card and the old photo strip.
-   */
-  const [narration, setNarration] = useState<WalkthroughNarrationPayload | null>(null);
-  const [narrationLoading, setNarrationLoading] = useState(false);
-  /** Set by the player so the photo list below can seek it. */
-  const playerRef = useRef<{ seek: (seconds: number) => void } | null>(null);
   /**
    * The summaries written from this recording.
    *
@@ -127,21 +101,6 @@ export function WalkthroughDetailPage() {
    */
   const [ownSummaries, setOwnSummaries] = useState<ProjectSummaryListItem[]>([]);
   const [makingSummary, setMakingSummary] = useState(false);
-  /* The "Transcribe recording" retry: whether it runs, for how long, and how it ended. */
-  const [transcribing, setTranscribing] = useState(false);
-  const [transcribeElapsed, setTranscribeElapsed] = useState(0);
-  const [transcribeResult, setTranscribeResult] = useState<{
-    text: string;
-    problem: boolean;
-  } | null>(null);
-  const mounted = useRef(true);
-  useEffect(
-    () => () => {
-      mounted.current = false;
-    },
-    [],
-  );
-
   const regenerate = generateWalkthroughReport;
   const setShare = setWalkthroughShare;
   const updateWalkVideo = updateWalkthroughVideoPath;
@@ -297,39 +256,6 @@ export function WalkthroughDetailPage() {
   }, [walkthroughId, user?.id]);
 
   /*
-   * Fetch the narration behind the Summary.
-   *
-   * Only for a finished recording: a Summary row has no walk to narrate, and a
-   * walkthrough still transcribing has no transcript to narrate FROM - asking
-   * early would cache a payload written from nothing. The server returns the
-   * stored narration unless forced, so this costs one select on every open
-   * after the first.
-   */
-  useEffect(() => {
-    if (!walk || walk.source === "summary" || walk.status !== "ready") return;
-    if (narration || narrationLoading) return;
-    let cancelled = false;
-    setNarrationLoading(true);
-    void generateWalkthroughNarration({ data: { walkthroughId: walk.id } })
-      .then((res) => {
-        if (!cancelled)
-          setNarration((res?.narration ?? null) as WalkthroughNarrationPayload | null);
-      })
-      .catch((e) => {
-        // Narration is an enhancement over a page that already works. A
-        // failure must not replace the user's summary with an error.
-        console.warn("[walkthrough] narration unavailable", e);
-      })
-      .finally(() => {
-        if (!cancelled) setNarrationLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [walk?.id, walk?.status, walk?.source]);
-
-  /*
    * The summaries written from this recording.
    *
    * Keyed on the project rather than fetched per walkthrough: the project list
@@ -389,54 +315,6 @@ export function WalkthroughDetailPage() {
       toast.error(e?.message ?? "Could not generate the summary");
     } finally {
       setMakingSummary(false);
-    }
-  };
-
-  /**
-   * Transcribe the stored recording again.
-   *
-   * The server works in the background and records the outcome on the row;
-   * this polls it, so a long walk is not cut short by the request timeout.
-   * Every ending is said: transcribed, nothing heard, or minutes lost.
-   */
-  const onTranscribe = async () => {
-    if (!walk?.video_path) return;
-    const videoPath = walk.video_path;
-    setTranscribing(true);
-    setTranscribeElapsed(0);
-    setTranscribeResult(null);
-    try {
-      const outcome = await runTranscription({
-        start: () =>
-          transcribeWalkthrough({
-            data: {
-              walkthroughId: walk.id,
-              storagePath: videoPath,
-              bucket: "site-videos",
-              mimeType: walk.video_mime_type ?? "video/webm",
-              background: true,
-            },
-          }),
-        status: () => getWalkthroughTranscription({ data: { walkthroughId: walk.id } }),
-        onProgress: (seconds) => {
-          if (mounted.current) setTranscribeElapsed(seconds);
-        },
-        cancelled: () => !mounted.current,
-      });
-      if (!mounted.current) return;
-      const text = transcriptionNotice(outcome);
-      const problem = transcriptionIsProblem(outcome);
-      setTranscribeResult({ text, problem });
-      if (problem) toast.warning(text);
-      else toast.success(text);
-      void load();
-    } catch (e: any) {
-      if (!mounted.current) return;
-      const text = e?.message ?? "Could not transcribe the recording";
-      setTranscribeResult({ text, problem: true });
-      toast.error(text);
-    } finally {
-      if (mounted.current) setTranscribing(false);
     }
   };
 
@@ -730,16 +608,6 @@ export function WalkthroughDetailPage() {
                       <Save className="mr-2 h-3.5 w-3.5" />
                       Edit
                     </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => void onRegenerate()} disabled={regenerating}>
-                      <Sparkles className="mr-2 h-3.5 w-3.5" />
-                      {/*
-                        Named for what it does. It re-runs the transcription and
-                        narration pass over the recording, which is what the
-                        player and the shared video page read - not the Summary,
-                        which is a separate document with a Regenerate of its own.
-                      */}
-                      {regenerating ? "Reprocessing\u2026" : "Reprocess recording"}
-                    </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       onSelect={() => void onDelete()}
@@ -755,6 +623,21 @@ export function WalkthroughDetailPage() {
           </div>
         </div>
       </Card>
+
+      {/*
+        The recording itself, then the photos taken along the way. No AI voice
+        reading over it and no transcript tools: the narration and transcript
+        exist to write the Summary, which is linked below.
+      */}
+      {videoUrl ? (
+        <WalkthroughVideo
+          className="mt-4"
+          videoUrl={videoUrl}
+          mimeType={walk.video_mime_type}
+          durationSeconds={walk.duration_seconds ?? 0}
+          steps={photoSteps}
+        />
+      ) : null}
 
       {/*
         The Summary written from this walk: linked, not embedded.
@@ -791,9 +674,9 @@ export function WalkthroughDetailPage() {
 
         {ownSummaries.length === 0 ? (
           <p className="mt-2 text-sm text-muted-foreground">
-            Write this walk up as a document: what was said, and every photo you took with a note of
-            its own. It gets its own page and its own share link, so a client can be sent the
-            summary without the footage.
+            AI writes this walk up as a report from what you said and the photos you took. It gets
+            its own page and its own share link, so a client can be sent the report without the
+            footage.
           </p>
         ) : (
           <ul className="mt-2 space-y-1.5">
@@ -817,115 +700,6 @@ export function WalkthroughDetailPage() {
       </Card>
 
       {/*
-        The transcript behind everything above, and the way to make it again.
-        A recording whose transcription failed at Stop (or heard nothing, or
-        lost a few minutes) used to have no way back from either app.
-      */}
-      {walk.source !== "summary" && walk.video_path ? (
-        <Card className="mt-4 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
-                Transcript
-              </p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {walk.transcript?.trim()
-                  ? `Transcribed, ${walk.transcript.trim().split(/\s+/).length} words.`
-                  : "Not transcribed yet. Reports are built from the photos until it is."}
-              </p>
-            </div>
-            <Button
-              size="sm"
-              variant={walk.transcript?.trim() ? "outline" : "default"}
-              disabled={transcribing}
-              onClick={() => void onTranscribe()}
-              className="h-8 rounded-lg text-xs font-bold"
-            >
-              {transcribing ? (
-                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Mic className="mr-1.5 h-3.5 w-3.5" />
-              )}
-              {walk.transcript?.trim() ? "Transcribe again" : "Transcribe recording"}
-            </Button>
-          </div>
-          {transcribing ? (
-            <p className="mt-2 text-xs text-muted-foreground">
-              Transcribing on the server · {fmt(transcribeElapsed)}. A long walk can take a few
-              minutes; you can leave this page.
-            </p>
-          ) : null}
-          {transcribeResult ? (
-            <p
-              className={`mt-2 flex items-start gap-1.5 text-xs ${
-                transcribeResult.problem ? "text-destructive" : "text-muted-foreground"
-              }`}
-            >
-              {transcribeResult.problem ? (
-                <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              ) : null}
-              <span>{transcribeResult.text}</span>
-            </p>
-          ) : null}
-        </Card>
-      ) : null}
-
-      {/*
-        The flagship: the recording playing with its AI narration on the same
-        timeline. Falls back to the old thumbnail card when there is no
-        narration yet - a walkthrough recorded before this feature, or a
-        database that has not run the narration migration - so the video is
-        never unreachable while the narration catches up.
-      */}
-      {videoUrl && narration ? (
-        <WalkthroughNarratedPlayer
-          className="mt-4"
-          videoUrl={videoUrl}
-          mimeType={walk.video_mime_type}
-          durationSeconds={walk.duration_seconds ?? 0}
-          narration={narration}
-          steps={photoSteps}
-          controllerRef={playerRef}
-        />
-      ) : videoUrl ? (
-        <Card className="mt-4 overflow-hidden p-0">
-          <VideoThumbnail
-            cacheKey={`walk-detail:${walk.id}`}
-            videoUrl={videoUrl}
-            onClick={() => {
-              devLog("[walkthrough] detail video thumbnail clicked", {
-                wid: walk.id,
-                hasVideoUrl: !!videoUrl,
-              });
-              setVideoOpen(true);
-            }}
-          />
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border p-3">
-            <div className="min-w-0">
-              <p className="text-sm font-medium">Walkthrough video</p>
-              {narrationLoading && (
-                <p className="text-[11px] text-muted-foreground">Writing AI narration…</p>
-              )}
-            </div>
-            <Button size="sm" onClick={() => setVideoOpen(true)}>
-              <PlayCircle className="mr-1.5 h-3.5 w-3.5" />
-              Play video
-            </Button>
-          </div>
-        </Card>
-      ) : null}
-
-      {
-        <VideoPlayerDialog
-          open={videoOpen}
-          onClose={() => setVideoOpen(false)}
-          videoUrl={videoUrl}
-          title={displayTitle}
-          mimeType={walk.video_mime_type}
-        />
-      }
-
-      {/*
         Deliberately no written summary and no photo list on this page.
 
         "Right now the summery produces the photo summery and the video in the
@@ -933,9 +707,6 @@ export function WalkthroughDetailPage() {
         write-up is a document of its own, at its own URL, with its own share
         link - which is what lets a client be sent one without the other. The
         card above links across to it.
-
-        The chapter rail inside the player stays, because that is navigation
-        within the footage rather than a second copy of the summary.
       */}
       {editing ? (
         <Card className="mt-4 p-5">

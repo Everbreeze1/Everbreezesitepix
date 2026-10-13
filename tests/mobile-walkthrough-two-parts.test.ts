@@ -118,12 +118,16 @@ describe("the screens are wired to both halves", () => {
     expect(card).toContain("AI Summary");
   });
 
-  it("the detail screen puts Summary and Transcript under the player", () => {
+  it("the detail screen puts the photos and the Summary under the player", () => {
+    // No Transcript tab and no "Transcribe again": the transcript only exists
+    // to write the Summary.
     const s = read("apps/mobile/app/(app)/walkthrough/[id].tsx");
-    expect(s.indexOf("<VideoView")).toBeGreaterThan(-1);
-    expect(s.indexOf("<SegmentTabs")).toBeGreaterThan(s.indexOf("<VideoView"));
-    expect(s).toContain('label: "Summary"');
-    expect(s).toContain('label: "Transcript"');
+    const video = s.indexOf("<VideoView");
+    expect(video).toBeGreaterThan(-1);
+    expect(s.indexOf("PHOTOS FROM THIS WALK")).toBeGreaterThan(video);
+    expect(s.indexOf("<SummaryReport")).toBeGreaterThan(s.indexOf("PHOTOS FROM THIS WALK"));
+    expect(s).not.toContain('label: "Transcript"');
+    expect(s).not.toContain("Transcribe again");
     expect(s).toContain("generateSummaryForWalkthrough");
   });
 
