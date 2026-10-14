@@ -193,6 +193,7 @@ export { readsAsDatabaseInternals, readableErrorMessage } from "./db-internals";
 export { titleWithinProject } from "./title-within-project";
 export {
   STUCK_AFTER_HOURS,
+  SHOW_WORKFLOWS,
   describeMissing,
   isStagedRun,
   isStepDone,

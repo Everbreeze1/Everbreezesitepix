@@ -162,7 +162,7 @@ export const PLANS: PlanPricing[] = [
     maxSeats: SELF_SERVE_SEAT_CAP,
     advertiseSeatCap: false,
     adds: [
-      "Workflows & project blueprints",
+      "Project blueprints",
       // The Portfolio lock screen sends people here with "See Team plan", and
       // this list is what they land on - it named every other Team feature
       // except the one they clicked for.

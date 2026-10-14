@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { Layers } from "lucide-react";
-import { relativeTime } from "@everlumen/shared";
+import { relativeTime, SHOW_WORKFLOWS } from "@everlumen/shared";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { BlueprintOriginApplication, BlueprintOriginItem } from "@/lib/blueprint.functions";
 import type { BlueprintOriginState } from "@/hooks/use-project-blueprint-origin";
@@ -131,6 +131,8 @@ function ApplicationBlock({
     // and now shows zero is kept, because "all of them are gone" is exactly the
     // fact this panel exists to surface.
     if (delivered === 0 && n === 0) return null;
+    // Workflows are hidden (SHOW_WORKFLOWS), and so is the tab these land on.
+    if (!SHOW_WORKFLOWS && meta.destination === "workflows") return null;
     return { kind, meta, n, delivered };
   }).filter(Boolean) as Array<{
     kind: BlueprintItemKind;

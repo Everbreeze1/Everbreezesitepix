@@ -9,6 +9,8 @@
  * to its own icon set.
  */
 
+import { SHOW_WORKFLOWS } from "./workflow-stages";
+
 export type HelpIconId =
   | "folder-kanban"
   | "camera"
@@ -62,7 +64,7 @@ export type HelpCategory = {
  * Plan gates and role gates are stated in the article rather than left for
  * someone to discover at the moment they press the button.
  */
-export const HELP_CATEGORIES: readonly HelpCategory[] = [
+const ALL_HELP_CATEGORIES: readonly HelpCategory[] = [
   {
     id: "projects",
     title: "Projects & pipelines",
@@ -86,13 +88,12 @@ export const HELP_CATEGORIES: readonly HelpCategory[] = [
       {
         id: "project-tabs",
         title: "What each project tab holds",
-        summary:
-          "Photos, Documents, Reports, Checklists, Walkthroughs, Workflows, Tasks, Calendar.",
+        summary: "Photos, Documents, Reports, Checklists, Walkthroughs, Tasks, Calendar.",
         steps: [
           "Photos: everything captured on the job. Select photos here to tag, share, or generate a document from them.",
           "Documents: paperwork produced from your document templates.",
           "Reports: client-ready PDFs and AI summaries.",
-          "Checklists and Workflows: the work the crew runs on site.",
+          "Checklists: the work the crew runs on site.",
           "Tasks: who is doing what, by when.",
           "Calendar: the same photos laid out by the day they were taken.",
         ],
@@ -380,7 +381,7 @@ export const HELP_CATEGORIES: readonly HelpCategory[] = [
         title: "What a blueprint is",
         summary: "The whole job setup, bundled and reusable.",
         steps: [
-          "A blueprint is a complete job setup in one bundle: the checklists the crew runs, the workflows it follows, the walkthrough shot lists it works to, the paperwork it produces, and the labels that file it.",
+          "A blueprint is a complete job setup in one bundle: the checklists the crew runs, the walkthrough shot lists it works to, the paperwork it produces, and the labels that file it.",
           "The pieces themselves live on the other Templates tabs. A blueprint only bundles references to them, so editing a checklist template updates every blueprint that uses it.",
           "Blueprints are the first tab of Templates, called Project blueprints.",
         ],
@@ -392,7 +393,7 @@ export const HELP_CATEGORIES: readonly HelpCategory[] = [
         steps: [
           "Open Templates in the sidebar. You land on Project blueprints.",
           "Click “Start from a pre-built blueprint” to install a complete worked example, or New blueprint to build your own.",
-          "With the blueprint selected, add sections from the picker: checklists, workflows, walkthroughs, documents, reports and label sets.",
+          "With the blueprint selected, add sections from the picker: checklists, documents and reports.",
           "Drag the sections into the order you want them created in.",
         ],
         tips: [
@@ -427,7 +428,7 @@ export const HELP_CATEGORIES: readonly HelpCategory[] = [
         summary: "Eight tabs, one place to manage every reusable piece.",
         steps: [
           "Open Templates in the sidebar. Project blueprints comes first, and bundles everything below it into one job setup.",
-          "Checklists holds flat item lists. Workflows holds multi-phase processes with sign-offs.",
+          "Checklists holds flat item lists.",
           "Walkthroughs holds shot lists: the sequence of shots a crew works through, so the same job is documented the same way every time.",
           "Documents holds Word-style templates with placeholders that auto-fill from project data. Reports holds report layouts.",
           "Label sets bundles related labels so you can apply them together. Labels is the catalogue of the individual labels themselves.",
@@ -706,6 +707,14 @@ export const HELP_CATEGORIES: readonly HelpCategory[] = [
     ],
   },
 ];
+
+/**
+ * The categories as shown. Workflows are hidden (SHOW_WORKFLOWS), so their
+ * articles are too: a guide to a screen nobody can reach only confuses.
+ */
+export const HELP_CATEGORIES: readonly HelpCategory[] = SHOW_WORKFLOWS
+  ? ALL_HELP_CATEGORIES
+  : ALL_HELP_CATEGORIES.filter((c) => c.id !== "workflows");
 
 /** Every guide id, in reading order. */
 export const HELP_GUIDE_IDS: readonly string[] = HELP_CATEGORIES.flatMap((c) =>

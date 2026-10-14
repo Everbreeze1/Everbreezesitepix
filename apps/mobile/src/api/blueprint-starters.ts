@@ -1,3 +1,4 @@
+import { SHOW_WORKFLOWS } from "@everlumen/shared";
 import type { BlueprintItemKind } from "./blueprints-view";
 
 /**
@@ -26,7 +27,7 @@ export type BlueprintStarter = {
   pieces: BlueprintStarterPiece[];
 };
 
-export const BLUEPRINT_STARTERS: BlueprintStarter[] = [
+const ALL_BLUEPRINT_STARTERS: BlueprintStarter[] = [
   {
     name: "Emergency Service Call",
     category: "Plumbing",
@@ -44,7 +45,7 @@ export const BLUEPRINT_STARTERS: BlueprintStarter[] = [
     name: "New Plumbing Install",
     category: "Plumbing",
     description:
-      "A multi-day install: staged workflow, pre-work condition record, and the paperwork that closes it out.",
+      "A multi-day install: pre-work condition record, the job checklist, and the paperwork that closes it out.",
     labels: ["Install"],
     pieces: [
       { kind: "workflow", name: "Install job" },
@@ -69,6 +70,18 @@ export const BLUEPRINT_STARTERS: BlueprintStarter[] = [
     ],
   },
 ];
+
+/**
+ * The starters as offered, as the web filters them. With Workflows hidden
+ * (`SHOW_WORKFLOWS`) their workflow piece is dropped, so the card does not
+ * list it and installing one does not build it.
+ */
+export const BLUEPRINT_STARTERS: BlueprintStarter[] = SHOW_WORKFLOWS
+  ? ALL_BLUEPRINT_STARTERS
+  : ALL_BLUEPRINT_STARTERS.map((s) => ({
+      ...s,
+      pieces: s.pieces.filter((p) => p.kind !== "workflow"),
+    }));
 
 export type ChecklistStarter = {
   name: string;

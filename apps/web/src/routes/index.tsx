@@ -152,7 +152,7 @@ const whatsNew = [
     ring: "#DDD6FE",
     badge: "Ask, investigate, locate",
     title: "AI assistant",
-    desc: "Use the assistant for ad hoc project questions: what changed, what is unresolved, and where the evidence is. Reports use the same project record to produce the formal document; workflows remain the structured process for assigned steps and sign-off.",
+    desc: "Use the assistant for ad hoc project questions: what changed, what is unresolved, and where the evidence is. Reports use the same project record to produce the formal document.",
     span: "narrow",
   },
   {

@@ -45,7 +45,12 @@ import {
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { goBack } from "@/lib/navigation";
 import { useInfiniteQuery, useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { displayCaption, formatPhotoDateGroup, projectDisplayName } from "@everlumen/shared";
+import {
+  displayCaption,
+  formatPhotoDateGroup,
+  projectDisplayName,
+  SHOW_WORKFLOWS,
+} from "@everlumen/shared";
 import {
   listProjectPhotoPage,
   PHOTO_PAGE_SIZE,
@@ -173,7 +178,7 @@ type DetailTab = InPlaceTab | LinkedTab;
  * which is the same as neither having one; `NotebookPen` is what the Daily
  * Log card already uses for a day written up.
  */
-const TAB_DEFS: ProjectTab<DetailTab>[] = [
+const ALL_TAB_DEFS: ProjectTab<DetailTab>[] = [
   { id: "photos", label: "Photos", icon: Images },
   { id: "documents", label: "Documents", icon: FileText },
   { id: "reports", label: "Reports", icon: Send },
@@ -185,6 +190,9 @@ const TAB_DEFS: ProjectTab<DetailTab>[] = [
   // This job's photos by day, as the web project page's Calendar tab.
   { id: "calendar", label: "Calendar", icon: Calendar },
 ];
+
+// Workflows are hidden product-wide (`SHOW_WORKFLOWS`); the data stays.
+const TAB_DEFS = ALL_TAB_DEFS.filter((tab) => SHOW_WORKFLOWS || tab.id !== "workflows");
 
 const LINKED_TABS: Record<LinkedTab, (id: string) => void> = {
   documents: (id) => router.push(`/project/${id}/documents`),
@@ -420,7 +428,8 @@ export default function ProjectDetailScreen() {
   const workflowsQuery = useQuery({
     queryKey: ["project-workflows", id],
     queryFn: () => listProjectWorkflows(id!),
-    enabled: countsEnabled,
+    // No tab to count for while Workflows are hidden.
+    enabled: countsEnabled && SHOW_WORKFLOWS,
     staleTime: 60_000,
   });
   const tasksQuery = useQuery({
@@ -980,10 +989,12 @@ export default function ProjectDetailScreen() {
                   />
                 </View>
 
-                <ProjectWorkflowStrip
-                  projectId={String(id)}
-                  onOpen={() => router.push(`/project/${id}/workflows`)}
-                />
+                {SHOW_WORKFLOWS ? (
+                  <ProjectWorkflowStrip
+                    projectId={String(id)}
+                    onOpen={() => router.push(`/project/${id}/workflows`)}
+                  />
+                ) : null}
 
                 <ProjectTabs tabs={tabs} value={tab} onChange={onTab} />
 

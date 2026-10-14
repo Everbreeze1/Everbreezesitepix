@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import { View } from "react-native";
 import { router, Stack, type Href } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { SHOW_WORKFLOWS } from "@everlumen/shared";
 import { createChecklistTemplate, listAllChecklistTemplates } from "@/api/template-admin";
 import { templateNameError } from "@/api/template-edit";
 import {
@@ -96,6 +97,9 @@ const LIBRARIES: {
  * walkthroughs each have a screen of their own, reached from the top of this
  * one. Nothing here sends anyone to a browser any more: every library the web
  * manages can be created, edited, duplicated and deleted on the phone.
+ *
+ * Workflows are hidden product-wide (`SHOW_WORKFLOWS`), so their section and
+ * the "Workflow" choice are left out; the templates themselves are kept.
  */
 export default function TemplatesScreen() {
   const queryClient = useQueryClient();
@@ -116,6 +120,7 @@ export default function TemplatesScreen() {
   const workflowsQuery = useQuery({
     queryKey: ["workflow-templates-admin"],
     queryFn: listAllWorkflowTemplates,
+    enabled: SHOW_WORKFLOWS,
   });
   const teamQuery = useQuery({ queryKey: ["my-team"], queryFn: getMyTeam });
 
@@ -233,7 +238,8 @@ export default function TemplatesScreen() {
         refreshing={checklistsQuery.isRefetching || workflowsQuery.isRefetching}
         onRefresh={() => {
           void checklistsQuery.refetch();
-          void workflowsQuery.refetch();
+          // `refetch` ignores `enabled`, so the hidden library is skipped here too.
+          if (SHOW_WORKFLOWS) void workflowsQuery.refetch();
         }}
         bottomInset={spacing.xxl}
       >
@@ -324,70 +330,79 @@ export default function TemplatesScreen() {
               ) : null}
             </View>
 
-            <SectionHeader title={`Workflows (${visibleWorkflows.length})`} />
-            <View style={{ paddingHorizontal: spacing.lg, gap: spacing.md }}>
-              {visibleWorkflows.length === 0 ? (
-                <Text variant="caption" tone="muted">
-                  No workflow templates yet.
-                </Text>
-              ) : (
-                <ListGroup>
-                  {visibleWorkflows.map((template, index) => (
-                    <View key={template.id}>
-                      {index > 0 ? <RowDivider /> : null}
-                      <ListRow
-                        icon={Workflow}
-                        iconTone={template.archived ? "muted" : "primary"}
-                        title={template.name}
-                        subtitle={
-                          [template.archived ? "Archived" : null, template.description]
-                            .filter(Boolean)
-                            .join(" · ") || undefined
-                        }
-                        chevron={!canManage}
-                        right={
-                          canManage ? (
-                            <IconButton
-                              icon={EllipsisVertical}
-                              tone="muted"
-                              surface={false}
-                              accessibilityLabel={`More actions for ${template.name}`}
-                              onPress={() => setWorkflowMenu(template)}
-                            />
-                          ) : undefined
-                        }
-                        onPress={
-                          canManage
-                            ? () =>
-                                router.push({
-                                  pathname: "/workflow-template/[templateId]",
-                                  params: { templateId: template.id, name: template.name },
-                                })
-                            : undefined
-                        }
-                      />
-                    </View>
-                  ))}
-                </ListGroup>
-              )}
-              {archivedWorkflows > 0 ? (
-                <Button
-                  label={
-                    showArchivedWorkflows ? "Hide archived" : `Show ${archivedWorkflows} archived`
-                  }
-                  icon={Archive}
-                  variant="ghost"
-                  fullWidth
-                  onPress={() => setShowArchivedWorkflows((current) => !current)}
-                />
-              ) : null}
-              {!canManage && teamQuery.isSuccess ? (
+            {SHOW_WORKFLOWS ? (
+              <>
+                <SectionHeader title={`Workflows (${visibleWorkflows.length})`} />
+                <View style={{ paddingHorizontal: spacing.lg, gap: spacing.md }}>
+                  {visibleWorkflows.length === 0 ? (
+                    <Text variant="caption" tone="muted">
+                      No workflow templates yet.
+                    </Text>
+                  ) : (
+                    <ListGroup>
+                      {visibleWorkflows.map((template, index) => (
+                        <View key={template.id}>
+                          {index > 0 ? <RowDivider /> : null}
+                          <ListRow
+                            icon={Workflow}
+                            iconTone={template.archived ? "muted" : "primary"}
+                            title={template.name}
+                            subtitle={
+                              [template.archived ? "Archived" : null, template.description]
+                                .filter(Boolean)
+                                .join(" · ") || undefined
+                            }
+                            chevron={!canManage}
+                            right={
+                              canManage ? (
+                                <IconButton
+                                  icon={EllipsisVertical}
+                                  tone="muted"
+                                  surface={false}
+                                  accessibilityLabel={`More actions for ${template.name}`}
+                                  onPress={() => setWorkflowMenu(template)}
+                                />
+                              ) : undefined
+                            }
+                            onPress={
+                              canManage
+                                ? () =>
+                                    router.push({
+                                      pathname: "/workflow-template/[templateId]",
+                                      params: { templateId: template.id, name: template.name },
+                                    })
+                                : undefined
+                            }
+                          />
+                        </View>
+                      ))}
+                    </ListGroup>
+                  )}
+                  {archivedWorkflows > 0 ? (
+                    <Button
+                      label={
+                        showArchivedWorkflows
+                          ? "Hide archived"
+                          : `Show ${archivedWorkflows} archived`
+                      }
+                      icon={Archive}
+                      variant="ghost"
+                      fullWidth
+                      onPress={() => setShowArchivedWorkflows((current) => !current)}
+                    />
+                  ) : null}
+                </View>
+              </>
+            ) : null}
+            {!canManage && teamQuery.isSuccess ? (
+              <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.md }}>
                 <Text variant="caption" tone="muted">
                   Only an owner or admin can change the shared library. You can still start a
-                  checklist or workflow from any of these on a project.
+                  {SHOW_WORKFLOWS ? " checklist or workflow" : " checklist"} from any of these on a
+                  project.
                 </Text>
-              ) : null}
-            </View>
+              </View>
+            ) : null}
           </>
         )}
       </Screen>
@@ -402,11 +417,15 @@ export default function TemplatesScreen() {
             icon: ClipboardCheck,
             onPress: () => openDraft({ kind: "checklist", editing: null }),
           },
-          {
-            label: "Workflow",
-            icon: Workflow,
-            onPress: () => openDraft({ kind: "workflow", editing: null }),
-          },
+          ...(SHOW_WORKFLOWS
+            ? [
+                {
+                  label: "Workflow",
+                  icon: Workflow,
+                  onPress: () => openDraft({ kind: "workflow", editing: null }),
+                },
+              ]
+            : []),
           ...LIBRARIES.map((library) => ({
             label:
               library.title === "Walkthroughs" ? "Walkthrough" : library.title.replace(/s$/, ""),

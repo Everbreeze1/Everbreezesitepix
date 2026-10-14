@@ -1,9 +1,10 @@
 /**
  * Where a notification sends you, and how it reads.
  *
- * Import-free so the routing rules can be tested directly, because the failure
- * they guard against is silent: a notification whose tap does nothing looks
- * exactly like a notification that has not finished loading.
+ * Import-free (the shared `SHOW_WORKFLOWS` flag aside) so the routing rules
+ * can be tested directly, because the failure they guard against is silent: a
+ * notification whose tap does nothing looks exactly like a notification that
+ * has not finished loading.
  *
  * The awkward part is that `link_path` is written for the **web** router. The
  * triggers in `supabase/migrations/*_notifications.sql` and the API services
@@ -20,6 +21,8 @@
  * the path, they cannot drift out of sync with the web routes, and every
  * notification raised since the table was created has them.
  */
+
+import { SHOW_WORKFLOWS } from "@everlumen/shared";
 
 /**
  * Every value the `type` column is allowed to hold.
@@ -136,6 +139,10 @@ export function notificationTarget(n: NotificationTargetInput): NotificationTarg
       case "checklist":
         return { pathname: "/checklist/[id]", params: { id: n.entityId } };
       case "workflow":
+        // Workflows are hidden (`SHOW_WORKFLOWS`): an old workflow notification
+        // falls through to its project below (the triggers always write
+        // `project_id` for one) instead of a parked screen.
+        if (!SHOW_WORKFLOWS) break;
         return { pathname: "/workflow/[id]", params: { id: n.entityId } };
       default:
         break;

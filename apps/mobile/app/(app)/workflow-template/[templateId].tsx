@@ -1,7 +1,8 @@
 import { useCallback, useMemo, useState } from "react";
 import { Alert, View } from "react-native";
-import { Stack, useLocalSearchParams } from "expo-router";
+import { Redirect, Stack, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { SHOW_WORKFLOWS } from "@everlumen/shared";
 import { moved, nextPosition, ordered, positionChanges, removed } from "@/api/template-edit";
 import { listChecklistTemplates } from "@/api/templates";
 import {
@@ -67,7 +68,16 @@ import {
  * reason, using the same helpers: `template-edit.ts` is generic over anything
  * with `{ id, position, label }`, which phases and steps both are.
  */
+/**
+ * Workflows are hidden (`SHOW_WORKFLOWS`): the library no longer lists these
+ * templates, so a stale link here goes back to the library rather than open an
+ * editor for something nothing else shows.
+ */
 export default function WorkflowTemplateScreen() {
+  return SHOW_WORKFLOWS ? <WorkflowTemplateEditor /> : <Redirect href="/templates" />;
+}
+
+function WorkflowTemplateEditor() {
   const { templateId, name } = useLocalSearchParams<{ templateId: string; name?: string }>();
   const queryClient = useQueryClient();
 

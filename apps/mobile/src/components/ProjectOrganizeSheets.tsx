@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Alert, View } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { SHOW_WORKFLOWS } from "@everlumen/shared";
 import {
   addProjectToGroup,
   combineProjects,
@@ -192,7 +193,8 @@ export function ProjectMergeSheet({
   const confirm = (targetId: string, targetName: string) =>
     Alert.alert(
       `Merge into "${targetName}"?`,
-      `Every photo, video, task, document, checklist, workflow and walkthrough on "${projectName}" moves to "${targetName}", and "${projectName}" is removed. This cannot be undone.`,
+      // Workflow runs still move; they are just not named while hidden (`SHOW_WORKFLOWS`).
+      `Every photo, video, task, document, checklist${SHOW_WORKFLOWS ? ", workflow" : ""} and walkthrough on "${projectName}" moves to "${targetName}", and "${projectName}" is removed. This cannot be undone.`,
       [
         { text: "Cancel", style: "cancel" },
         { text: "Merge", style: "destructive", onPress: () => merge.mutate(targetId) },

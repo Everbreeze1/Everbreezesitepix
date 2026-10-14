@@ -1,4 +1,5 @@
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
+import { SHOW_WORKFLOWS } from "@everlumen/shared";
 import { can } from "@everlumen/shared/team-permissions";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
@@ -183,7 +184,7 @@ const TAB_HERO: Record<TemplateTabKey, { title: string; subtitle: string }> = {
   blueprints: {
     title: "Blueprints",
     subtitle:
-      "Reusable bundles of checklists, workflows, documents and report templates for a job type. Every project shows the blueprint it was built from.",
+      "Reusable bundles of checklists, documents and report templates for a job type. Every project shows the blueprint it was built from.",
   },
   checklists: {
     title: "Checklists",
@@ -464,6 +465,7 @@ export function TemplatesPage() {
   const tabRelocated =
     (!SHOW_WALKTHROUGH_TEMPLATES && requestedTab === "walkthroughs") ||
     (!SHOW_LABEL_SETS && requestedTab === "label-sets") ||
+    (!SHOW_WORKFLOWS && requestedTab === "workflows") ||
     requestedTab === "labels";
   /*
    * Reports moved INTO Documents (the mockup draws Report templates as a second

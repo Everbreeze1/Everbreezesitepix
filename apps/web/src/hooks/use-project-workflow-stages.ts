@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { isStagedRun, runStage, type StagePhase } from "@everlumen/shared";
+import { SHOW_WORKFLOWS, isStagedRun, runStage, type StagePhase } from "@everlumen/shared";
 import { supabase } from "@/integrations/everlumen/client";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -37,7 +37,8 @@ export function useProjectWorkflowStages(
 
   const { data } = useQuery({
     queryKey: ["project-workflow-stages", user?.id ?? "anon", ids],
-    enabled: !!user && ids.length > 0,
+    // Workflows are hidden (SHOW_WORKFLOWS): no stage badges, so no read.
+    enabled: SHOW_WORKFLOWS && !!user && ids.length > 0,
     staleTime: 60_000,
     queryFn: async () => {
       const { data: wfs, error } = await supabase

@@ -615,7 +615,7 @@ export default function NewProjectScreen() {
           <Text variant="caption" tone="muted" numberOfLines={2}>
             {chosenBlueprint
               ? "Its checklists, documents, reports and labels are created with the job"
-              : "No checklists, documents or workflows will be added"}
+              : "No checklists or documents will be added"}
           </Text>
         </View>
         <Text variant="bodyStrong" tone="primary">
@@ -679,7 +679,7 @@ export default function NewProjectScreen() {
         ) : null}
         <BlueprintChoice
           title="Start blank"
-          detail="No checklists, documents or workflows will be added"
+          detail="No checklists or documents will be added"
           chosen={!blueprintId}
           onPress={() => {
             setBlueprintId(null);

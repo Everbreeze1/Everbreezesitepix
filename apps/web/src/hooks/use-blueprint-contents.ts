@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/everlumen/client";
-import type { BlueprintItemKind } from "@/features/settings/components/blueprint-outcomes";
+import { SHOW_WORKFLOWS } from "@everlumen/shared";
+import {
+  KIND_OUTCOME,
+  type BlueprintItemKind,
+} from "@/features/settings/components/blueprint-outcomes";
 
 const TABLE_FOR_KIND: Record<BlueprintItemKind, string> = {
   checklist: "checklist_templates",
@@ -72,7 +76,9 @@ export function useBlueprintContents(blueprintId: string | null | undefined): Bl
           kind: r.kind as BlueprintItemKind,
           refId: r.ref_id as string,
         })),
-      ];
+        // Applying skips what lands on the Workflows tab while it is hidden
+        // (SHOW_WORKFLOWS), so "what this creates" leaves it out too.
+      ].filter((r) => SHOW_WORKFLOWS || KIND_OUTCOME[r.kind].destination !== "workflows");
 
       // One query per kind actually present, rather than one per row.
       const byKind = new Map<BlueprintItemKind, string[]>();

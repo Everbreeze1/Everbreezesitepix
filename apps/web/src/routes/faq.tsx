@@ -16,7 +16,7 @@ export const Route = createFileRoute("/faq")({
       {
         name: "description",
         content:
-          "Answers to common questions about Everlumen - the job site photo, checklist, workflow, and reporting app built for contractors and field teams.",
+          "Answers to common questions about Everlumen - the job site photo, checklist and reporting app built for contractors and field teams.",
       },
       { property: "og:title", content: "FAQ - Everlumen" },
       {
