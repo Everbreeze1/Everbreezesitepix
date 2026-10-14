@@ -1,21 +1,17 @@
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import ReactMarkdown from "react-markdown";
 import {
   ArrowLeft,
   Check,
-  Clapperboard,
   Copy,
   ExternalLink,
   Link2Off,
   Loader2,
-  Save,
   Share2,
   Sparkles,
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -24,7 +20,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { useConfirm } from "@/hooks/use-confirm";
 import {
@@ -35,6 +30,7 @@ import {
   type SummaryPhoto,
 } from "@/lib/summaries.functions";
 import { SummaryPhotoNotes } from "@/features/walkthroughs/components/SummaryPhotoNotes";
+import { EditableSummaryText } from "@/features/walkthroughs/components/EditableSummaryText";
 
 /**
  * A walkthrough Summary, on its own route.
@@ -49,6 +45,10 @@ import { SummaryPhotoNotes } from "@/features/walkthroughs/components/SummaryPho
  * are on top, it should be backward. Please make that text show first for
  * summary and the pictures after." Written summary, then the photos, each with
  * its own note.
+ *
+ * Everything on it is edited where it sits: the title, the text and each
+ * photo's note save on their own, with no Edit mode and no raw Markdown box.
+ * The page uses the full width like the rest of the app.
  */
 export function SummaryDetailPage() {
   const { summaryId } = useParams({ from: "/_app/summaries/$summaryId" });
@@ -57,6 +57,8 @@ export function SummaryDetailPage() {
 
   const [loading, setLoading] = useState(true);
   const [title, setTitle] = useState("");
+  /** The title as last saved, so leaving the field unchanged saves nothing. */
+  const [savedTitle, setSavedTitle] = useState("");
   const [markdown, setMarkdown] = useState("");
   const [photos, setPhotos] = useState<SummaryPhoto[]>([]);
   const [walkthroughId, setWalkthroughId] = useState<string | null>(null);
@@ -64,8 +66,6 @@ export function SummaryDetailPage() {
   const [projectName, setProjectName] = useState<string>("");
   const [shareToken, setShareToken] = useState<string | null>(null);
   const [createdAt, setCreatedAt] = useState<string>("");
-  const [editing, setEditing] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   /** A share token is being issued or cleared - both are one round trip. */
@@ -77,6 +77,7 @@ export function SummaryDetailPage() {
       const res = await getWalkthroughSummary({ data: { summaryId } });
       const s = res.summary;
       setTitle(s.title);
+      setSavedTitle(s.title);
       setMarkdown(s.markdown ?? "");
       setWalkthroughId(s.walkthroughId);
       setProjectId(s.projectId);
@@ -96,17 +97,41 @@ export function SummaryDetailPage() {
     void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, [summaryId]);
 
-  const save = async () => {
-    setSaving(true);
+  const saveTitle = async () => {
+    const next = title.trim();
+    if (!next) {
+      setTitle(savedTitle);
+      return;
+    }
+    if (next === savedTitle) return;
     try {
-      await updateWalkthroughSummary({ data: { summaryId, title, markdown } });
-      toast.success("Saved");
-      setEditing(false);
-      void load();
+      await updateWalkthroughSummary({ data: { summaryId, title: next } });
+      setTitle(next);
+      setSavedTitle(next);
+      toast.success("Title saved");
     } catch (e: any) {
-      toast.error(e?.message ?? "Could not save");
-    } finally {
-      setSaving(false);
+      toast.error(e?.message ?? "Could not save the title");
+      setTitle(savedTitle);
+    }
+  };
+
+  const saveText = async (next: string) => {
+    try {
+      await updateWalkthroughSummary({ data: { summaryId, markdown: next } });
+      setMarkdown(next);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not save the summary");
+      throw e;
+    }
+  };
+
+  const saveNote = async (photoId: string, note: string) => {
+    try {
+      await updateWalkthroughSummary({ data: { summaryId, photoNote: { photoId, note } } });
+      setPhotos((prev) => prev.map((p) => (p.photoId === photoId ? { ...p, note } : p)));
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not save the note");
+      throw e;
     }
   };
 
@@ -223,7 +248,7 @@ export function SummaryDetailPage() {
   }
 
   return (
-    <div className="container mx-auto max-w-3xl px-4 pb-24 pt-6 md:pt-10">
+    <div className="w-full px-4 pb-24 pt-6 md:px-8 md:pt-8">
       <Button asChild variant="ghost" size="sm" className="-ml-2 mb-3 h-9">
         <Link to="/projects/$projectId" params={{ projectId }} search={{ panel: "walkthroughs" }}>
           <ArrowLeft className="mr-1.5 h-4 w-4" />
@@ -231,107 +256,68 @@ export function SummaryDetailPage() {
         </Link>
       </Button>
 
-      <Card className="p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            {editing ? (
-              <Input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                className="text-lg font-semibold"
-              />
-            ) : (
-              <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
-            )}
-            <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-              <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-primary">
-                <Sparkles className="h-3 w-3" />
-                AI Summary
-              </span>
-              <span>
-                {photos.length} {photos.length === 1 ? "photo" : "photos"}
-              </span>
-              {createdAt && <span>{new Date(createdAt).toLocaleString()}</span>}
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {editing ? (
-              <>
-                <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
-                  Cancel
-                </Button>
-                <Button size="sm" onClick={() => void save()} disabled={saving}>
-                  {saving ? (
-                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Save className="mr-1.5 h-3.5 w-3.5" />
-                  )}
-                  Save
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button size="sm" onClick={() => void onShare()}>
-                  <Share2 className="mr-1.5 h-3.5 w-3.5" />
-                  {shareToken ? "Shared" : "Share"}
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
-                  <Save className="mr-1.5 h-3.5 w-3.5" />
-                  Edit
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => void onDelete()}
-                  aria-label="Delete summary"
-                >
-                  <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                </Button>
-              </>
-            )}
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          {/* The title is a field styled as a heading: click and type, it saves
+              when you press Enter or click away. */}
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onBlur={() => void saveTitle()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.currentTarget.blur();
+              if (e.key === "Escape") {
+                setTitle(savedTitle);
+                e.currentTarget.blur();
+              }
+            }}
+            aria-label="Summary title"
+            title="Click to rename"
+            className="-mx-2 w-full rounded-lg border border-transparent bg-transparent px-2 py-1 text-2xl font-bold tracking-tight transition hover:border-border focus:border-primary/50 focus:bg-background focus:outline-none md:text-3xl"
+          />
+          <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-primary">
+              <Sparkles className="h-3 w-3" />
+              AI Summary
+            </span>
+            <span>
+              {photos.length} {photos.length === 1 ? "photo" : "photos"}
+            </span>
+            {createdAt && <span>{new Date(createdAt).toLocaleString()}</span>}
           </div>
         </div>
-
-        {/* The recording this was written from, when there is one. A link, not
-            an embedded player: the video is its own artefact with its own page
-            and its own share link, which is the separation asked for. */}
-        {walkthroughId && (
-          <Button asChild size="sm" variant="secondary" className="mt-4 h-8 rounded-lg text-xs">
-            <Link to="/walkthroughs/$walkthroughId" params={{ walkthroughId }}>
-              <Clapperboard className="mr-1.5 h-3.5 w-3.5" />
-              Watch the walkthrough this came from
-            </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" onClick={() => void onShare()}>
+            <Share2 className="mr-1.5 h-3.5 w-3.5" />
+            {shareToken ? "Shared" : "Share"}
           </Button>
-        )}
-      </Card>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void onDelete()}
+            aria-label="Delete summary"
+          >
+            <Trash2 className="h-3.5 w-3.5 text-destructive" />
+          </Button>
+        </div>
+      </header>
 
-      <Card className="mt-4 p-5">
-        {editing ? (
-          <Textarea
-            value={markdown}
-            onChange={(e) => setMarkdown(e.target.value)}
-            rows={20}
-            className="font-mono text-sm leading-relaxed"
-            placeholder="Summary markdown…"
-          />
-        ) : (
-          <>
-            {/*
-              Text first, photos after. The client asked for exactly this
-              reversal, and it is only this simple because the photos are no
-              longer embedded in the markdown - they are their own array now.
-            */}
-            <section>
-              <h2 className="text-xl font-semibold tracking-tight">Summary</h2>
-              <div className="wt-markdown mt-3 rounded-xl border border-border bg-muted/20 p-5">
-                <ReactMarkdown>{markdown || "_No summary text._"}</ReactMarkdown>
-              </div>
-            </section>
+      {/*
+        Text first, photos after. The client asked for exactly this reversal,
+        and it is only this simple because the photos are no longer embedded in
+        the markdown - they are their own array now.
+      */}
+      <section className="mt-6">
+        <h2 className="text-xl font-semibold tracking-tight">Summary</h2>
+        <EditableSummaryText
+          key={summaryId}
+          markdown={markdown}
+          onSave={saveText}
+          className="mt-3"
+        />
+      </section>
 
-            <SummaryPhotoNotes photos={photos} timed={!!walkthroughId} />
-          </>
-        )}
-      </Card>
+      <SummaryPhotoNotes photos={photos} timed={!!walkthroughId} onEditNote={saveNote} />
 
       <Dialog open={shareOpen} onOpenChange={setShareOpen}>
         <DialogContent className="sm:max-w-lg">

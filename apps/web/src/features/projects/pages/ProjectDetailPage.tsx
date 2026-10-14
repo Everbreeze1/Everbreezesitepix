@@ -39,6 +39,7 @@ import {
   Type as TypeIcon,
   Copy as CopyIcon,
   Download,
+  MoreHorizontal,
 } from "lucide-react";
 import { formatBytes } from "@/hooks/use-storage-usage";
 import { photoObjectPaths } from "@everlumen/shared";
@@ -2415,6 +2416,31 @@ export function ProjectDetailPage() {
     }
   };
 
+  /**
+   * Delete a recording from its card. This used to live on the walkthrough's
+   * own page, which was the same video again, so the card's menu carries it.
+   */
+  const deleteWalkthroughVideo = async (w: (typeof walkthroughs)[number]) => {
+    if (
+      !(await confirm({
+        description:
+          "Delete this walkthrough recording? Its summary and your photos are not affected. This cannot be undone.",
+        variant: "destructive",
+      }))
+    )
+      return;
+    const { error } = await supabase
+      .from("walkthroughs" as any)
+      .delete()
+      .eq("id", w.id);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setWalkthroughs((prev) => prev.filter((item) => item.id !== w.id));
+    toast.success("Walkthrough deleted");
+  };
+
   const openWalkthroughVideo = async (w: (typeof walkthroughs)[number]) => {
     devLog("[walkthrough] video thumbnail clicked", {
       wid: w.id,
@@ -3144,7 +3170,7 @@ export function ProjectDetailPage() {
               </div>
             </div>
           ) : (
-            <div className="mt-6 grid gap-4 sm:grid-cols-2">
+            <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
               {walkthroughs.map((w) => {
                 const isSummary = w.source === "summary";
                 const mins = Math.floor((w.duration_seconds || 0) / 60);
@@ -3152,34 +3178,40 @@ export function ProjectDetailPage() {
                 return (
                   <div
                     key={w.id}
-                    className="group relative overflow-hidden rounded-3xl border border-border bg-card/80 p-6"
+                    className="group relative overflow-hidden rounded-3xl border border-border bg-card/80"
                   >
-                    <div className="pointer-events-none absolute -right-12 -top-12 h-40 w-40 rounded-full border-[18px] border-primary/10" />
-                    <div className="relative flex min-h-[172px] flex-col justify-between gap-6">
-                      {isSummary ? (
-                        /*
-                          No recording exists, so there is no play affordance. A
-                          static mark keeps the card's visual rhythm without
-                          promising playback the row cannot deliver.
-                        */
-                        <span
-                          aria-hidden
-                          className="flex h-11 w-11 items-center justify-center rounded-full bg-primary/10 text-primary"
-                        >
-                          <Sparkles className="h-5 w-5" />
-                        </span>
-                      ) : (
-                        <button
-                          type="button"
+                    {isSummary ? (
+                      /*
+                        A summary row from before summaries had their own table:
+                        no recording, so no thumbnail and nothing to play.
+                      */
+                      <span
+                        aria-hidden
+                        className="flex aspect-video w-full items-center justify-center bg-primary/10 text-primary"
+                      >
+                        <Sparkles className="h-8 w-8" />
+                      </span>
+                    ) : (
+                      /*
+                        A frame of the footage itself, not a generic play icon.
+                        Tapping it plays the video; there is no separate page to
+                        open, because that page was the same video again.
+                      */
+                      <div className="relative">
+                        <VideoThumbnail
+                          cacheKey={`walk-card:${w.id}`}
+                          videoUrl={w.video_signed_url}
+                          fallbackPosterUrl={w.thumb_url}
                           onClick={() => void openWalkthroughVideo(w)}
-                          aria-label="Play walkthrough video"
-                          className="flex h-11 w-11 items-center justify-center rounded-full bg-primary/10 text-primary transition hover:bg-primary/20"
-                        >
-                          <PlayCircle className="h-5 w-5" />
-                        </button>
-                      )}
-                      <div>
-                        <p className="font-display truncate text-3xl font-bold leading-tight tracking-tight text-foreground">
+                        />
+                        <span className="pointer-events-none absolute bottom-2 right-2 rounded-full bg-black/65 px-2 py-0.5 font-mono text-[11px] font-medium text-white">
+                          {mins}:{secs.toString().padStart(2, "0")}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex items-start gap-2 p-4">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-display truncate text-lg font-bold leading-tight tracking-tight text-foreground">
                           {w.title}
                         </p>
                         <p className="mt-1 text-xs font-bold text-muted-foreground">
@@ -3226,15 +3258,48 @@ export function ProjectDetailPage() {
                             )}
                           </p>
                         )}
-                        <Link
-                          to="/walkthroughs/$walkthroughId"
-                          params={{ walkthroughId: w.id }}
-                          className="mt-3 inline-flex items-center gap-2 text-xs font-extrabold text-primary hover:underline"
-                        >
-                          {isSummary ? "Open AI Summary" : "Open walkthrough"}{" "}
-                          <span aria-hidden>→</span>
-                        </Link>
+                        {isSummary ? (
+                          <Link
+                            to="/walkthroughs/$walkthroughId"
+                            params={{ walkthroughId: w.id }}
+                            className="mt-3 inline-flex items-center gap-2 text-xs font-extrabold text-primary hover:underline"
+                          >
+                            Open AI Summary <span aria-hidden>→</span>
+                          </Link>
+                        ) : null}
                       </div>
+                      {!isSummary && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              type="button"
+                              aria-label="Video options"
+                              className="-mr-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                            >
+                              <MoreHorizontal className="h-4 w-4" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              disabled={!w.video_signed_url}
+                              onSelect={() => {
+                                if (w.video_signed_url)
+                                  window.open(w.video_signed_url, "_blank", "noopener,noreferrer");
+                              }}
+                            >
+                              <Download className="mr-2 h-3.5 w-3.5" />
+                              Download video
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onSelect={() => void deleteWalkthroughVideo(w)}
+                              className="text-destructive focus:text-destructive"
+                            >
+                              <Trash2 className="mr-2 h-3.5 w-3.5" />
+                              Delete video
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
                     </div>
                   </div>
                 );

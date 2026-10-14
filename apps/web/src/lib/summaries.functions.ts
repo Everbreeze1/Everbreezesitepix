@@ -53,7 +53,12 @@ export const generateSummaryForWalkthrough = rpcOp<
 >("generateSummaryForWalkthrough", { idempotent: true });
 
 export const updateWalkthroughSummary = rpcOp<
-  { summaryId: string; title?: string; markdown?: string },
+  {
+    summaryId: string;
+    title?: string;
+    markdown?: string;
+    photoNote?: { photoId: string; note: string };
+  },
   Result<typeof updateWalkthroughSummaryService>
 >("updateWalkthroughSummary");
 
