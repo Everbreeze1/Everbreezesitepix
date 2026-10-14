@@ -696,6 +696,13 @@ export const updateSummaryInputSchema = z.object({
   summaryId: z.string().uuid(),
   title: z.string().trim().min(1).max(160).optional(),
   markdown: z.string().max(200_000).optional(),
+  /** Correct the AI's note on one photo, edited in place on the summary page. */
+  photoNote: z
+    .object({
+      photoId: z.string().min(1).max(100),
+      note: z.string().max(4_000),
+    })
+    .optional(),
 });
 
 export async function updateWalkthroughSummaryService(
@@ -707,6 +714,26 @@ export async function updateWalkthroughSummaryService(
   // Strip a gallery a user may have pasted in: the photos are rendered from
   // photo_notes, and a second copy in the prose is the duplication being fixed.
   if (data.markdown !== undefined) patch.markdown = stripPhotoGallery(data.markdown);
+  if (data.photoNote) {
+    /*
+     * One note in the jsonb array, rewritten in place. Read-modify-write rather
+     * than a jsonb_set: the array is small, and the photo is matched by id, not
+     * by a position that a regenerate could have shifted.
+     */
+    const { data: row, error: readError } = await (ctx.supabase as any)
+      .from("walkthrough_summaries")
+      .select("photo_notes")
+      .eq("id", data.summaryId)
+      .maybeSingle();
+    if (readError) throw new Error(readError.message);
+    if (!row) throw new Error("Summary not found");
+    const notes = Array.isArray(row.photo_notes) ? [...row.photo_notes] : [];
+    const { photoId, note } = data.photoNote;
+    const index = notes.findIndex((n: any) => n && n.photoId === photoId);
+    if (index === -1) throw new Error("That photo is not part of this summary");
+    notes[index] = { ...notes[index], note: note.trim() };
+    patch.photo_notes = notes;
+  }
   if (!Object.keys(patch).length) return { ok: true as const };
 
   const { error } = await (ctx.supabase as any)

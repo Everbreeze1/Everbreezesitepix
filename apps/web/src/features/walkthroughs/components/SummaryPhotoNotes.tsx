@@ -1,4 +1,5 @@
-import { ImageOff, Play, Sparkles } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Check, ImageOff, Loader2, Pencil, Play, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SummaryPhoto } from "@/lib/summaries.functions";
 
@@ -17,6 +18,11 @@ import type { SummaryPhoto } from "@/lib/summaries.functions";
  * the shot and wrote it into the note, so printing the raw words again as a
  * "heard on camera" quote just said the same thing twice. `spoken` stays in the
  * data for the report writer; it is not shown.
+ *
+ * On the summary page each note can be corrected in place: "i should be able to
+ * click on the comments on any picture on the summary and edit it just in case
+ * something got recorded wrong." `onEditNote` turns that on; the public share
+ * page leaves it off and stays read-only.
  */
 
 const fmtOffset = (seconds: number) =>
@@ -30,11 +36,14 @@ export function SummaryPhotoNotes({
   timed = false,
   /** Given when there is a player above to drive; omitted on the share page. */
   onSeek,
+  /** Given on the owner's summary page, so a note can be corrected in place. */
+  onEditNote,
   className,
 }: {
   photos: SummaryPhoto[];
   timed?: boolean;
   onSeek?: (seconds: number) => void;
+  onEditNote?: (photoId: string, note: string) => Promise<void>;
   className?: string;
 }) {
   if (!photos.length) return null;
@@ -48,6 +57,7 @@ export function SummaryPhotoNotes({
             {timed
               ? "Each photo from the walk, with the AI's note on what was being done."
               : "The photos this summary was written from."}
+            {onEditNote && " Click a note to correct it."}
           </p>
         </div>
         <span className="shrink-0 rounded-full border border-border bg-muted/40 px-2.5 py-1 text-xs font-medium text-muted-foreground">
@@ -55,7 +65,7 @@ export function SummaryPhotoNotes({
         </span>
       </div>
 
-      <ol className="grid gap-4 sm:grid-cols-2">
+      <ol className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {photos.map((photo, idx) => {
           // The caption only earns a line of its own when it says something the
           // note does not already say.
@@ -105,13 +115,20 @@ export function SummaryPhotoNotes({
                     <Sparkles className="h-3 w-3" strokeWidth={2.25} />
                     Note
                   </p>
-                  <p className="mt-1 text-sm leading-relaxed text-foreground">
-                    {photo.note?.trim() || (
-                      <span className="text-muted-foreground">
-                        Nothing was recorded against this photo.
-                      </span>
-                    )}
-                  </p>
+                  {onEditNote ? (
+                    <EditableNote
+                      note={photo.note ?? ""}
+                      onSave={(note) => onEditNote(photo.photoId, note)}
+                    />
+                  ) : (
+                    <p className="mt-1 text-sm leading-relaxed text-foreground">
+                      {photo.note?.trim() || (
+                        <span className="text-muted-foreground">
+                          Nothing was recorded against this photo.
+                        </span>
+                      )}
+                    </p>
+                  )}
                 </div>
 
                 {caption && (
@@ -125,5 +142,103 @@ export function SummaryPhotoNotes({
         })}
       </ol>
     </section>
+  );
+}
+
+/**
+ * One photo's note, as text until it is clicked and a text box after.
+ *
+ * Enter saves (Shift+Enter for a new line), Escape puts the old words back, and
+ * clicking away saves too, so a correction never needs a separate Save button.
+ */
+function EditableNote({ note, onSave }: { note: string; onSave: (note: string) => Promise<void> }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(note);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const boxRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    if (!editing) setDraft(note);
+  }, [note, editing]);
+
+  // Grow with the text, so a long note is never cut off behind a scrollbar.
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!el || !editing) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [draft, editing]);
+
+  const commit = async () => {
+    const next = draft.trim();
+    setEditing(false);
+    if (next === note.trim()) return;
+    setSaving(true);
+    try {
+      await onSave(next);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 1500);
+    } catch {
+      setDraft(note);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (editing) {
+    return (
+      <textarea
+        ref={boxRef}
+        autoFocus
+        value={draft}
+        rows={2}
+        onChange={(e) => setDraft(e.target.value)}
+        onFocus={(e) => {
+          const end = e.currentTarget.value.length;
+          e.currentTarget.setSelectionRange(end, end);
+        }}
+        onBlur={() => void commit()}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            e.currentTarget.blur();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            setDraft(note);
+            setEditing(false);
+          }
+        }}
+        placeholder="What was being done in this shot"
+        aria-label="Edit note"
+        className="mt-1 block w-full resize-none overflow-hidden rounded-lg border border-primary/50 bg-background px-2 py-1.5 text-sm leading-relaxed text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+      />
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => setEditing(true)}
+      title="Click to edit this note"
+      className="group/note -mx-2 mt-0.5 flex w-[calc(100%+1rem)] items-start gap-2 rounded-lg px-2 py-1 text-left text-sm leading-relaxed text-foreground transition hover:bg-muted/60"
+    >
+      <span className="min-w-0 flex-1 whitespace-pre-wrap">
+        {note.trim() || (
+          <span className="text-muted-foreground">
+            Nothing was recorded against this photo. Click to add a note.
+          </span>
+        )}
+      </span>
+      <span className="mt-1 shrink-0 text-muted-foreground">
+        {saving ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : saved ? (
+          <Check className="h-3.5 w-3.5 text-primary" />
+        ) : (
+          <Pencil className="h-3.5 w-3.5 opacity-0 transition group-hover/note:opacity-100" />
+        )}
+      </span>
+    </button>
   );
 }
