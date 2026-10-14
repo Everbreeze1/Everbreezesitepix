@@ -47,7 +47,7 @@ import { uploadPhotoThumbnail } from "@/lib/photo-thumbnails";
 import { downloadBlobFile } from "@/lib/download-file";
 import { isOverUploadLimit, overUploadLimitMessage } from "@/lib/upload-limits";
 import { uploadWithResume } from "@/lib/resumable-upload";
-import { relativeTime, cleanCaption } from "@everlumen/shared";
+import { relativeTime, cleanCaption, SHOW_WORKFLOWS } from "@everlumen/shared";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EditProjectDialog } from "@/features/projects/components/EditProjectDialog";
 import { NewReportDialog } from "@/features/projects/components/NewReportDialog";
@@ -511,7 +511,9 @@ export function ProjectDetailPage() {
   // from a sub-page (a document, a walkthrough, the report builder) via back
   // navigation restores the tab the user was on instead of resetting to Photos.
   type PanelKey = NonNullable<ProjectDetailSearch["panel"]>;
-  const panel: PanelKey | null = search.panel ?? null;
+  // An old ?panel=workflows link lands on Photos while Workflows are hidden.
+  const panel: PanelKey | null =
+    search.panel === "workflows" && !SHOW_WORKFLOWS ? null : (search.panel ?? null);
   function setPanel(next: PanelKey | null | ((cur: PanelKey | null) => PanelKey | null)) {
     const resolved = typeof next === "function" ? next(panel) : next;
     navigate({
@@ -2924,19 +2926,21 @@ export function ProjectDetailPage() {
       {/* Where the job stands in its workflow. Without one it still shows a quiet
           "none started" row, so a project never looks like it is missing the
           feature; off the Team plan, clicking it opens the upgrade prompt. */}
-      <ProjectWorkflowStrip
-        className="mb-7"
-        projectId={projectId}
-        showEmpty
-        refreshKey={`${counts.workflows}-${panel ?? "photos"}`}
-        onOpen={() => {
-          if (!isTeam) {
-            setWorkflowsUpgradeOpen(true);
-            return;
-          }
-          setPanel("workflows");
-        }}
-      />
+      {SHOW_WORKFLOWS && (
+        <ProjectWorkflowStrip
+          className="mb-7"
+          projectId={projectId}
+          showEmpty
+          refreshKey={`${counts.workflows}-${panel ?? "photos"}`}
+          onOpen={() => {
+            if (!isTeam) {
+              setWorkflowsUpgradeOpen(true);
+              return;
+            }
+            setPanel("workflows");
+          }}
+        />
+      )}
 
       <ReferenceTabStrip
         className="mb-[22px]"
@@ -2957,7 +2961,9 @@ export function ProjectDetailPage() {
             label: "Walkthroughs",
             count: walkthroughs.length + summaries.length,
           },
-          { key: "workflows", label: "Workflows", count: counts.workflows },
+          ...(SHOW_WORKFLOWS
+            ? [{ key: "workflows", label: "Workflows", count: counts.workflows }]
+            : []),
           { key: "tasks", label: "Tasks", count: counts.tasksOpen },
           // No count: the calendar is a view of the photos already counted on
           // the Photos tab, so a number here would double-count the same work.

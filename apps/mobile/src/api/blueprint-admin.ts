@@ -1,4 +1,4 @@
-import { REPORT_STARTERS } from "@everlumen/shared";
+import { REPORT_STARTERS, SHOW_WORKFLOWS } from "@everlumen/shared";
 import { supabase } from "@/lib/supabase";
 import type { BlueprintItemKind } from "./blueprints-view";
 import {
@@ -604,6 +604,8 @@ export async function installBlueprintStarter(
   const result: InstallResult = { blueprintId, attached: 0, skipped: [], created: [] };
 
   for (const [idx, piece] of starter.pieces.entries()) {
+    // Workflows are hidden (`SHOW_WORKFLOWS`): do not build one nobody can see.
+    if (piece.kind === "workflow" && !SHOW_WORKFLOWS) continue;
     const before = await countLibrary(piece.kind);
     const refId = await resolvePiece(piece, userId, teamId);
     if (!refId) {

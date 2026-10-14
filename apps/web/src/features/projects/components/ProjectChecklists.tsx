@@ -442,7 +442,7 @@ export function ProjectChecklists({
         title="Checklists"
         description={
           checklists.length === 0
-            ? "Task lists that travel with this job - printable and shareable once filled in. For multi-phase processes with sign-off, use Workflows."
+            ? "Task lists that travel with this job - printable and shareable once filled in."
             : activeCount === 0
               ? `All ${checklists.length} checklist${checklists.length === 1 ? "" : "s"} on this job are complete.`
               : `${activeCount} still open on this job.`

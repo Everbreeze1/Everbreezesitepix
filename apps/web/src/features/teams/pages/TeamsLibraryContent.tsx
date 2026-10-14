@@ -83,7 +83,6 @@ const PERMISSION_ROWS: Array<[string, string, string, string]> = [
   ["View projects", "\u2713", "\u2713", "Assigned only"],
   ["Edit project details", "\u2713", "\u2713", "\u2713"],
   ["Assign crew", "\u2713", "\u2713", "\u2014"],
-  ["Delete workflows", "\u2713", "\u2713", "\u2014"],
   ["Manage blueprints & checklists", "\u2713", "\u2014", "\u2014"],
   ["Invite crew members", "\u2713", "\u2713", "\u2014"],
   ["Manage billing & account settings", "\u2713", "\u2014", "\u2014"],

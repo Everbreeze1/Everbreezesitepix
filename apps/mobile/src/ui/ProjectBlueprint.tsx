@@ -203,9 +203,7 @@ export function ProjectBlueprint({
         onClose={close}
         title={result ? "Blueprint applied" : "Choose a blueprint"}
         subtitle={
-          result
-            ? undefined
-            : "Creates the checklists, workflows, documents and labels for this kind of job."
+          result ? undefined : "Creates the checklists, documents and labels for this kind of job."
         }
         footer={result ? <Button label="Done" fullWidth onPress={close} /> : undefined}
       >

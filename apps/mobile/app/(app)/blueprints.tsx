@@ -10,6 +10,7 @@ import {
 import {
   contentsSummary,
   installSummary,
+  shownSection,
   tradesInUse,
   visibleBlueprints,
 } from "@/api/blueprint-library-view";
@@ -45,8 +46,8 @@ const ALL = "__all";
 /**
  * The blueprint library: the web's Templates > Blueprints tab.
  *
- * A blueprint bundles the checklists, workflow, documents and report templates
- * a company uses for one kind of job. This screen lists and makes them; each
+ * A blueprint bundles the checklists, documents and report templates a
+ * company uses for one kind of job. This screen lists and makes them; each
  * one opens on `blueprint/[id]`, where its sections are edited and it can be
  * applied to projects already running.
  *
@@ -240,7 +241,7 @@ export default function BlueprintsScreen() {
                   body={
                     all.length
                       ? "Try another search or trade."
-                      : "A blueprint sets a job up in one go: its checklists, workflow, documents and report templates. Start from a pre-built one to see the pattern."
+                      : "A blueprint sets a job up in one go: its checklists, documents and report templates. Start from a pre-built one to see the pattern."
                   }
                   action={
                     canManage && !all.length
@@ -263,7 +264,9 @@ export default function BlueprintsScreen() {
                         title={blueprint.name}
                         subtitle={[
                           tradeOf(blueprint.category),
-                          contentsSummary(links.filter((l) => l.blueprintId === blueprint.id)),
+                          contentsSummary(
+                            links.filter((l) => l.blueprintId === blueprint.id && shownSection(l)),
+                          ),
                         ].join(" · ")}
                         right={
                           blueprint.archived ? (
@@ -365,7 +368,7 @@ export default function BlueprintsScreen() {
         visible={startersOpen}
         onClose={() => (install.isPending ? undefined : setStartersOpen(false))}
         title="Starter blueprints"
-        subtitle="Each one builds any checklist, workflow or shot list it needs in your libraries first."
+        subtitle="Each one builds any checklist or shot list it needs in your libraries first."
       >
         <ListGroup>
           {BLUEPRINT_STARTERS.map((starter, index) => (

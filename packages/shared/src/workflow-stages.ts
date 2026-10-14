@@ -13,6 +13,20 @@
  * none of this applies to them (see `isStagedRun`).
  */
 
+/**
+ * Whether Workflows are offered anywhere in the product.
+ *
+ * Off at the owner's request (2026-10-14): "I dont have a use for it for a
+ * photo management site." Hidden, not deleted: the tables, existing runs and
+ * workflow templates all stay, and the database rules above still apply. With
+ * this off, nothing offers, lists or creates a workflow: the Workflows tab and
+ * stage strip on a project, the stage badge on the Projects list, the
+ * Workflows library and blueprint "Workflow phases" on web and in the app, and
+ * applying a blueprint skips its workflow section. Flip to true to bring it
+ * back, one line, no data migration.
+ */
+export const SHOW_WORKFLOWS = false;
+
 /** The step kinds a stage can hold. `checklist` links a project checklist. */
 export type WorkflowStepKind = "check" | "photo" | "note" | "checklist";
 

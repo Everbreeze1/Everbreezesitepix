@@ -22,6 +22,7 @@ import {
   multiApplyHeadline,
   nextSectionPosition,
   sectionRows,
+  shownSection,
   swapped,
   targetAddress,
   type SectionRow,
@@ -157,13 +158,16 @@ export default function BlueprintScreen() {
 
   const blueprint = libraryQuery.data?.blueprints.find((b) => b.id === id) ?? null;
   const libraries = libraryQuery.data?.libraries;
-  const sections = useMemo(
+  const allSections = useMemo(
     () =>
       libraryQuery.data && id
         ? sectionRows(id, libraryQuery.data.links, libraryQuery.data.libraries)
         : [],
     [libraryQuery.data, id],
   );
+  // What is listed. A hidden workflow section (`SHOW_WORKFLOWS`) is kept, not
+  // shown, so positions and adds still read the whole blueprint.
+  const sections = useMemo(() => allSections.filter(shownSection), [allSections]);
 
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ["blueprint-library"] });
@@ -217,8 +221,18 @@ export default function BlueprintScreen() {
   };
 
   const move = (index: number, by: -1 | 1) => {
-    const next = swapped(sections, index, by);
-    if (next === sections) return;
+    const target = sections[index + by];
+    if (!target) return;
+    if (sections.length === allSections.length) {
+      run.mutate(() => saveSectionOrder(id!, swapped(sections, index, by)));
+      return;
+    }
+    // Swap the two listed rows within the whole order, so a hidden section
+    // keeps its own place rather than being renumbered over.
+    const from = allSections.indexOf(sections[index]);
+    const to = allSections.indexOf(target);
+    const next = [...allSections];
+    [next[from], next[to]] = [next[to], next[from]];
     run.mutate(() => saveSectionOrder(id!, next));
   };
 
@@ -231,7 +245,7 @@ export default function BlueprintScreen() {
     );
 
   const add = (refId: string) => {
-    const refusal = addRefusal(addKind, sections);
+    const refusal = addRefusal(addKind, allSections);
     if (refusal) {
       setFailure(refusal);
       setAdding(false);
@@ -243,7 +257,7 @@ export default function BlueprintScreen() {
         blueprintId: id!,
         kind: addKind,
         refId,
-        position: nextSectionPosition(sections),
+        position: nextSectionPosition(allSections),
       }),
     );
   };
@@ -340,8 +354,8 @@ export default function BlueprintScreen() {
     );
   }
 
-  const addable = libraries ? addableEntries(addKind, libraries, sections) : [];
-  const refusal = addRefusal(addKind, sections);
+  const addable = libraries ? addableEntries(addKind, libraries, allSections) : [];
+  const refusal = addRefusal(addKind, allSections);
   const targets = filterTargets(targetsQuery.data ?? [], targetSearch);
 
   return (
@@ -420,7 +434,7 @@ export default function BlueprintScreen() {
             <EmptyState
               icon={Plus}
               title="Nothing in it yet"
-              body="Add the checklists, workflow, documents and report templates a job of this kind needs. Applying the blueprint creates them all on the project."
+              body="Add the checklists, documents and report templates a job of this kind needs. Applying the blueprint creates them all on the project."
               action={
                 canManage
                   ? { label: "Add a section", onPress: () => setAdding(true), icon: Plus }

@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { SHOW_WORKFLOWS } from "@everlumen/shared";
 import { ArrowRight, FolderOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -34,9 +35,11 @@ function groupByDestination(items: BlueprintPreviewItem[], labels: string[]): Gr
     else byKind.set(it.kind, [it.name]);
   }
 
+  // Applying skips the workflow tab's items while Workflows are hidden
+  // (SHOW_WORKFLOWS), so the preview leaves them out too.
   const order: BlueprintDestination[] = [
     "checklists",
-    "workflows",
+    ...(SHOW_WORKFLOWS ? (["workflows"] as const) : []),
     "documents",
     "reports",
     "labels",
@@ -102,8 +105,8 @@ export function BlueprintOutcomePreview({
       >
         <p className="text-sm font-semibold text-foreground">This blueprint is still empty</p>
         <p className="mx-auto mt-1 max-w-sm text-xs leading-relaxed text-muted-foreground">
-          Add checklists, workflows, documents, reports or label sets below and this panel will show
-          exactly what a project gets when you apply it.
+          Add checklists, documents or reports below and this panel will show exactly what a project
+          gets when you apply it.
         </p>
       </div>
     );

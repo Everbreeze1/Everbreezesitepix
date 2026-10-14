@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { RefreshControl, ScrollView, View } from "react-native";
-import { router, useLocalSearchParams } from "expo-router";
+import { Redirect, router, useLocalSearchParams } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { SHOW_WORKFLOWS } from "@everlumen/shared";
 import { listProjectWorkflows } from "@/api/workflows";
 import {
   applyWorkflowTemplate,
@@ -38,6 +39,19 @@ import {
  * could see.
  */
 export default function ProjectWorkflowsScreen() {
+  return SHOW_WORKFLOWS ? <ProjectWorkflows /> : <ParkedWorkflowsRedirect />;
+}
+
+/**
+ * Workflows are hidden (`SHOW_WORKFLOWS`) and nothing links here any more, but
+ * a stale deep link still can: it lands on the project instead.
+ */
+function ParkedWorkflowsRedirect() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  return <Redirect href={(id ? `/project/${id}` : "/") as never} />;
+}
+
+function ProjectWorkflows() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const theme = useTheme();
   const { user } = useAuth();

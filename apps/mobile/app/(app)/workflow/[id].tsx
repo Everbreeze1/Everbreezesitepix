@@ -1,9 +1,9 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import * as WebBrowser from "expo-web-browser";
-import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { Redirect, router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { WORKFLOW_KIND_LABELS, type WorkflowItemKind } from "@everlumen/shared";
+import { SHOW_WORKFLOWS, WORKFLOW_KIND_LABELS, type WorkflowItemKind } from "@everlumen/shared";
 import {
   canSignOff,
   checkItemPatch,
@@ -43,6 +43,7 @@ import { isShareLive, openShareSheet, publicUrl, setRecordShareEnabled } from "@
 import { ProjectSubPageHeader } from "@/components/ProjectSubPageHeader";
 import { QueueBanner } from "@/components/QueueBanner";
 import { webAppUrl } from "@/lib/api";
+import { goBack } from "@/lib/navigation";
 import { useAuth } from "@/lib/auth";
 import { useRecordAuthoring } from "@/lib/use-access";
 import {
@@ -84,7 +85,32 @@ import {
   Text,
 } from "@/ui";
 
+/**
+ * Workflows are hidden (`SHOW_WORKFLOWS`), but an old notification or link can
+ * still land here. Rather than run a hidden feature, this sends the reader on
+ * to the run's project, or back when the run cannot be read.
+ */
 export default function WorkflowRunnerScreen() {
+  return SHOW_WORKFLOWS ? <WorkflowRunner /> : <ParkedWorkflowRedirect />;
+}
+
+function ParkedWorkflowRedirect() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const { data, error } = useQuery({
+    queryKey: ["workflow", id],
+    queryFn: () => getWorkflow(id!),
+    enabled: Boolean(id),
+  });
+  // Not found reads as `null`, still loading as `undefined`.
+  const failed = !id || Boolean(error) || data === null;
+  useEffect(() => {
+    if (failed) goBack("/");
+  }, [failed]);
+  if (data) return <Redirect href={`/project/${data.project_id}` as never} />;
+  return <SkeletonList rows={4} />;
+}
+
+function WorkflowRunner() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const theme = useTheme();
   // A form column, not a stretched phone layout, on a tablet.

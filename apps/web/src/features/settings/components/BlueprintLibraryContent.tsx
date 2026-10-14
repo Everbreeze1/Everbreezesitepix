@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
+import { SHOW_WORKFLOWS } from "@everlumen/shared";
 import { supabase } from "@/integrations/everlumen/client";
 
 /*
@@ -189,8 +190,9 @@ function BlueprintEditor({
         )}
       </div>
 
-      {/* Checklists and workflow phases sit side by side on wide screens. */}
-      <div className="grid grid-cols-1 gap-x-4 lg:grid-cols-2">
+      {/* Checklists and workflow phases sit side by side on wide screens.
+          With Workflows hidden (SHOW_WORKFLOWS) Checklists take the row. */}
+      <div className={`grid grid-cols-1 gap-x-4${SHOW_WORKFLOWS ? " lg:grid-cols-2" : ""}`}>
         <div>
           {/* Checklists */}
           <SectionLabel>Checklists</SectionLabel>
@@ -220,39 +222,41 @@ function BlueprintEditor({
             <AddRow onPick={() => onAddSection("checklist")}>+ Add from checklist library</AddRow>
           </div>
         </div>
-        <div>
-          {/* Workflow phases */}
-          <SectionLabel>Workflow phases</SectionLabel>
-          <div className="mb-3.5 rounded-xl border border-border bg-card px-[18px] py-4">
-            {workflowRows.length > 0 ? (
-              workflowRows.flatMap((row) =>
-                (row.phaseRows ?? []).map((phase) => (
-                  <div
-                    key={phase.id}
-                    className="flex items-center gap-3 border-b border-border py-[9px] last:border-b-0"
-                  >
-                    <span className="shrink-0 text-faint">
-                      <PhasesIcon />
-                    </span>
-                    <div className="min-w-0 flex-grow text-[13px] font-medium text-foreground">
-                      {phase.name || "(Untitled phase)"}
+        {SHOW_WORKFLOWS && (
+          <div>
+            {/* Workflow phases */}
+            <SectionLabel>Workflow phases</SectionLabel>
+            <div className="mb-3.5 rounded-xl border border-border bg-card px-[18px] py-4">
+              {workflowRows.length > 0 ? (
+                workflowRows.flatMap((row) =>
+                  (row.phaseRows ?? []).map((phase) => (
+                    <div
+                      key={phase.id}
+                      className="flex items-center gap-3 border-b border-border py-[9px] last:border-b-0"
+                    >
+                      <span className="shrink-0 text-faint">
+                        <PhasesIcon />
+                      </span>
+                      <div className="min-w-0 flex-grow text-[13px] font-medium text-foreground">
+                        {phase.name || "(Untitled phase)"}
+                      </div>
+                      <span className="inline-flex shrink-0 items-center gap-1 rounded-[6px] bg-muted px-2 py-[3px] text-[11px] text-muted-foreground">
+                        {phase.steps > 0
+                          ? `Actionable \u00b7 ${phase.steps} ${phase.steps === 1 ? "step" : "steps"}`
+                          : "Marker"}
+                      </span>
                     </div>
-                    <span className="inline-flex shrink-0 items-center gap-1 rounded-[6px] bg-muted px-2 py-[3px] text-[11px] text-muted-foreground">
-                      {phase.steps > 0
-                        ? `Actionable \u00b7 ${phase.steps} ${phase.steps === 1 ? "step" : "steps"}`
-                        : "Marker"}
-                    </span>
-                  </div>
-                )),
-              )
-            ) : (
-              <div className="border-b border-border py-[9px] text-[13px] text-faint">
-                No workflow attached.
-              </div>
-            )}
-            <AddRow onPick={() => onAddSection("workflow")}>+ Add phase</AddRow>
+                  )),
+                )
+              ) : (
+                <div className="border-b border-border py-[9px] text-[13px] text-faint">
+                  No workflow attached.
+                </div>
+              )}
+              <AddRow onPick={() => onAddSection("workflow")}>+ Add phase</AddRow>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Documents + Report templates */}
@@ -457,7 +461,7 @@ export function BlueprintLibraryContent({
             const chips: string[] = [];
             if (checklists > 0)
               chips.push(`${checklists} ${checklists === 1 ? "checklist" : "checklists"}`);
-            if (workflows > 0)
+            if (SHOW_WORKFLOWS && workflows > 0)
               chips.push(
                 `${workflows} ${workflows === 1 ? "workflow" : "workflows"} \u00b7 ${workflowPhases} ${
                   workflowPhases === 1 ? "phase" : "phases"

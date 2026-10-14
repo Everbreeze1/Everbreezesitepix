@@ -61,7 +61,6 @@ const FEATURES = [
     points: [
       "Answers are grounded in your actual timestamped photos and notes, not guesses",
       "One-tap report drafting, reviewed and edited before it goes out",
-      "Workflows stay the structured, assigned-step process for sign-off - the assistant is for ad hoc questions",
     ],
     image: "AI assistant chat panel",
   },

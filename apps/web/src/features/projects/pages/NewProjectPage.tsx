@@ -1097,7 +1097,7 @@ export function NewProjectPage() {
                     ? blueprint.loading
                       ? "Loading what this creates…"
                       : `${blueprint.items.length} item${blueprint.items.length === 1 ? "" : "s"} will be created on this project`
-                    : "No checklists, documents or workflows will be added"}
+                    : "No checklists or documents will be added"}
                 </span>
               </span>
               <Button

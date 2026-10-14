@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { parseReportTemplateStructure } from "@everlumen/shared";
+import { SHOW_WORKFLOWS, parseReportTemplateStructure } from "@everlumen/shared";
 import { getSupabaseAdmin } from "../../lib/supabase";
 import { isMissingColumn, isMissingTable } from "../../lib/postgrest";
 import type { ServiceContext } from "../../lib/user-context";
@@ -436,6 +436,10 @@ export async function applyProjectBlueprintService(
         if (mergeErr) throw new Error(mergeErr.message);
         counts.label_sets++;
       } else if (it.kind === "workflow") {
+        // Workflows are hidden (SHOW_WORKFLOWS): a blueprint that still holds
+        // one applies everything else and leaves the workflow out, so no job
+        // gets stages nobody can see.
+        if (!SHOW_WORKFLOWS) continue;
         const { data: wt } = await supabaseAdmin
           .from("workflow_templates" as any)
           .select("name")
@@ -514,6 +518,9 @@ export async function applyProjectBlueprintService(
          * `source_kind` is what keeps it a walkthrough after it lands. Without
          * it the project would call a shot list a workflow forever after.
          */
+        // Only the Workflows tab shows these runs, so while it is hidden
+        // (SHOW_WORKFLOWS) creating one would leave work nobody can see.
+        if (!SHOW_WORKFLOWS) continue;
         const { data: wt, error: wtErr } = await supabaseAdmin
           .from("walkthrough_templates" as any)
           .select("name, description")

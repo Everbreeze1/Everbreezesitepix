@@ -1,12 +1,13 @@
+import { SHOW_WORKFLOWS } from "@everlumen/shared";
 import { OUTCOME, type BlueprintItemKind } from "./blueprints-view";
 import { categoryRank, matchesSearch, tradeOf } from "./template-library-view";
 
 /**
  * The blueprint library: authoring the bundles rather than applying them.
  *
- * Import-free (types and two sibling rule modules aside) so the rules are
- * tested directly. Every rule here is the web's, from `TemplatesPage.tsx`,
- * restated for a phone; the comments say which.
+ * Import-free (types, two sibling rule modules and one shared flag aside) so
+ * the rules are tested directly. Every rule here is the web's, from
+ * `TemplatesPage.tsx`, restated for a phone; the comments say which.
  */
 
 /** One row of `project_templates`, as the library needs it. */
@@ -50,8 +51,24 @@ export type Libraries = Record<BlueprintItemKind, LibraryEntry[]>;
  * offering them while every existing section of those kinds keeps working. The
  * phone follows it: offering them here would recreate the confusion the web
  * owner parked them to avoid.
+ *
+ * Workflows are hidden the same way, product-wide (`SHOW_WORKFLOWS`): no new
+ * workflow section is offered, and an existing one is left in place but not
+ * listed (see `shownSection`).
  */
-export const ADDABLE_KINDS: BlueprintItemKind[] = ["checklist", "workflow", "document", "report"];
+export const ADDABLE_KINDS: BlueprintItemKind[] = (
+  ["checklist", "workflow", "document", "report"] as BlueprintItemKind[]
+).filter((kind) => SHOW_WORKFLOWS || kind !== "workflow");
+
+/**
+ * Whether a section of this kind is listed. Workflow and walkthrough (shot
+ * list) sections both land on the Workflows tab, so while it is hidden they
+ * stay in the blueprint but applying skips them, and showing them would
+ * promise something the apply no longer makes.
+ */
+export function shownSection(section: Pick<SectionLink, "kind">): boolean {
+  return SHOW_WORKFLOWS || (section.kind !== "workflow" && section.kind !== "walkthrough");
+}
 
 /**
  * At most one workflow per blueprint: a project has one status, and two

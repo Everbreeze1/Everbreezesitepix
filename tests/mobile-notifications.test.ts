@@ -54,7 +54,7 @@ describe("notificationTarget: the structured columns", () => {
     });
   });
 
-  it("routes checklists and workflows to their own runners", () => {
+  it("routes checklists to their runner, and workflows to their project while hidden", () => {
     expect(
       notificationTarget({
         ...base,
@@ -70,8 +70,9 @@ describe("notificationTarget: the structured columns", () => {
         type: "workflow_assigned",
         entityType: "workflow",
         entityId: E,
+        projectId: P,
       }),
-    ).toEqual({ pathname: "/workflow/[id]", params: { id: E } });
+    ).toEqual({ pathname: "/project/[id]", params: { id: P } });
   });
 
   it("prefers the columns over the path when they disagree", () => {

@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/everlumen/client";
-import { REPORT_STARTERS } from "@everlumen/shared";
+import { REPORT_STARTERS, SHOW_WORKFLOWS } from "@everlumen/shared";
 import { STARTER_TEMPLATES } from "./checklist-starters";
 import { STARTER_WORKFLOWS } from "./workflow-starters";
 import { WALKTHROUGH_STARTERS } from "./walkthrough-starters";
@@ -324,6 +324,8 @@ export async function installBlueprintStarter(
    * sees against the order written here.
    */
   for (const [idx, piece] of starter.pieces.entries()) {
+    // Workflows are hidden (SHOW_WORKFLOWS): don't build one nobody can see.
+    if (piece.kind === "workflow" && !SHOW_WORKFLOWS) continue;
     const before = await countLibrary(piece.kind);
     const refId = await resolvePiece(piece, userId, teamId);
     if (!refId) {

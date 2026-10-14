@@ -1,3 +1,4 @@
+import { SHOW_WORKFLOWS } from "@everlumen/shared";
 import { jsonError, jsonOk } from "../../lib/errors";
 import { verifyCronSecret } from "../../lib/cron-auth";
 import { getSupabaseAdmin } from "../../lib/supabase";
@@ -18,6 +19,9 @@ export async function handleWorkflowEscalation(request: Request): Promise<Respon
   if (!(await verifyCronSecret(request))) {
     return jsonError(401, "unauthorized", "Unauthorized");
   }
+  // Workflows are hidden (SHOW_WORKFLOWS): don't send "Workflow stalled"
+  // alerts about runs nobody can open.
+  if (!SHOW_WORKFLOWS) return jsonOk({ result: { notified: 0, considered: 0 } });
 
   try {
     const outcome = await recordJobRun("workflow-escalation", async () => {
@@ -70,7 +74,11 @@ export async function handleWorkflowEscalation(request: Request): Promise<Respon
 
     return jsonOk(outcome);
   } catch (e: unknown) {
-    return jsonError(500, "workflow_escalation_failed", e instanceof Error ? e.message : "Escalation failed");
+    return jsonError(
+      500,
+      "workflow_escalation_failed",
+      e instanceof Error ? e.message : "Escalation failed",
+    );
   }
 }
 
